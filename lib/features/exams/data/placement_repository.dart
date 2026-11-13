@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 
 import '../models/placement_models.dart';
+import '../models/preflight_models.dart';
 
 /// Repository for `/api/learner/placement*` endpoints.
 class PlacementRepository {
@@ -29,11 +30,27 @@ class PlacementRepository {
     );
   }
 
-  Future<PlacementPreflight> fetchAttemptPreflight(int placementId) async {
+  /// `GET /api/learner/placement/take/{id}/preflight` — the device gate's facts.
+  ///
+  /// Distinct from [fetchPreflight]: that one is the pre-start capability view.
+  Future<PreflightStatus> fetchPreflightStatus(int placementId) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/learner/placement/take/$placementId/preflight',
     );
-    return PlacementPreflight.fromJson(
+    return PreflightStatus.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  /// `POST /api/learner/attempts/{attemptId}/preflight/verify`.
+  ///
+  /// A placement has no verify route of its own; the sitting it adapts does, so
+  /// the status payload's own `attemptId` is what this is called with.
+  Future<PreflightStatus> verifyPreflight(int attemptId) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/learner/attempts/$attemptId/preflight/verify',
+    );
+    return PreflightStatus.fromJson(
       response.data ?? const <String, dynamic>{},
     );
   }

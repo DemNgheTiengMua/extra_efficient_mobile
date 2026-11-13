@@ -226,7 +226,7 @@ class _PlacementPlacard extends StatelessWidget {
               key: const Key('resume-placement-btn'),
               label: 'RESUME PLACEMENT',
               onPress: () =>
-                  context.push('/placement/take/$activePlacementId?resume=1'),
+                  context.push('/placement/take/$activePlacementId/preflight'),
             ),
             const SizedBox(height: 8),
           ],
@@ -333,7 +333,7 @@ class _MockExamRow extends StatelessWidget {
                 label: 'RESUME IN-PROGRESS',
                 variant: PlacardButtonVariant.secondary,
                 onPress: () =>
-                    context.push('/exams/attempts/${exam.activeAttemptId}'),
+                    context.push('/exams/attempts/${exam.activeAttemptId}/preflight'),
               )
             else
               PlacardButton(
@@ -448,7 +448,7 @@ class _HistoryRow extends StatelessWidget {
                 key: Key('history-resume-${item.attemptId}'),
                 label: 'RESUME',
                 onPress: () =>
-                    context.push('/exams/attempts/${item.attemptId}'),
+                    context.push('/exams/attempts/${item.attemptId}/preflight'),
               ),
             )
           else ...[

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,8 +9,9 @@ import 'package:extra_efficient_mobile/core/media/audio_media_adapter.dart';
 import 'package:extra_efficient_mobile/core/network/dio_client.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
 import 'package:extra_efficient_mobile/features/exams/screens/exam_hub_screen.dart';
+import 'package:extra_efficient_mobile/features/exams/screens/exam_preflight_screen.dart';
 import 'package:extra_efficient_mobile/features/exams/screens/mock_instructions_screen.dart';
-import 'package:extra_efficient_mobile/features/exams/screens/mock_preflight_screen.dart';
+import 'package:extra_efficient_mobile/features/exams/providers/exam_room_gate_providers.dart';
 import 'package:extra_efficient_mobile/theme/signage_theme.dart';
 
 import '../../helpers/fake_http_adapter.dart';
@@ -43,6 +45,13 @@ void main() {
           ),
         ),
         GoRoute(
+          path: '/placement/take/:placementId/preflight',
+          builder: (context, state) => ExamPreflightScreen(
+            kind: SittingKind.placement,
+            sittingId: int.parse(state.pathParameters['placementId'] ?? '0'),
+          ),
+        ),
+        GoRoute(
           path: '/exams/:examId/instructions',
           builder: (context, state) {
             final examId = int.parse(state.pathParameters['examId'] ?? '0');
@@ -55,7 +64,10 @@ void main() {
             final attemptId = int.parse(
               state.pathParameters['attemptId'] ?? '0',
             );
-            return MockPreflightScreen(attemptId: attemptId);
+            return ExamPreflightScreen(
+              kind: SittingKind.attempt,
+              sittingId: attemptId,
+            );
           },
         ),
         GoRoute(
@@ -63,6 +75,16 @@ void main() {
           builder: (context, state) => Scaffold(
             body: Center(
               child: Text('MOCK ROOM #${state.pathParameters['attemptId']}'),
+            ),
+          ),
+        ),
+        GoRoute(
+          path: '/placement/take/:placementId',
+          builder: (context, state) => Scaffold(
+            body: Center(
+              child: Text(
+                'PLACEMENT ROOM #${state.pathParameters['placementId']}',
+              ),
             ),
           ),
         ),
@@ -112,6 +134,55 @@ void main() {
     ],
     'creditBalance': 12,
   };
+
+  /// The real `PreflightStatusDto`, with no audio and no mic so the gate opens
+  /// at once. Every door leads here, so each test below has to serve it.
+  Map<String, dynamic> preflightPayload({
+    required int attemptId,
+    bool isVerified = false,
+  }) => {
+    'attemptId': attemptId,
+    'examId': 1,
+    'examName': 'ETS 2024 — Test 1',
+    'certCode': 'TOEIC',
+    'certName': 'TOEIC Listening & Reading',
+    'durationMinutes': 120,
+    'requiresPreflight': true,
+    'requiresAudio': false,
+    'requiresMicrophone': false,
+    'isVerified': isVerified,
+    'verifiedAt': isVerified ? '2026-11-13T16:03:15Z' : null,
+    'audioUrls': <String>[],
+  };
+
+  /// Serves the device-gate read for either door. Every entry path lands on the
+  /// gate now, so the hub tests route through it too.
+  ResponseBody? gateResponseFor(RequestOptions options, {bool verified = true}) {
+    if (options.method != 'GET') return null;
+    final placement = RegExp(
+      r'^/api/learner/placement/take/(\d+)/preflight$',
+    ).firstMatch(options.path);
+    if (placement != null) {
+      return FakeHttpClientAdapter.jsonResponse(
+        preflightPayload(
+          attemptId: int.parse(placement.group(1)!),
+          isVerified: verified,
+        ),
+      );
+    }
+    final attempt = RegExp(
+      r'^/api/learner/attempts/(\d+)/preflight$',
+    ).firstMatch(options.path);
+    if (attempt != null) {
+      return FakeHttpClientAdapter.jsonResponse(
+        preflightPayload(
+          attemptId: int.parse(attempt.group(1)!),
+          isVerified: verified,
+        ),
+      );
+    }
+    return null;
+  }
 
   /// Recorded shape of `GET /api/learner/placement`: an envelope.
   Map<String, dynamic> placementCatalogPayload({
@@ -238,7 +309,8 @@ void main() {
           case 'GET /api/learner/exams/history':
             return FakeHttpClientAdapter.jsonResponse(historyPayload());
           default:
-            return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+            return gateResponseFor(options) ??
+                FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
         }
       });
 
@@ -260,7 +332,9 @@ void main() {
 
       await tester.tap(resume);
       await tester.pumpAndSettle();
-      expect(find.text('PLACEMENT ROOM #41'), findsOneWidget);
+      // RESUME is a door into the gate, not the room: the sitting is unreadable
+      // until the device checks have been verified.
+      expect(find.text('PLACEMENT PREFLIGHT'), findsOneWidget);
     },
   );
 
@@ -283,7 +357,8 @@ void main() {
         case 'GET /api/learner/exams/history':
           return FakeHttpClientAdapter.jsonResponse(historyPayload());
         default:
-          return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+          return gateResponseFor(options) ??
+              FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
       }
     });
 
@@ -314,7 +389,8 @@ void main() {
           case 'GET /api/learner/exams/history':
             return FakeHttpClientAdapter.jsonResponse(historyPayload());
           default:
-            return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+            return gateResponseFor(options) ??
+                FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
         }
       });
 
@@ -344,7 +420,7 @@ void main() {
 
       await tester.tap(find.byKey(const Key('resume-mock-exam-102')));
       await tester.pumpAndSettle();
-      expect(find.text('MOCK ROOM #888'), findsOneWidget);
+      expect(find.text('MOCK ATTEMPT PREFLIGHT'), findsOneWidget);
     },
   );
 
@@ -363,7 +439,8 @@ void main() {
         case 'GET /api/learner/exams/history':
           return FakeHttpClientAdapter.jsonResponse(historyPayload());
         default:
-          return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+          return gateResponseFor(options) ??
+              FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
       }
     });
 
@@ -388,7 +465,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('history-resume-702')));
     await tester.pumpAndSettle();
-    expect(find.text('MOCK ROOM #702'), findsOneWidget);
+    expect(find.text('MOCK ATTEMPT PREFLIGHT'), findsOneWidget);
   });
 
   testWidgets('history survives the designed empty state', (tester) async {
@@ -414,7 +491,8 @@ void main() {
             'attempts': [],
           });
         default:
-          return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+          return gateResponseFor(options) ??
+              FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
       }
     });
 
@@ -489,16 +567,41 @@ void main() {
           case 'POST /api/learner/exams/101/start':
             return FakeHttpClientAdapter.jsonResponse({'attemptId': 902});
           case 'GET /api/learner/attempts/902/preflight':
+            // The real `PreflightStatusDto`: no `audioSampleUrl`, audio URLs are
+            // an array, and the gate is `isVerified`.
             return FakeHttpClientAdapter.jsonResponse({
               'attemptId': 902,
-              'audioSampleUrl': 'https://cdn.example.com/preflight.mp3',
+              'examId': 101,
+              'examName': 'TOEIC Full Mock #1',
+              'certCode': 'TOEIC',
+              'certName': 'TOEIC Listening & Reading',
+              'durationMinutes': 120,
+              'requiresPreflight': true,
+              'requiresAudio': true,
               'requiresMicrophone': true,
+              'isVerified': false,
+              'verifiedAt': null,
+              'audioUrls': ['/audio/toeic/test1-p1.mp3'],
             });
           case 'POST /api/learner/attempts/902/preflight/verify':
             preflightVerified = true;
-            return FakeHttpClientAdapter.jsonResponse({'verified': true});
+            return FakeHttpClientAdapter.jsonResponse({
+              'attemptId': 902,
+              'examId': 101,
+              'examName': 'TOEIC Full Mock #1',
+              'certCode': 'TOEIC',
+              'certName': 'TOEIC Listening & Reading',
+              'durationMinutes': 120,
+              'requiresPreflight': true,
+              'requiresAudio': true,
+              'requiresMicrophone': true,
+              'isVerified': true,
+              'verifiedAt': '2026-11-13T16:03:15Z',
+              'audioUrls': ['/audio/toeic/test1-p1.mp3'],
+            });
           default:
-            return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+            return gateResponseFor(options) ??
+                FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
         }
       });
 
@@ -527,12 +630,17 @@ void main() {
       expect(find.text('MOCK ATTEMPT PREFLIGHT'), findsOneWidget);
       await tester.tap(find.byKey(const Key('preflight-audio-check-btn')));
       await tester.pumpAndSettle();
-      expect(audio.lastLoadedUrl, 'https://cdn.example.com/preflight.mp3');
+      expect(audio.lastLoadedUrl, '/audio/toeic/test1-p1.mp3');
 
       await tester.tap(find.byKey(const Key('preflight-mic-check-btn')));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('enter-mock-room-btn')));
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('enter-room-btn')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const Key('enter-room-btn')));
       await tester.pumpAndSettle();
 
       expect(preflightVerified, isTrue);

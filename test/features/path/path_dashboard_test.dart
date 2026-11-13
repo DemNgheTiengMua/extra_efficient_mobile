@@ -44,6 +44,13 @@ Widget buildApp({
         path: '/placement/take/:placementId',
         builder: (context, state) =>
             marker('PLACEMENT ROOM #${state.pathParameters['placementId']}'),
+        routes: [
+          GoRoute(
+            path: 'preflight',
+            builder: (context, state) =>
+                marker('PLACEMENT GATE #${state.pathParameters['placementId']}'),
+          ),
+        ],
       ),
       GoRoute(
         path: '/speaking/take/:attemptId',
@@ -256,7 +263,10 @@ void main() {
 
       await tester.tap(find.byKey(const Key('resume-attempt-btn')));
       await tester.pumpAndSettle();
-      expect(find.text('PLACEMENT ROOM #2'), findsOneWidget);
+      // The backend's resume URL names the sitting; the app addresses it through
+      // the device gate, because the sitting answers `preflight_required` until
+      // the gate has passed.
+      expect(find.text('PLACEMENT GATE #2'), findsOneWidget);
     },
   );
 
