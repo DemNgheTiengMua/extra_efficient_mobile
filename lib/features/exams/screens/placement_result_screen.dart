@@ -15,10 +15,7 @@ import '../providers/placement_providers.dart';
 /// while `PENDING`, surfaces a free retry CTA on `FAILED`, and renders
 /// [ScorePlacard] + [CefrBandBar] when `COMPLETED`.
 class PlacementResultScreen extends ConsumerStatefulWidget {
-  const PlacementResultScreen({
-    super.key,
-    required this.placementId,
-  });
+  const PlacementResultScreen({super.key, required this.placementId});
 
   final int placementId;
 
@@ -98,16 +95,6 @@ class _PlacementResultScreenState extends ConsumerState<PlacementResultScreen> {
       if (!mounted) return;
       setState(() {
         _retrying = false;
-        _result = PlacementResult(
-          placementId: widget.placementId,
-          status: 'PENDING',
-          overallBand: _result?.overallBand ?? '-',
-          totalScaledScore: _result?.totalScaledScore ?? 0,
-          cefrBand: _result?.cefrBand ?? 'A1',
-          skillBreakdowns: _result?.skillBreakdowns ?? const [],
-          canRetryGrading: false,
-          hasFailedGrading: false,
-        );
       });
       _startPolling();
     } catch (e) {
@@ -129,161 +116,161 @@ class _PlacementResultScreenState extends ConsumerState<PlacementResultScreen> {
         color: SignageColors.wall,
         child: Column(
           children: [
-          DecoratedBox(
-            decoration: const BoxDecoration(
-              color: SignageColors.signBlue,
-              border: Border(
-                bottom: BorderSide(color: SignageColors.ink, width: 2),
+            DecoratedBox(
+              decoration: const BoxDecoration(
+                color: SignageColors.signBlue,
+                border: Border(
+                  bottom: BorderSide(color: SignageColors.ink, width: 2),
+                ),
               ),
-            ),
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                child: Row(
-                  children: [
-                    FTappable(
-                      onPress: () => context.go('/exams'),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: SignageColors.paper,
-                          border: Border.all(
-                            color: SignageColors.ink,
-                            width: 2,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  child: Row(
+                    children: [
+                      FTappable(
+                        onPress: () => context.go('/exams'),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: SignageColors.paper,
+                            border: Border.all(
+                              color: SignageColors.ink,
+                              width: 2,
+                            ),
+                          ),
+                          child: Text(
+                            'EXAMS',
+                            style: SignageTypography.label(fontSize: 12),
                           ),
                         ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
                         child: Text(
-                          'EXAMS',
-                          style: SignageTypography.label(fontSize: 12),
+                          'PLACEMENT RESULT',
+                          style: SignageTypography.title(
+                            color: SignageColors.paper,
+                          ).copyWith(fontSize: 18),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'PLACEMENT RESULT',
-                        style: SignageTypography.title(color: SignageColors.paper)
-                            .copyWith(fontSize: 18),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: FCircularProgress())
-                : _error != null
-                    ? ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          PlacardAlert(
-                            variant: PlacardAlertVariant.danger,
-                            title: 'Unable to load placement result',
-                            subtitle: _error,
-                          ),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: FCircularProgress())
+                  : _error != null
+                  ? ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        PlacardAlert(
+                          variant: PlacardAlertVariant.danger,
+                          title: 'Unable to load placement result',
+                          subtitle: _error,
+                        ),
+                      ],
+                    )
+                  : result == null
+                  ? const SizedBox.shrink()
+                  : result.hasFailedGrading
+                  ? ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        const PlacardAlert(
+                          variant: PlacardAlertVariant.danger,
+                          title: 'AI grading failed',
+                          subtitle: 'One or more free-response tasks could not be graded. Retrying is completely free.',
+                        ),
+                        const SizedBox(height: 16),
+                        PlacardButton(
+                          key: const Key('retry-grading-btn'),
+                          label: 'RETRY AI GRADING (FREE)',
+                          isLoading: _retrying,
+                          onPress: _retryGrading,
+                        ),
+                      ],
+                    )
+                  : result.isPending
+                  ? ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        StateBlock(
+                          stamp: 'PENDING',
+                          title: 'AI grading in progress',
+                          description: result.stageDescriptor ?? 'Your free-response tasks are being evaluated against the certificate rubric. Checking status every 3 seconds...',
+                        ),
+                      ],
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        ScorePlacard(
+                          totalScore: '${result.displayTotalScore}',
+                          caption:
+                              '${result.examName} · BAND ${result.bandLabel}',
+                          splits: [
+                            for (final s in result.skillScores)
+                              ScoreSplit(
+                                label: s.skillName,
+                                value: '${s.scaledScore}',
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        if (result.isBanded) ...[
+                          CefrBandBar(currentBand: result.bandCode),
+                          const SizedBox(height: 16),
                         ],
-                      )
-                    : result == null
-                        ? const SizedBox.shrink()
-                        : result.isPending
-                            ? ListView(
-                                padding: const EdgeInsets.all(16),
-                                children: const [
-                                  StateBlock(
-                                    stamp: 'PENDING',
-                                    title: 'AI grading in progress',
-                                    description:
-                                        'Your free-response tasks are being evaluated against the certificate rubric. Checking status every 3 seconds...',
+                        for (final s in result.skillScores) ...[
+                          PlacardPanel(
+                            title: s.skillName.toUpperCase(),
+                            trailing: s.isBanded
+                                ? PlacardBadge.info(s.bandLabel)
+                                : const PlacardBadge.muted('NOT YET BANDED'),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'SCALED: ${s.scaledScore}',
+                                  style: SignageTypography.data(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
                                   ),
-                                ],
-                              )
-                            : result.isFailed
-                                ? ListView(
-                                    padding: const EdgeInsets.all(16),
-                                    children: [
-                                      const PlacardAlert(
-                                        variant: PlacardAlertVariant.danger,
-                                        title: 'AI grading failed',
-                                        subtitle:
-                                            'One or more free-response tasks could not be graded. Retrying is completely free.',
-                                      ),
-                                      const SizedBox(height: 16),
-                                      PlacardButton(
-                                        key: const Key('retry-grading-btn'),
-                                        label: 'RETRY AI GRADING (FREE)',
-                                        isLoading: _retrying,
-                                        onPress: _retryGrading,
-                                      ),
-                                    ],
-                                  )
-                                : ListView(
-                                    padding: const EdgeInsets.all(16),
-                                    children: [
-                                      ScorePlacard(
-                                        totalScore:
-                                            '${result.totalScaledScore}',
-                                        caption:
-                                            'BAND ${result.overallBand} — DIAGNOSTIC PLACEMENT',
-                                        splits: [
-                                          for (final s
-                                              in result.skillBreakdowns)
-                                            ScoreSplit(
-                                              label: s.skill,
-                                              value: '${s.scaledScore}',
-                                            ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      CefrBandBar(
-                                        currentBand: result.cefrBand,
-                                      ),
-                                      const SizedBox(height: 16),
-                                      for (final s in result.skillBreakdowns) ...[
-                                        PlacardPanel(
-                                          title: s.skill.toUpperCase(),
-                                          trailing: PlacardBadge.info(s.band),
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text(
-                                                'SCALED: ${s.scaledScore}',
-                                                style: SignageTypography.data(
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w700,
-                                                ),
-                                              ),
-                                              Text(
-                                                'RAW: ${s.rawScore}',
-                                                style: SignageTypography.data(
-                                                  fontSize: 14,
-                                                  color: SignageColors.inkMuted,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 12),
-                                      ],
-                                      const SizedBox(height: 8),
-                                      PlacardButton(
-                                        key: const Key('configure-path-cta'),
-                                        label: 'CONFIGURE TARGET BAND & PATH',
-                                        onPress: () => context.go('/path'),
-                                      ),
-                                    ],
+                                ),
+                                Text(
+                                  'RAW: ${s.rawScore}/${s.totalQuestions}',
+                                  style: SignageTypography.data(
+                                    fontSize: 14,
+                                    color: SignageColors.inkMuted,
                                   ),
-          ),
-        ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        const SizedBox(height: 8),
+                        PlacardButton(
+                          key: const Key('configure-path-cta'),
+                          label: 'CONFIGURE TARGET BAND & PATH',
+                          onPress: () => context.go('/path'),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
-    ),
     );
   }
 }

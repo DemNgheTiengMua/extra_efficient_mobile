@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/media/audio_media_adapter.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../models/practice_models.dart';
 import '../providers/practice_providers.dart';
 
@@ -33,6 +34,7 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
   final Map<int, PracticeAnswerResult> _results = {};
   bool _submitting = false;
   bool _isPlayingAudio = false;
+  String? _bookmarkError;
 
   bool _showingSummary = false;
   PracticeSummary? _summary;
@@ -59,6 +61,10 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
     );
   }
 
+  /// The address the backend gave this question: its row id, else the pinned
+  /// item version. A pool item has no row id, and `0` would 404.
+  int _addressOf(PracticeQuestion q) => q.address ?? q.displayOrder;
+
   int _countWords(String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return 0;
@@ -66,17 +72,30 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
   }
 
   Future<void> _toggleBookmark(PracticeQuestion q) async {
-    final currentSavedId =
-        _savedQuestionIds[q.questionId] ?? q.savedQuestionId;
+    final key = _addressOf(q);
+    final currentSavedId = _savedQuestionIds[key] ?? q.savedQuestionId;
     final repo = ref.read(practiceRepositoryProvider);
-    if (currentSavedId != null && currentSavedId > 0) {
-      await repo.deleteSavedQuestion(currentSavedId);
+    try {
+      if (currentSavedId != null && currentSavedId > 0) {
+        await repo.deleteSavedQuestion(currentSavedId);
+        if (!mounted) return;
+        setState(() => _savedQuestionIds[key] = null);
+      } else {
+        // Save by the address the question actually holds: POSTing a pool
+        // item's 0 to the questions route files nothing.
+        final result = await repo.saveQuestionAddress(
+          questionId: q.questionId,
+          itemVersionId: q.itemVersionId,
+        );
+        if (!mounted) return;
+        setState(() => _savedQuestionIds[key] = result.savedQuestionId);
+      }
+    } catch (e) {
       if (!mounted) return;
-      setState(() => _savedQuestionIds[q.questionId] = null);
-    } else {
-      final newId = await repo.saveQuestion(q.questionId);
-      if (!mounted) return;
-      setState(() => _savedQuestionIds[q.questionId] = newId);
+      setState(() {
+        _bookmarkError =
+            extractApiError(e, fallback: 'Could not update saved question');
+      });
     }
   }
 
@@ -131,29 +150,29 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
   Future<void> _requestHint(PracticeQuestion q) async {
     final hint = await ref
         .read(practiceRepositoryProvider)
-        .requestHint(widget.sessionId, q.questionId);
+        .requestHint(widget.sessionId, _addressOf(q));
     if (!mounted) return;
     setState(() {
-      _hints[q.questionId] = hint;
+      _hints[_addressOf(q)] = hint;
     });
   }
 
   Future<void> _submitAnswer(PracticeQuestion q) async {
     if (_submitting) return;
     if (q.isWriting) {
-      final text = (_writingResponses[q.questionId] ?? '').trim();
+      final text = (_writingResponses[_addressOf(q)] ?? '').trim();
       if (text.isEmpty) return;
       setState(() => _submitting = true);
       try {
         final result = await ref.read(practiceRepositoryProvider).submitAnswer(
               widget.sessionId,
-              q.questionId,
+              _addressOf(q),
               selectedOptionId: null,
               responseText: text,
             );
         if (!mounted) return;
         setState(() {
-          _results[q.questionId] = result;
+          _results[_addressOf(q)] = result;
         });
       } finally {
         if (mounted) setState(() => _submitting = false);
@@ -161,18 +180,18 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
       return;
     }
 
-    final selectedId = _selectedOptions[q.questionId];
+    final selectedId = _selectedOptions[_addressOf(q)];
     if (selectedId == null) return;
     setState(() => _submitting = true);
     try {
       final result = await ref.read(practiceRepositoryProvider).submitAnswer(
             widget.sessionId,
-            q.questionId,
+            _addressOf(q),
             selectedOptionId: selectedId,
           );
       if (!mounted) return;
       setState(() {
-        _results[q.questionId] = result;
+        _results[_addressOf(q)] = result;
       });
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -272,13 +291,13 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
     }
 
     final q = session.questions[_currentIndex];
-    final selectedId = _selectedOptions[q.questionId];
-    final writingText = _writingResponses[q.questionId] ?? '';
+    final selectedId = _selectedOptions[_addressOf(q)];
+    final writingText = _writingResponses[_addressOf(q)] ?? '';
     final wordCount = _countWords(writingText);
     final isSaved =
-        (_savedQuestionIds[q.questionId] ?? q.savedQuestionId ?? 0) > 0;
-    final result = _results[q.questionId];
-    final hint = _hints[q.questionId];
+        (_savedQuestionIds[_addressOf(q)] ?? q.savedQuestionId ?? 0) > 0;
+    final result = _results[_addressOf(q)];
+    final hint = _hints[_addressOf(q)];
     final isLast = _currentIndex == session.questions.length - 1;
     final isImmediate = session.feedbackMode == PracticeFeedbackMode.immediate;
     final canSubmit = q.isWriting
@@ -297,7 +316,7 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
             PlacardBadge.muted(session.feedbackMode.label),
             const Spacer(),
             PlacardButton(
-              key: Key('bookmark-question-${q.questionId}'),
+              key: Key('bookmark-question-${_addressOf(q)}'),
               label: isSaved ? 'SAVED' : 'SAVE QUESTION',
               variant: isSaved
                   ? PlacardButtonVariant.ink
@@ -308,6 +327,14 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
           ],
         ),
         const SizedBox(height: 12),
+        if (_bookmarkError != null) ...[
+          PlacardAlert(
+            key: const Key('bookmark-error'),
+            title: _bookmarkError!,
+            variant: PlacardAlertVariant.danger,
+          ),
+          const SizedBox(height: 12),
+        ],
         if (q.audioUrl != null && q.audioUrl!.isNotEmpty) ...[
           PlacardPanel(
             title: 'AUDIO TRACK',
@@ -386,10 +413,10 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
                 FTextField.multiline(
                   key: const Key('writing-response-input'),
                   control: FTextFieldControl.managed(
-                    controller: _controllerFor(q.questionId),
+                    controller: _controllerFor(_addressOf(q)),
                     onChange: (value) {
                       setState(() {
-                        _writingResponses[q.questionId] = value.text;
+                        _writingResponses[_addressOf(q)] = value.text;
                       });
                     },
                   ),
@@ -413,7 +440,7 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
                         ? null
                         : () {
                             setState(() {
-                              _selectedOptions[q.questionId] = opt.optionId;
+                              _selectedOptions[_addressOf(q)] = opt.optionId;
                             });
                           },
                   ),

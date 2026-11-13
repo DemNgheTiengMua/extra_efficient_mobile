@@ -1,0 +1,32 @@
+[
+  {
+    "complaintId": 2,
+    "type": "mentor_quality",
+    "reason": "Session started 5 minutes late due to mentor connection troubles.",
+    "status": "reviewing",
+    "resolution": null,
+    "resolvedAt": null,
+    "resolvedByGrantTxnId": null,
+    "grantedCredits": null,
+    "createdAt": "2026-11-10T01:44:01.895339+07:00",
+    "bookingId": 1,
+    "attemptId": null,
+    "orderId": null,
+    "subjectSummary": "Booking #1 (Dr. Trần Minh Khoa)"
+  },
+  {
+    "complaintId": 1,
+    "type": "technical_error",
+    "reason": "Audio stream froze momentarily during listening Part 4, causing a missed question.",
+    "status": "resolved",
+    "resolution": "Audio stream logs confirmed a 4-second network stutter. Granted 1 make-good credit to student wallet.",
+    "resolvedAt": "2026-11-09T01:44:01.8883268+07:00",
+    "resolvedByGrantTxnId": 6,
+    "grantedCredits": 1,
+    "createdAt": "2026-11-09T01:44:01.8883268+07:00",
+    "bookingId": null,
+    "attemptId": 2,
+    "orderId": null,
+    "subjectSummary": "Exam #2 (ETS 2024 - Test 1)"
+  }
+]

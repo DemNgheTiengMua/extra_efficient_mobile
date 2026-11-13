@@ -4,6 +4,7 @@ import 'package:forui/forui.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../../context/learner_context_provider.dart';
 import '../wallet_models.dart';
 import '../wallet_providers.dart';
@@ -30,6 +31,7 @@ class _CheckoutFlowViewState extends ConsumerState<CheckoutFlowView> {
   WalletOrder? _order;
   bool _isLoading = false;
   String? _error;
+  String? _launchError;
 
   @override
   void initState() {
@@ -57,7 +59,7 @@ class _CheckoutFlowViewState extends ConsumerState<CheckoutFlowView> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = extractApiError(e, fallback: e.toString());
           _isLoading = false;
         });
       }
@@ -72,8 +74,14 @@ class _CheckoutFlowViewState extends ConsumerState<CheckoutFlowView> {
       _error = null;
     });
     try {
-      final order =
+      final created =
           await ref.read(walletRepositoryProvider).createOrder(packageId);
+      // CreateOrderResponse carries no package name or credits.
+      final order = created.withPackage(
+        packageId: packageId,
+        packageName: _preview?.packageName,
+        credits: _preview?.credits,
+      );
       await ref.read(walletSummaryProvider.notifier).refresh();
       if (mounted) {
         setState(() {
@@ -84,7 +92,7 @@ class _CheckoutFlowViewState extends ConsumerState<CheckoutFlowView> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = extractApiError(e, fallback: e.toString());
           _isLoading = false;
         });
       }
@@ -111,7 +119,7 @@ class _CheckoutFlowViewState extends ConsumerState<CheckoutFlowView> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = extractApiError(e, fallback: e.toString());
           _isLoading = false;
         });
       }
@@ -138,7 +146,7 @@ class _CheckoutFlowViewState extends ConsumerState<CheckoutFlowView> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = extractApiError(e, fallback: e.toString());
           _isLoading = false;
         });
       }
@@ -157,14 +165,9 @@ class _CheckoutFlowViewState extends ConsumerState<CheckoutFlowView> {
       await ref.read(walletSummaryProvider.notifier).refresh();
       if (mounted) {
         setState(() {
-          _order = WalletOrder(
-            orderCode: _order!.orderCode,
-            packageId: _order!.packageId,
-            packageName: _order!.packageName,
-            credits: _order!.credits,
-            amountVnd: _order!.amountVnd,
-            status: OrderStatus.cancelled,
-            createdAt: _order!.createdAt,
+          _order = _order!.copyWith(
+            status: OrderStatus.failed,
+            errorCode: 'user_cancelled',
           );
           _isLoading = false;
         });
@@ -172,11 +175,22 @@ class _CheckoutFlowViewState extends ConsumerState<CheckoutFlowView> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = extractApiError(e, fallback: e.toString());
           _isLoading = false;
         });
       }
     }
+  }
+
+  Future<void> _openGateway(String url) async {
+    final launched =
+        await ref.read(urlLauncherAdapterProvider).launchExternalUrl(url);
+    if (!mounted) return;
+    setState(() {
+      _launchError = launched
+          ? null
+          : 'Could not open the payment gateway. Copy this link into a browser: $url';
+    });
   }
 
   Future<void> _mockGateway(String action) async {
@@ -204,7 +218,7 @@ class _CheckoutFlowViewState extends ConsumerState<CheckoutFlowView> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = extractApiError(e, fallback: e.toString());
           _isLoading = false;
         });
       }
@@ -253,15 +267,17 @@ class _CheckoutFlowViewState extends ConsumerState<CheckoutFlowView> {
   }
 
   Widget _buildPreview(CheckoutPreview preview) {
-    if (preview.hasOpenOrder) {
+    final openOrder = preview.openOrder;
+    if (openOrder != null) {
       return StateBlock(
         stamp: 'BLOCKED',
         title: 'Do not pay again',
         description:
-            'You already have an open order (${preview.openOrderCode ?? 'pending'}). Complete or cancel it before starting a new order.',
+            'You already have an open order ${openOrder.orderCode} for ${openOrder.packageName} (${openOrder.status.name}). Complete or cancel it before starting a new order.',
         action: PlacardButton(
-          label: 'RETURN TO WALLET',
-          onPress: widget.onClose,
+          key: const Key('view-open-order-button'),
+          label: 'VIEW OPEN ORDER',
+          onPress: () => setState(() => _order = openOrder),
         ),
       );
     }
@@ -324,10 +340,16 @@ class _CheckoutFlowViewState extends ConsumerState<CheckoutFlowView> {
                 PlacardButton(
                   key: const Key('open-gateway-url-button'),
                   label: 'OPEN PAYMENT GATEWAY',
-                  onPress: () => ref
-                      .read(urlLauncherAdapterProvider)
-                      .launchExternalUrl(order.checkoutUrl!),
+                  onPress: () => _openGateway(order.checkoutUrl!),
                 ),
+                if (_launchError != null) ...[
+                  const SizedBox(height: 8),
+                  PlacardAlert(
+                    variant: PlacardAlertVariant.danger,
+                    title: 'Could not open link',
+                    subtitle: _launchError,
+                  ),
+                ],
                 const SizedBox(height: 8),
               ],
               PlacardButton(
@@ -376,8 +398,12 @@ class _CheckoutFlowViewState extends ConsumerState<CheckoutFlowView> {
           ),
         ),
       OrderStatus.failed => (
-          'Payment failed',
-          'Gateway reported an error${order.errorCode != null ? ' (${order.errorCode})' : ''}. You may retry checkout.',
+          order.errorCode == 'user_cancelled'
+              ? 'Order cancelled'
+              : 'Payment failed',
+          order.errorCode == 'user_cancelled'
+              ? 'You cancelled this order before paying. You may start a new one.'
+              : 'Gateway error code: ${order.errorCode ?? 'none reported'}. You may retry checkout.',
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -423,8 +449,8 @@ class _CheckoutFlowViewState extends ConsumerState<CheckoutFlowView> {
             ],
           ),
         ),
-      OrderStatus.cancelled || OrderStatus.unknown => (
-          'Order ${order.status.name}',
+      OrderStatus.unknown => (
+          'Order status unavailable',
           'This order is closed.',
           PlacardButton(
             label: 'RETURN TO WALLET',

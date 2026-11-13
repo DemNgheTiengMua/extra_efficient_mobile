@@ -1,0 +1,25 @@
+{
+  "certificate": {
+    "code": "TOEIC",
+    "name": "TOEIC Listening & Reading",
+    "sectionNoun": "Part"
+  },
+  "creditBalance": 11,
+  "exams": [
+    {
+      "examId": 1,
+      "certId": 1,
+      "certCode": "TOEIC",
+      "name": "ETS 2024 — Test 1",
+      "description": "A full TOEIC Listening & Reading form.",
+      "durationMinutes": 120,
+      "questionCount": 200,
+      "sourceName": "ETS 2024",
+      "creditCost": 1,
+      "activeAttemptId": 1005,
+      "activeAttemptExpiresAt": "2026-11-13T18:03:15.8731758+00:00",
+      "completedAttemptScore": 10,
+      "completedAttemptBand": "below_A1"
+    }
+  ]
+}
