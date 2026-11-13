@@ -30,26 +30,46 @@ class _MockPreflightScreenState extends ConsumerState<MockPreflightScreen> {
     final audio = ref.read(audioMediaAdapterProvider);
     final url = sampleUrl.isNotEmpty
         ? sampleUrl
-        : 'https://example.com/audio/preflight.mp3';
-    await audio.setAudioUrl(url);
-    await audio.play();
-    await audio.stop();
-    if (!mounted) return;
-    setState(() => _audioChecked = true);
+        : '/media/placement-listening-placeholder.wav';
+    try {
+      await audio.setAudioUrl(url);
+      await audio.play();
+      await audio.stop();
+      if (!mounted) return;
+      setState(() {
+        _audioChecked = true;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _audioChecked = false;
+        _error = 'Audio check failed: $e';
+      });
+    }
   }
 
   Future<void> _runMicCheck() async {
     final audio = ref.read(audioMediaAdapterProvider);
-    final granted = await audio.hasRecordPermission();
-    if (granted) {
-      await audio.startRecording('mock_preflight_test.m4a');
-      await audio.stopRecording();
+    try {
+      final granted = await audio.hasRecordPermission();
+      if (granted) {
+        await audio.startRecording('mock_preflight_test.m4a');
+        await audio.stopRecording();
+      }
+      if (!mounted) return;
+      setState(() {
+        _micGranted = granted;
+        _micChecked = granted;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _micChecked = false;
+        _error = 'Microphone check failed: $e';
+      });
     }
-    if (!mounted) return;
-    setState(() {
-      _micGranted = granted;
-      _micChecked = granted;
-    });
   }
 
   Future<void> _verifyAndEnter() async {

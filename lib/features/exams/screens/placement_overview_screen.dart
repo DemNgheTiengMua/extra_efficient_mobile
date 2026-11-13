@@ -35,26 +35,46 @@ class _PlacementOverviewScreenState
     final audio = ref.read(audioMediaAdapterProvider);
     final url = sampleUrl.isNotEmpty
         ? sampleUrl
-        : 'https://example.com/audio/preflight.mp3';
-    await audio.setAudioUrl(url);
-    await audio.play();
-    await audio.stop();
-    if (!mounted) return;
-    setState(() => _audioChecked = true);
+        : '/media/placement-listening-placeholder.wav';
+    try {
+      await audio.setAudioUrl(url);
+      await audio.play();
+      await audio.stop();
+      if (!mounted) return;
+      setState(() {
+        _audioChecked = true;
+        _errorMessage = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _audioChecked = false;
+        _errorMessage = 'Audio check failed: $e';
+      });
+    }
   }
 
   Future<void> _runMicCheck() async {
     final audio = ref.read(audioMediaAdapterProvider);
-    final granted = await audio.hasRecordPermission();
-    if (granted) {
-      await audio.startRecording('preflight_test.m4a');
-      await audio.stopRecording();
+    try {
+      final granted = await audio.hasRecordPermission();
+      if (granted) {
+        await audio.startRecording('preflight_test.m4a');
+        await audio.stopRecording();
+      }
+      if (!mounted) return;
+      setState(() {
+        _micGranted = granted;
+        _micChecked = granted;
+        _errorMessage = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _micChecked = false;
+        _errorMessage = 'Microphone check failed: $e';
+      });
     }
-    if (!mounted) return;
-    setState(() {
-      _micGranted = granted;
-      _micChecked = granted;
-    });
   }
 
   Future<void> _startPlacement(PlacementOverview overview) async {
@@ -409,13 +429,23 @@ class _PlacementOverviewScreenState
                   ),
                 ),
                 const SizedBox(height: 20),
+                if (overview.examId <= 0) ...[
+                  PlacardAlert(
+                    variant: PlacardAlertVariant.warning,
+                    title: 'NO PLACEMENT EXAM AVAILABLE',
+                    subtitle:
+                        'No placement exam is currently configured for ${overview.certificateCode.isEmpty ? 'this certificate' : overview.certificateCode}. Switch certificate in ACCOUNT to take a placement test.',
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 PlacardButton(
                   key: const Key('start-placement-btn'),
                   label: overview.isFirstPlacement
                       ? 'START FREE PLACEMENT'
                       : 'START PLACEMENT RETAKE',
                   isLoading: _starting,
-                  onPress: () => _startPlacement(overview),
+                  onPress:
+                      overview.examId > 0 ? () => _startPlacement(overview) : null,
                 ),
               ],
             );

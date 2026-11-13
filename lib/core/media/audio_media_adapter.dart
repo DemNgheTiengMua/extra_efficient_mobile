@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:record/record.dart';
+
+import '../config/app_config.dart';
 
 /// Device-edge adapter wrapping audio playback (`just_audio`) and microphone
 /// recording (`record`) so exam/practice widgets remain testable without hardware.
@@ -26,11 +29,24 @@ class DeviceAudioMediaAdapter implements AudioMediaAdapter {
   DeviceAudioMediaAdapter({
     AudioPlayer? player,
     AudioRecorder? recorder,
+    String? baseUrl,
   })  : _player = player ?? AudioPlayer(),
-        _recorder = recorder ?? AudioRecorder();
+        _recorder = recorder ?? AudioRecorder(),
+        _baseUrl = baseUrl ?? AppConfig.baseUrl;
 
   final AudioPlayer _player;
   final AudioRecorder _recorder;
+  final String _baseUrl;
+
+  String _resolveUrl(String url) {
+    if (url.startsWith('/')) {
+      final base = _baseUrl.endsWith('/')
+          ? _baseUrl.substring(0, _baseUrl.length - 1)
+          : _baseUrl;
+      return '$base$url';
+    }
+    return url;
+  }
 
   @override
   Future<void> setAudioUrl(
@@ -38,16 +54,17 @@ class DeviceAudioMediaAdapter implements AudioMediaAdapter {
     Duration? clipStart,
     Duration? clipEnd,
   }) async {
+    final resolvedUrl = _resolveUrl(url);
     if (clipStart != null || clipEnd != null) {
       await _player.setAudioSource(
         ClippingAudioSource(
           start: clipStart,
           end: clipEnd,
-          child: AudioSource.uri(Uri.parse(url)),
+          child: AudioSource.uri(Uri.parse(resolvedUrl)),
         ),
       );
     } else {
-      await _player.setUrl(url);
+      await _player.setUrl(resolvedUrl);
     }
   }
 
@@ -73,8 +90,13 @@ class DeviceAudioMediaAdapter implements AudioMediaAdapter {
   Future<bool> hasRecordPermission() => _recorder.hasPermission();
 
   @override
-  Future<void> startRecording(String outputPath) =>
-      _recorder.start(const RecordConfig(), path: outputPath);
+  Future<void> startRecording(String outputPath) {
+    final resolvedPath =
+        (!outputPath.contains('/') && !outputPath.contains(r'\'))
+            ? '${Directory.systemTemp.path}/$outputPath'
+            : outputPath;
+    return _recorder.start(const RecordConfig(), path: resolvedPath);
+  }
 
   @override
   Future<String?> stopRecording() => _recorder.stop();
