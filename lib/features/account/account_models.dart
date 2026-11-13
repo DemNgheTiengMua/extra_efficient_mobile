@@ -1,3 +1,5 @@
+import '../wallet/wallet_models.dart';
+
 /// Learner personal profile returned by `GET /api/profile` and `PUT /api/profile`.
 class LearnerProfile {
   const LearnerProfile({
@@ -109,6 +111,8 @@ enum ComplaintType {
 }
 
 /// Submitted learner Complaint returned by `GET /api/learner/complaints`.
+///
+/// Wire DTO: `LearnerComplaintDto` — the identifier arrives as `complaintId`.
 class Complaint {
   const Complaint({
     required this.id,
@@ -151,10 +155,10 @@ class Complaint {
             ? 'Attempt #$attemptId'
             : orderId != null
                 ? 'Order #$orderId'
-                : 'Complaint #${json['id'] ?? ''}';
+                : 'Complaint #${json['complaintId'] ?? ''}';
 
     return Complaint(
-      id: (json['id'] as num?)?.toInt() ?? 0,
+      id: (json['complaintId'] as num?)?.toInt() ?? 0,
       type: ComplaintType.fromJson(json['type'] as String?),
       status: ComplaintStatus.fromJson(json['status'] as String?),
       reason: json['reason'] as String? ?? '',
@@ -180,6 +184,11 @@ DateTime? _parseDate(dynamic value) {
 }
 
 /// An owned Booking, Attempt, or Order eligible for filing a Complaint.
+///
+/// Wire DTO: `EligibleSubjectsDto` groups them as `bookings` / `attempts` /
+/// `orders`. Each group names its own identifier (`bookingId`, `attemptId`,
+/// `orderId`) and its own descriptive fields, so the summary and subtitle are
+/// derived per category rather than read from a shared `summary` key.
 class EligibleSubject {
   const EligibleSubject({
     required this.category,
@@ -200,17 +209,11 @@ class EligibleSubject {
       };
 
   static List<EligibleSubject> parseResponse(dynamic data) {
+    if (data is! Map<String, dynamic>) return const [];
     final result = <EligibleSubject>[];
-    if (data is Map<String, dynamic>) {
-      _addGroup(result, data['bookings'], ComplaintSubjectCategory.booking);
-      _addGroup(result, data['attempts'], ComplaintSubjectCategory.attempt);
-      _addGroup(result, data['orders'], ComplaintSubjectCategory.order);
-      if (data['items'] is List<dynamic>) {
-        _addFlatList(result, data['items'] as List<dynamic>);
-      }
-    } else if (data is List<dynamic>) {
-      _addFlatList(result, data);
-    }
+    _addGroup(result, data['bookings'], ComplaintSubjectCategory.booking);
+    _addGroup(result, data['attempts'], ComplaintSubjectCategory.attempt);
+    _addGroup(result, data['orders'], ComplaintSubjectCategory.order);
     return result;
   }
 
@@ -221,49 +224,52 @@ class EligibleSubject {
   ) {
     if (raw is! List<dynamic>) return;
     for (final item in raw.whereType<Map<String, dynamic>>()) {
-      final id = (item['id'] as num? ?? item['subjectId'] as num?)?.toInt() ?? 0;
-      final summary = item['summary'] as String? ??
-          item['label'] as String? ??
-          item['title'] as String? ??
-          '${category.label} #$id';
-      final subtitle = item['subtitle'] as String? ?? item['date'] as String?;
-      out.add(
-        EligibleSubject(
-          category: category,
-          id: id,
-          summary: summary,
-          subtitle: subtitle,
-        ),
-      );
-    }
-  }
-
-  static void _addFlatList(List<EligibleSubject> out, List<dynamic> items) {
-    for (final item in items.whereType<Map<String, dynamic>>()) {
-      final rawCat = (item['subjectType'] as String? ??
-              item['category'] as String? ??
-              item['type'] as String? ??
-              '')
-          .toLowerCase();
-      final category = switch (rawCat) {
-        'booking' => ComplaintSubjectCategory.booking,
-        'order' => ComplaintSubjectCategory.order,
-        _ => ComplaintSubjectCategory.attempt,
+      final idKey = switch (category) {
+        ComplaintSubjectCategory.booking => 'bookingId',
+        ComplaintSubjectCategory.attempt => 'attemptId',
+        ComplaintSubjectCategory.order => 'orderId',
       };
-      final id = (item['id'] as num? ?? item['subjectId'] as num?)?.toInt() ?? 0;
-      final summary = item['summary'] as String? ??
-          item['label'] as String? ??
-          item['title'] as String? ??
-          '${category.label} #$id';
-      final subtitle = item['subtitle'] as String? ?? item['date'] as String?;
+      final id = (item[idKey] as num?)?.toInt() ?? 0;
       out.add(
-        EligibleSubject(
-          category: category,
-          id: id,
-          summary: summary,
-          subtitle: subtitle,
-        ),
+        switch (category) {
+          ComplaintSubjectCategory.booking => EligibleSubject(
+              category: category,
+              id: id,
+              summary: item['mentorName'] as String? ?? 'Booking #$id',
+              subtitle: _describeDate(item['scheduledAt']),
+            ),
+          ComplaintSubjectCategory.attempt => EligibleSubject(
+              category: category,
+              id: id,
+              summary: item['examTitle'] as String? ?? 'Attempt #$id',
+              subtitle: _describeDate(item['startedAt']),
+            ),
+          ComplaintSubjectCategory.order => EligibleSubject(
+              category: category,
+              id: id,
+              summary: [
+                item['orderCode'] as String? ?? 'Order #$id',
+                item['packageName'] as String?,
+              ].nonNulls.join(' · '),
+              subtitle: [
+                if (item['amount'] is num)
+                  formatVnd((item['amount'] as num).toInt()),
+                _describeDate(item['createdAt']),
+              ].nonNulls.join(' · '),
+            ),
+        },
       );
     }
   }
 }
+
+/// Renders a wire timestamp as a compact `YYYY-MM-DD HH:mm UTC` stamp.
+String? _describeDate(dynamic value) {
+  final parsed = _parseDate(value);
+  if (parsed == null) return null;
+  final utc = parsed.toUtc();
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${utc.year}-${two(utc.month)}-${two(utc.day)} '
+      '${two(utc.hour)}:${two(utc.minute)} UTC';
+}
+
