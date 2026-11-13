@@ -78,10 +78,13 @@ class _ExamPreflightScreenState extends ConsumerState<ExamPreflightScreen> {
       });
     } catch (_) {
       if (!mounted) return;
+      // A playback that threw is not a pass: say it failed and let the learner
+      // retest, rather than waving them into a room whose audio does not work.
       setState(() {
-        _audioChecked = true;
-        _sampleUnavailable = true;
-        _error = null;
+        _audioChecked = false;
+        _sampleUnavailable = false;
+        _error = 'The audio sample could not be played on this device. '
+            'Check your volume and output device, then test again.';
       });
     }
   }

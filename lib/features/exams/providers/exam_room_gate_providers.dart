@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/provider_retry.dart';
 import '../data/mock_exam_repository.dart';
 import '../data/placement_repository.dart';
 import '../models/preflight_models.dart';
@@ -63,11 +64,7 @@ final examRoomGateProvider = Provider<ExamRoomGate>((ref) {
   );
 });
 
-/// A read with an on-screen way out, so Riverpod's ~38-second retry ladder
-/// would only delay an answer the learner already needs.
-Duration? _noRetry(int retryCount, Object error) => null;
-
 final preflightStatusProvider = FutureProvider.autoDispose
     .family<PreflightStatus, SittingRef>((ref, sitting) {
       return ref.watch(examRoomGateProvider).readStatus(sitting);
-    }, retry: _noRetry);
+    }, retry: noProviderRetry);

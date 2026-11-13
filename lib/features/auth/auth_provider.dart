@@ -14,16 +14,47 @@ String extractApiError(Object error, {String fallback = 'Request failed'}) {
   if (error is DioException) {
     final data = error.response?.data;
     if (data is Map<String, dynamic>) {
-      final msg = data['message'] ?? data['error'] ?? data['detail'] ?? data['title'];
+      // ProblemDetails: `detail` carries the actionable sentence, `title` the
+      // generic surface name. Prefer the specific one.
+      final msg =
+          data['detail'] ?? data['message'] ?? data['error'] ?? data['title'];
       if (msg is String && msg.isNotEmpty) {
         return msg;
       }
     }
-    if (error.message != null && error.message!.isNotEmpty) {
-      return error.message!;
-    }
+    // No usable response body: the learner must not be shown dio's internal
+    // text ("This indicates an error which most likely cannot be solved by the
+    // library."). Say what actually happened instead.
+    return switch (error.type) {
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.receiveTimeout =>
+        'The server took too long to answer. Check your connection and try again.',
+      DioExceptionType.connectionError =>
+        'Cannot reach the server. Check your connection and try again.',
+      DioExceptionType.badCertificate =>
+        'The server certificate could not be verified.',
+      DioExceptionType.cancel => 'The request was cancelled.',
+      DioExceptionType.badResponse => _statusMessage(error.response?.statusCode),
+      _ => fallback,
+    };
   }
   return fallback;
+}
+
+String _statusMessage(int? status) {
+  final code = status ?? 0;
+  return switch (code) {
+    400 => 'That request was not accepted. Check the details and try again.',
+    401 => 'Your session has expired. Please sign in again.',
+    403 => 'You do not have access to that.',
+    404 => 'That item could not be found.',
+    409 => 'That action conflicts with the current state. Refresh and retry.',
+    422 => 'Some details were not accepted. Check them and try again.',
+    429 => 'Too many requests. Wait a moment and try again.',
+    >= 500 => 'The server had a problem. Please try again shortly.',
+    _ => 'The request failed. Please try again.',
+  };
 }
 
 /// Manages learner authentication, JWT persistence, and 401 session invalidation.
