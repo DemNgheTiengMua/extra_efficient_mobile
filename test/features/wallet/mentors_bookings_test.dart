@@ -532,6 +532,9 @@ void main() {
       await tester.tap(find.byKey(const Key('cancel-booking-button-2')));
       await tester.pumpAndSettle();
       expect(find.text('13 CREDITS'), findsOneWidget);
+      // The refund the backend granted is reported, not assumed from the price.
+      expect(find.byKey(const Key('cancel-notice-2')), findsOneWidget);
+      expect(find.text('Booking cancelled. 1 credits refunded.'), findsOneWidget);
 
       // The finished ('done') booking is the ratable one.
       expect(find.byKey(const Key('rate-booking-button-1')), findsOneWidget);
@@ -552,8 +555,229 @@ void main() {
 
       expect(ratingPayload?['rating'], 5);
       expect(ratingPayload?['text'], 'Clear feedback');
+
+      // The rating and review text are read from the booking's nested review
+      // object and shown on the booking itself.
+      expect(
+        find.text('Rated: 5/5 — Clear feedback'),
+        findsOneWidget,
+      );
     },
   );
+
+  testWidgets(
+    'a finished session is not offered a meet link, even one the backend left',
+    (tester) async {
+      final adapter = _adapter((options, body) async {
+        if (options.path == '/api/mentors') {
+          return FakeHttpClientAdapter.jsonResponse(const []);
+        }
+        if (options.path == '/api/mentors/bookings') {
+          return FakeHttpClientAdapter.jsonResponse([
+            {
+              'bookingId': 7,
+              'userId': 2,
+              'mentorId': 1,
+              'mentorName': 'Dr. Trần Minh Khoa',
+              'mentorType': 'human',
+              'slotId': 5,
+              'status': 'done',
+              // A stale link on an ended session: still not offered.
+              'meetLink': 'https://meet.google.com/abc-defg-hij',
+              'priceCredits': 1,
+              'createdAt': '2026-11-06T01:44:01+07:00',
+              'review': null,
+            },
+          ]);
+        }
+        return null;
+      });
+
+      await _pumpWallet(tester, adapter);
+      await _openMentorsTab(tester);
+
+      expect(find.byKey(const Key('join-meet-button-7')), findsNothing);
+      // A finished, unrated session is ratable instead.
+      expect(find.byKey(const Key('rate-booking-button-7')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'a failed launch says so instead of swallowing the tap',
+    (tester) async {
+      final adapter = _adapter((options, body) async {
+        if (options.path == '/api/mentors') {
+          return FakeHttpClientAdapter.jsonResponse(const []);
+        }
+        if (options.path == '/api/mentors/bookings') {
+          return FakeHttpClientAdapter.jsonResponse([
+            {
+              'bookingId': 5,
+              'userId': 2,
+              'mentorId': 1,
+              'mentorName': 'Dr. Trần Minh Khoa',
+              'mentorType': 'human',
+              'slotId': 6,
+              'status': 'confirmed',
+              'meetLink': 'https://meet.google.com/abc-defg-hij',
+              'priceCredits': 1,
+              'createdAt': '2026-11-10T01:44:01+07:00',
+              'review': null,
+            },
+          ]);
+        }
+        return null;
+      });
+
+      await _pumpWallet(
+        tester,
+        adapter,
+        urlLauncher: _FailingUrlLauncher(),
+      );
+      await _openMentorsTab(tester);
+
+      await tester.ensureVisible(find.byKey(const Key('join-meet-button-5')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('join-meet-button-5')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not open link'), findsOneWidget);
+      expect(
+        find.textContaining('https://meet.google.com/abc-defg-hij'),
+        findsWidgets,
+      );
+    },
+  );
+
+  testWidgets(
+    'a failed rating reports the backend message and leaves the rating usable',
+    (tester) async {
+      var attempts = 0;
+
+      final adapter = _adapter((options, body) async {
+        if (options.path == '/api/mentors') {
+          return FakeHttpClientAdapter.jsonResponse(const []);
+        }
+        if (options.path == '/api/mentors/bookings') {
+          return FakeHttpClientAdapter.jsonResponse([
+            {
+              'bookingId': 1,
+              'userId': 2,
+              'mentorId': 1,
+              'mentorName': 'Dr. Trần Minh Khoa',
+              'mentorType': 'human',
+              'slotId': 5,
+              'status': 'done',
+              'meetLink': null,
+              'priceCredits': 1,
+              'createdAt': '2026-11-06T01:44:01+07:00',
+              'review': null,
+            },
+          ]);
+        }
+        if (options.path == '/api/mentors/bookings/1/rate') {
+          attempts++;
+          return FakeHttpClientAdapter.jsonResponse({
+            'title': 'Mentor rating error',
+            'status': 400,
+            'detail': 'This booking has already been rated.',
+            'code': 'booking_already_rated',
+          }, statusCode: 400);
+        }
+        return null;
+      });
+
+      await _pumpWallet(tester, adapter);
+      await _openMentorsTab(tester);
+
+      await tester.ensureVisible(find.byKey(const Key('rate-booking-button-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('rate-booking-button-1')));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(
+        find.byKey(const Key('submit-rating-button')),
+      );
+      await tester.tap(find.byKey(const Key('submit-rating-button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('This booking has already been rated.'),
+        findsOneWidget,
+      );
+
+      // The control stays usable, so the learner can retry.
+      await tester.tap(find.byKey(const Key('submit-rating-button')));
+      await tester.pumpAndSettle();
+      expect(attempts, 2);
+    },
+  );
+
+  testWidgets(
+    'a failed cancel reports the backend message and leaves the button usable',
+    (tester) async {
+      var attempts = 0;
+
+      final adapter = _adapter((options, body) async {
+        if (options.path == '/api/mentors') {
+          return FakeHttpClientAdapter.jsonResponse(const []);
+        }
+        if (options.path == '/api/mentors/bookings') {
+          return FakeHttpClientAdapter.jsonResponse([
+            {
+              'bookingId': 2,
+              'userId': 2,
+              'mentorId': 1,
+              'mentorName': 'Dr. Trần Minh Khoa',
+              'mentorType': 'human',
+              'slotId': 6,
+              'status': 'confirmed',
+              'meetLink': 'https://meet.google.com/abc-defg-hij',
+              'priceCredits': 1,
+              'createdAt': '2026-11-10T01:44:01+07:00',
+              'review': null,
+            },
+          ]);
+        }
+        if (options.path == '/api/mentors/bookings/2/cancel') {
+          attempts++;
+          return FakeHttpClientAdapter.jsonResponse({
+            'title': 'Mentor booking cancellation error',
+            'status': 400,
+            'detail': 'Cannot cancel a session that has already started.',
+            'code': 'booking_cannot_cancel',
+          }, statusCode: 400);
+        }
+        return null;
+      });
+
+      await _pumpWallet(tester, adapter);
+      await _openMentorsTab(tester);
+
+      await tester.ensureVisible(
+        find.byKey(const Key('cancel-booking-button-2')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('cancel-booking-button-2')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('cancel-error-2')), findsOneWidget);
+      expect(
+        find.text('Cannot cancel a session that has already started.'),
+        findsOneWidget,
+      );
+
+      // Not the silent `finally`: the learner can try again.
+      await tester.tap(find.byKey(const Key('cancel-booking-button-2')));
+      await tester.pumpAndSettle();
+      expect(attempts, 2);
+    },
+  );
+}
+
+class _FailingUrlLauncher implements UrlLauncherAdapter {
+  @override
+  Future<bool> launchExternalUrl(String url) async => false;
 }
 
 Future<void> _pumpWallet(
