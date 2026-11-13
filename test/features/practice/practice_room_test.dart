@@ -605,6 +605,46 @@ void main() {
     expect(writes.where((r) => r.path.endsWith('/answer')), isEmpty);
   });
 
+  testWidgets('a question whose hint is empty says so instead of re-offering',
+      (tester) async {
+    final writes = <RequestOptions>[];
+    final take = practiceTakeResponse(
+      session: practiceSession(
+        sessionId: 17,
+        sectionId: 2,
+        sectionCode: 'P2',
+        sectionName: 'Question-Response',
+        modality: 'listening',
+      ),
+      questions: [
+        practiceQuestion(
+          itemVersionId: 4,
+          displayOrder: 1,
+          stem: 'Where did you leave the project folders?',
+          hintUsed: true,
+          options: [
+            practiceOption(
+              optionId: 41,
+              label: 'A',
+              text: 'Yes, I folded them neatly.',
+            ),
+            practiceOption(
+              optionId: 42,
+              label: 'B',
+              text: 'On the conference room table.',
+            ),
+          ],
+        ),
+      ],
+    );
+    await pumpToSession(tester, roomAdapter(writes: writes, take: take));
+
+    // `hintUsed: true` with a null `hint` means the item has no hint; asking
+    // again would tell the learner the same thing twice.
+    expect(find.text('No hint for this question'), findsOneWidget);
+    expect(find.byKey(const Key('practice-request-hint')), findsNothing);
+  });
+
   testWidgets('the room offers no question-source or feedback-timing control',      (tester) async {
     final writes = <RequestOptions>[];
     final starts = <RequestOptions>[];

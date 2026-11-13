@@ -388,6 +388,7 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
     final wordCount = _countWords(writingText);
     final result = _results[address];
     final hint = _hints[address] ?? q.hint;
+    final hintRequested = _hints.containsKey(address) || q.hintUsed;
     final isLast = _currentIndex == _questions.length - 1;
     final isSaved = _isSaved(q);
     final canSubmit = q.isWriting
@@ -539,6 +540,14 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
             title: 'HINT',
             subtitle: hint,
             variant: PlacardAlertVariant.warning,
+          ),
+          const SizedBox(height: 12),
+        ] else if (hintRequested) ...[
+          // `hintUsed` can be true beside a null `hint`: the item has none.
+          const PlacardAlert(
+            key: Key('practice-hint-empty'),
+            title: 'No hint for this question',
+            variant: PlacardAlertVariant.info,
           ),
           const SizedBox(height: 12),
         ] else ...[
