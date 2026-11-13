@@ -12,6 +12,10 @@ import '../../features/auth/screens/forgot_password_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/auth/screens/sign_in_screen.dart';
 import '../../features/auth/screens/verify_email_screen.dart';
+import '../../features/path/screens/goal_calibration_screen.dart';
+import '../../features/path/screens/learning_path_screen.dart';
+import '../../features/path/screens/lesson_player_screen.dart';
+import '../../features/path/screens/path_dashboard_screen.dart';
 import '../../features/shell/main_shell.dart';
 import '../../features/shell/tab_placeholder_screen.dart';
 import '../../features/wallet/screens/wallet_screen.dart';
@@ -74,11 +78,25 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/path',
-                builder: (context, state) => const TabPlaceholderScreen(
-                  tabName: 'PATH',
-                  description:
-                      'Personalized learning path, placement status, and next action.',
-                ),
+                builder: (context, state) => const PathDashboardScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'goal',
+                    builder: (context, state) => const GoalCalibrationScreen(),
+                  ),
+                  GoRoute(
+                    path: 'learning-path',
+                    builder: (context, state) => const LearningPathScreen(),
+                  ),
+                  GoRoute(
+                    path: 'lessons/:id',
+                    builder: (context, state) {
+                      final id =
+                          int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+                      return LessonPlayerScreen(lessonId: id);
+                    },
+                  ),
+                ],
               ),
             ],
           ),
