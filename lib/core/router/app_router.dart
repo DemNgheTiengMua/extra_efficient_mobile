@@ -13,9 +13,10 @@ import '../../features/auth/screens/register_screen.dart';
 import '../../features/auth/screens/sign_in_screen.dart';
 import '../../features/auth/screens/verify_email_screen.dart';
 import '../../features/exams/screens/exam_hub_screen.dart';
+import '../../features/exams/screens/exam_preflight_screen.dart';
+import '../../features/exams/providers/exam_room_gate_providers.dart';
 import '../../features/exams/screens/mock_exam_room_screen.dart';
 import '../../features/exams/screens/mock_instructions_screen.dart';
-import '../../features/exams/screens/mock_preflight_screen.dart';
 import '../../features/exams/screens/mock_result_screen.dart';
 import '../../features/exams/screens/mock_review_screen.dart';
 import '../../features/exams/screens/placement_exam_room_screen.dart';
@@ -181,9 +182,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final id =
               int.tryParse(state.pathParameters['placementId'] ?? '') ?? 0;
-          final resume = state.uri.queryParameters['resume'] == '1';
-          return PlacementExamRoomScreen(placementId: id, resume: resume);
+          return PlacementExamRoomScreen(placementId: id);
         },
+        routes: [
+          GoRoute(
+            path: 'preflight',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) {
+              final id =
+                  int.tryParse(state.pathParameters['placementId'] ?? '') ?? 0;
+              return ExamPreflightScreen(
+                kind: SittingKind.placement,
+                sittingId: id,
+              );
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: '/placement/result/:placementId',
@@ -217,7 +231,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final attemptId =
               int.tryParse(state.pathParameters['attemptId'] ?? '') ?? 0;
-          return MockPreflightScreen(attemptId: attemptId);
+          return ExamPreflightScreen(
+            kind: SittingKind.attempt,
+            sittingId: attemptId,
+          );
         },
       ),
       GoRoute(

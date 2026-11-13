@@ -185,7 +185,7 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
             return PlacardPanel(
               title: 'TARGET BAND & STUDY GOAL',
               trailing: PlacardBadge.info(
-                'CURRENT ${goal.currentBandCode?.toUpperCase() ?? '--'}',
+                'CURRENT ${goal.currentBandCode == null ? '--' : _bandCodeLabel(goal.currentBandCode!)}',
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -201,13 +201,13 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
                     children: [
                       for (final band in goal.availableBands)
                         FTappable(
-                          key: Key('target-band-$band'),
+                          key: Key('target-band-${band.code}'),
                           onPress: () => setState(() {
-                            _selectedTargetBand = band;
+                            _selectedTargetBand = band.code;
                           }),
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              color: selected == band
+                              color: selected == band.code
                                   ? SignageColors.ink
                                   : SignageColors.paper,
                               border: Border.all(
@@ -220,15 +220,33 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
                                 horizontal: 14,
                                 vertical: 10,
                               ),
-                              child: Text(
-                                band.toUpperCase(),
-                                style: SignageTypography.data(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: selected == band
-                                      ? SignageColors.paper
-                                      : SignageColors.ink,
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${_bandCodeLabel(band.code)} · ${band.name}'
+                                        .toUpperCase(),
+                                    style: SignageTypography.data(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: selected == band.code
+                                          ? SignageColors.paper
+                                          : SignageColors.ink,
+                                    ),
+                                  ),
+                                  // The band's own score range, as the
+                                  // certificate defines it.
+                                  Text(
+                                    band.rangeText,
+                                    style: SignageTypography.body(
+                                      fontSize: 12,
+                                      color: selected == band.code
+                                          ? SignageColors.paper
+                                          : SignageColors.inkMuted,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -296,27 +314,35 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
           ),
           data: (calibration) {
             if (calibration == null) return const SizedBox.shrink();
+            final proposal = calibration.proposal;
             return PlacardPanel(
               title: 'BAND CALIBRATION',
-              trailing: calibration.pending
-                  ? const PlacardBadge.warning('PENDING')
+              trailing: proposal != null
+                  ? const PlacardBadge.warning('SUGGESTED')
                   : const PlacardBadge.muted('NONE'),
-              child: calibration.pending
+              child: proposal != null
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (calibration.recommendedBandCode != null)
-                          Text(
-                            'RECOMMENDED TARGET: ${calibration.recommendedBandCode!.toUpperCase()}',
-                            style: SignageTypography.label(fontSize: 13),
+                        Text(
+                          'SUGGESTED TARGET: ${proposal.proposedBandName.toUpperCase()}',
+                          style: SignageTypography.label(fontSize: 13),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          proposal.evidence,
+                          style: SignageTypography.body(fontSize: 15),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${proposal.observedAccuracyPct.toStringAsFixed(0)}% accuracy over '
+                          '${proposal.validAnswerCount} answers (needs '
+                          '${proposal.requiredAccuracyPct}%)',
+                          style: SignageTypography.data(
+                            fontSize: 12,
+                            color: SignageColors.inkMuted,
                           ),
-                        if (calibration.reason != null) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            calibration.reason!,
-                            style: SignageTypography.body(fontSize: 15),
-                          ),
-                        ],
+                        ),
                         const SizedBox(height: 12),
                         Row(
                           children: [
@@ -343,7 +369,9 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
                       ],
                     )
                   : Text(
-                      'No calibration adjustments pending.',
+                      calibration.reason == 'below_threshold'
+                          ? 'Your practice still matches ${calibration.placedBandName ?? calibration.placedBandCode}.'
+                          : 'No calibration adjustments pending.',
                       style: SignageTypography.body(
                         fontSize: 14,
                         color: SignageColors.inkMuted,
@@ -355,4 +383,11 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
       ],
     );
   }
+}
+
+/// `below_A1` is the server's code for the band the signage bar paints `<A1`.
+String _bandCodeLabel(String code) {
+  final lower = code.toLowerCase();
+  if (lower == 'below_a1' || lower == '<a1') return '<A1';
+  return code.toUpperCase();
 }

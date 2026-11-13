@@ -184,26 +184,6 @@ class MockExamInstructions {
   bool get hasActiveAttempt => activeAttemptId != null;
 }
 
-class MockPreflight {
-  const MockPreflight({
-    required this.attemptId,
-    required this.audioSampleUrl,
-    required this.requiresMicrophone,
-  });
-
-  factory MockPreflight.fromJson(Map<String, dynamic> json) {
-    return MockPreflight(
-      attemptId: (json['attemptId'] as num?)?.toInt() ?? 0,
-      audioSampleUrl: (json['audioSampleUrl'] as String?) ?? '',
-      requiresMicrophone: (json['requiresMicrophone'] as bool?) ?? false,
-    );
-  }
-
-  final int attemptId;
-  final String audioSampleUrl;
-  final bool requiresMicrophone;
-}
-
 /// One row of `GET /api/learner/exams/history`'s `attempts[]`.
 class ExamHistoryItem {
   const ExamHistoryItem({

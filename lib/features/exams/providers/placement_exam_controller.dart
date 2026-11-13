@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/media/audio_media_adapter.dart';
 import '../data/placement_repository.dart';
+import '../models/exam_room_stop.dart';
 import '../models/placement_models.dart';
 
 enum AutosaveStatus { idle, saving, saved, failed }
@@ -21,6 +22,9 @@ class PlacementExamState {
     this.isSubmitting = false,
     this.isCompleted = false,
     this.uploadedAudioQuestionIds = const <int>{},
+    this.answeredCount = 0,
+    this.stop,
+    this.needsPreflight = false,
   });
 
   final bool isLoading;
@@ -34,6 +38,17 @@ class PlacementExamState {
   final bool isSubmitting;
   final bool isCompleted;
   final Set<int> uploadedAudioQuestionIds;
+
+  /// The server's count of answers it holds, for the resume banner.
+  final int answeredCount;
+
+  /// Set when the sitting cannot be opened at all; the room renders this and
+  /// nothing else.
+  final ExamRoomStop? stop;
+
+  /// The backend refused the sitting with `preflight_required`, so this door is
+  /// the wrong one and the device gate must run first.
+  final bool needsPreflight;
 
   PlacementQuestion? get currentQuestion =>
       (currentIndex >= 0 && currentIndex < questions.length)
@@ -53,6 +68,9 @@ class PlacementExamState {
     bool? isSubmitting,
     bool? isCompleted,
     Set<int>? uploadedAudioQuestionIds,
+    int? answeredCount,
+    ExamRoomStop? stop,
+    bool? needsPreflight,
   }) {
     return PlacementExamState(
       isLoading: isLoading ?? this.isLoading,
@@ -67,6 +85,9 @@ class PlacementExamState {
       isCompleted: isCompleted ?? this.isCompleted,
       uploadedAudioQuestionIds:
           uploadedAudioQuestionIds ?? this.uploadedAudioQuestionIds,
+      answeredCount: answeredCount ?? this.answeredCount,
+      stop: stop ?? this.stop,
+      needsPreflight: needsPreflight ?? this.needsPreflight,
     );
   }
 }
@@ -77,14 +98,12 @@ class PlacementExamController extends ChangeNotifier {
     required this.placementId,
     required this.repository,
     required this.audioAdapter,
-    this.resume = false,
     this.onSubmitted,
   });
 
   final int placementId;
   final PlacementRepository repository;
   final AudioMediaAdapter audioAdapter;
-  final bool resume;
   final VoidCallback? onSubmitted;
 
   PlacementExamState _state = const PlacementExamState();
@@ -99,11 +118,18 @@ class PlacementExamController extends ChangeNotifier {
     _update(_state.copyWith(isLoading: true, clearError: true));
     try {
       // The resume payload carries no questions by design. Questions always come
-      // from the take endpoint, which is the authoritative view of the room.
+      // from the take endpoint, which is the authoritative view of the room -
+      // and it is only readable once the device gate has been verified.
       final sitting = await repository.fetchSitting(placementId);
 
       final now = DateTime.now().toUtc();
       final remaining = sitting.expiresAt.toUtc().difference(now).inSeconds;
+      final stop = stopForSitting(
+        status: sitting.status,
+        questionCount: sitting.questions.length,
+        resultRoute: '/placement/result/$placementId',
+        hubRoute: '/exams',
+      );
       _update(
         _state.copyWith(
           isLoading: false,
@@ -111,12 +137,44 @@ class PlacementExamController extends ChangeNotifier {
           expiresAt: sitting.expiresAt,
           remainingSeconds: remaining > 0 ? remaining : 0,
           questions: sitting.questions,
+          answeredCount: sitting.answeredCount,
           currentIndex: 0,
+          stop: stop,
         ),
       );
+      if (stop != null) return;
       _startCountdown();
       await _loadAudioForCurrentQuestion();
     } catch (e) {
+      if (isPreflightRequired(e)) {
+        // The door was the wrong one: the shared gate has to run first.
+        _update(
+          _state.copyWith(isLoading: false, needsPreflight: true),
+        );
+        return;
+      }
+      if (isSittingOver(e) || isSittingMissing(e)) {
+        _update(
+          _state.copyWith(
+            isLoading: false,
+            stop: ExamRoomStop(
+              stamp: isSittingMissing(e) ? 'NOT FOUND' : 'FINISHED',
+              title: isSittingMissing(e)
+                  ? 'This sitting no longer exists'
+                  : 'This sitting is over',
+              description: isSittingMissing(e)
+                  ? 'The backend does not recognise it, so there is nothing to '
+                      'open.'
+                  : 'It was submitted, graded or expired, so it can no longer be '
+                      'answered. Your score is on the result placard.',
+              actionLabel: isSittingMissing(e) ? 'BACK TO EXAMS' : 'VIEW RESULT',
+              actionRoute:
+                  isSittingMissing(e) ? '/exams' : '/placement/result/$placementId',
+            ),
+          ),
+        );
+        return;
+      }
       _update(_state.copyWith(isLoading: false, error: e.toString()));
     }
   }
@@ -141,7 +199,7 @@ class PlacementExamController extends ChangeNotifier {
 
   Future<void> _loadAudioForCurrentQuestion() async {
     final q = _state.currentQuestion;
-    if (q == null || q.audioUrl == null || q.audioUrl!.isEmpty) {
+    if (q == null || q.audioPath == null || q.audioPath!.isEmpty) {
       if (_loadedAudioQuestionId != null) {
         await audioAdapter.stop();
         _loadedAudioQuestionId = null;
@@ -151,7 +209,7 @@ class PlacementExamController extends ChangeNotifier {
     if (_loadedAudioQuestionId == q.questionId) return;
     _loadedAudioQuestionId = q.questionId;
     await audioAdapter.setAudioUrl(
-      q.audioUrl!,
+      q.audioPath!,
       clipStart: q.audioStartMs != null
           ? Duration(milliseconds: q.audioStartMs!)
           : null,
@@ -299,10 +357,19 @@ class PlacementExamController extends ChangeNotifier {
     }
   }
 
-  Future<void> abandon() async {
+  /// The deliberate ABANDON action. Its failure is reported, but leaving the
+  /// room is the screen's job and never waits on this answer.
+  Future<bool> abandon() async {
     _debounceTimer?.cancel();
     _countdownTimer?.cancel();
-    await repository.abandon(placementId);
+    try {
+      await repository.abandon(placementId);
+      return true;
+    } catch (e) {
+      if (_disposed) return false;
+      _update(_state.copyWith(error: e.toString()));
+      return false;
+    }
   }
 
   void _update(PlacementExamState next) {

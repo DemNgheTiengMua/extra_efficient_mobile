@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 
 import '../models/mock_exam_models.dart';
 import '../models/placement_models.dart';
+import '../models/preflight_models.dart';
 
 /// Repository for `/api/learner/exams*` and `/api/learner/attempts*`.
 class MockExamRepository {
@@ -45,15 +46,26 @@ class MockExamRepository {
         0;
   }
 
-  Future<MockPreflight> fetchPreflight(int attemptId) async {
+  /// `GET /api/learner/attempts/{id}/preflight` — the device gate's facts.
+  Future<PreflightStatus> fetchPreflightStatus(int attemptId) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/learner/attempts/$attemptId/preflight',
     );
-    return MockPreflight.fromJson(response.data ?? const <String, dynamic>{});
+    return PreflightStatus.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
   }
 
-  Future<void> verifyPreflight(int attemptId) async {
-    await _dio.post<void>('/api/learner/attempts/$attemptId/preflight/verify');
+  /// `POST /api/learner/attempts/{id}/preflight/verify` — opens the sitting.
+  ///
+  /// Answers 200 with the same [PreflightStatus], now `isVerified: true`.
+  Future<PreflightStatus> verifyPreflight(int attemptId) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/learner/attempts/$attemptId/preflight/verify',
+    );
+    return PreflightStatus.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
   }
 
   Future<PlacementSitting> fetchAttemptState(int attemptId, {int? q}) async {

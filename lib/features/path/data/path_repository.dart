@@ -40,21 +40,20 @@ class PathRepository {
     return TargetBandGoal.fromJson(response.data ?? const <String, dynamic>{});
   }
 
-  Future<TargetBandGoal> updateTargetBand(String targetBandCode) async {
-    final response = await _dio.post<Map<String, dynamic>>(
+  Future<void> updateTargetBand(String targetBandCode) async {
+    await _dio.post<void>(
       '/api/learner/target-band',
       data: {'targetBandCode': targetBandCode},
     );
-    return TargetBandGoal.fromJson(response.data ?? const <String, dynamic>{});
   }
 
-  Future<TargetBandGoal> saveGoal({
+  Future<void> saveGoal({
     String? currentBandCode,
     required String targetBandCode,
     String? targetDate,
     num? weeklyStudyHours,
   }) async {
-    final response = await _dio.post<Map<String, dynamic>>(
+    await _dio.post<void>(
       '/api/learner/goal',
       data: {
         'currentBandCode': currentBandCode,
@@ -63,7 +62,6 @@ class PathRepository {
         'weeklyStudyHours': weeklyStudyHours,
       },
     );
-    return TargetBandGoal.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   Future<CalibrationStatus> fetchCalibration() async {
@@ -88,32 +86,25 @@ class PathRepository {
   }
 
   /// `GET /learning-path` is the existence switch: `hasActivePath: false` means
-  /// there is no path to show, and a 404 is the older form of the same answer.
-  /// A payload without the flag predates it, so a 200 is trusted rather than
-  /// read as empty.
-  Future<LearningPathOverview?> fetchLearningPath() async {
-    try {
-      final response = await _dio.get<Map<String, dynamic>>(
-        '/api/learner/learning-path',
-      );
-      final data = response.data;
-      if (data == null) return null;
-      if (data['hasActivePath'] == false) return null;
-      return LearningPathOverview.fromJson(data);
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 404) {
-        return null;
-      }
-      rethrow;
-    }
+  /// there is no path to show.
+  Future<LearningPathOverview> fetchLearningPath() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/learner/learning-path',
+    );
+    return LearningPathOverview.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
   }
 
+  /// `POST /learning-path/generate` needs a target band: without one the
+  /// backend answers 422 `LEARNING_PATH_BAND_UNKNOWN`. The screen gates on that
+  /// rather than offering a button that always fails.
   Future<void> generateLearningPath({String? targetBandCode}) async {
     await _dio.post<void>(
       '/api/learner/learning-path/generate',
       data: targetBandCode != null
           ? {'targetBandCode': targetBandCode}
-          : <String, dynamic>{},
+          : const <String, dynamic>{},
     );
   }
 
@@ -121,18 +112,41 @@ class PathRepository {
     await _dio.post<void>('/api/learner/learning-path/reset');
   }
 
-  Future<PathModuleItem> fetchStep(int stepId) async {
-    final response = await _dio.get<Map<String, dynamic>>(
-      '/api/learner/learning-path/steps/$stepId',
-    );
-    return PathModuleItem.fromJson(response.data ?? const <String, dynamic>{});
+  /// A step that is not on the active path is a terminal "not available", so
+  /// the 404 is translated instead of surfacing as a retryable failure.
+  Future<PathStep> fetchStep(int stepId) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/api/learner/learning-path/steps/$stepId',
+      );
+      return PathStep.fromJson(response.data ?? const <String, dynamic>{});
+    } on DioException catch (e) {
+      throw _stepError(e, stepId);
+    }
   }
 
-  Future<PathModuleItem> startStep(int stepId) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      '/api/learner/learning-path/steps/$stepId/start',
-    );
-    return PathModuleItem.fromJson(response.data ?? const <String, dynamic>{});
+  Future<StartStepResult> startStep(int stepId) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/learner/learning-path/steps/$stepId/start',
+      );
+      return StartStepResult.fromJson(
+        response.data ?? const <String, dynamic>{},
+      );
+    } on DioException catch (e) {
+      throw _stepError(e, stepId);
+    }
+  }
+
+  /// 404 `LEARNING_PATH_STEP_NOT_FOUND` is terminal, not a network fault.
+  Object _stepError(DioException e, int stepId) {
+    final data = e.response?.data;
+    final code = data is Map ? data['code']?.toString() : null;
+    if (e.response?.statusCode == 404 &&
+        code?.toLowerCase() == 'learning_path_step_not_found') {
+      return PathStepUnavailable('Step $stepId is not on your active path.');
+    }
+    return e;
   }
 
   /// `GET /insights/path` answers `404 LEARNING_PATH_NOT_FOUND` whenever there
@@ -212,11 +226,10 @@ class PathRepository {
     return LessonProgress.fromJson(response.data ?? const <String, dynamic>{});
   }
 
-  Future<LessonProgress> markCardViewed(int lessonId, int cardId) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      '/api/learner/lessons/$lessonId/cards/$cardId/view',
-    );
-    return LessonProgress.fromJson(response.data ?? const <String, dynamic>{});
+  /// Records a card view. The backend answers `{success: true}`, not a progress
+  /// view, so the caller refetches progress rather than reading this result.
+  Future<void> markCardViewed(int lessonId, int cardId) async {
+    await _dio.post<void>('/api/learner/lessons/$lessonId/cards/$cardId/view');
   }
 
   Future<MicroCheckResult> submitMicroCheck({

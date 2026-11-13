@@ -38,12 +38,14 @@ class PracticeRepository {
     );
   }
 
+  /// `StartPracticeRequest` accepts a section **or** a (topic, level) cell,
+  /// plus an optional content tier. It accepts no question source and no
+  /// feedback mode — sending them is silently ignored, which is why the room
+  /// offers neither.
   Future<int> startSession({
     int? sectionId,
     int? topicId,
     String? cefrLevelCode,
-    required PracticeQuestionSource questionSource,
-    required PracticeFeedbackMode feedbackMode,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/learner/practice/sessions',
@@ -51,14 +53,13 @@ class PracticeRepository {
         'sectionId': ?sectionId,
         'topicId': ?topicId,
         'cefrLevelCode': ?cefrLevelCode,
-        'questionSource': questionSource.apiValue,
-        'feedbackMode': feedbackMode.apiValue,
       },
     );
     final data = res.data ?? const <String, dynamic>{};
     return (data['sessionId'] as num?)?.toInt() ?? 0;
   }
 
+  /// The composite: session, current question, every question, navigator.
   Future<PracticeSessionTake> fetchSessionTake(int sessionId) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/learner/practice/sessions/$sessionId/take',
@@ -68,23 +69,26 @@ class PracticeRepository {
     );
   }
 
-  Future<String> requestHint(int sessionId, int questionId) async {
+  /// `address`, not `questionId`: a pool item has no row id and sending `0`
+  /// answers nothing.
+  Future<String> requestHint(int sessionId, int address) async {
     final res = await _dio.post<Map<String, dynamic>>(
-      '/api/learner/practice/sessions/$sessionId/questions/$questionId/hint',
+      '/api/learner/practice/sessions/$sessionId/questions/$address/hint',
+      data: const <String, dynamic>{},
     );
     return res.data?['hint'] as String? ?? '';
   }
 
   Future<PracticeAnswerResult> submitAnswer(
     int sessionId,
-    int questionId, {
+    int address, {
     int? selectedOptionId,
     String? responseText,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
-      '/api/learner/practice/sessions/$sessionId/questions/$questionId/answer',
+      '/api/learner/practice/sessions/$sessionId/questions/$address/answer',
       data: {
-        'selectedOptionId': selectedOptionId,
+        'selectedOptionId': ?selectedOptionId,
         'responseText': ?responseText,
       },
     );
@@ -182,30 +186,6 @@ class PracticeRepository {
 final practiceRepositoryProvider = Provider<PracticeRepository>((ref) {
   return PracticeRepository(ref.watch(dioProvider));
 });
-
-class PracticeQuestionSourceNotifier extends Notifier<PracticeQuestionSource> {
-  @override
-  PracticeQuestionSource build() => PracticeQuestionSource.all;
-
-  void select(PracticeQuestionSource source) => state = source;
-}
-
-final practiceQuestionSourceProvider =
-    NotifierProvider<PracticeQuestionSourceNotifier, PracticeQuestionSource>(
-  PracticeQuestionSourceNotifier.new,
-);
-
-class PracticeFeedbackModeNotifier extends Notifier<PracticeFeedbackMode> {
-  @override
-  PracticeFeedbackMode build() => PracticeFeedbackMode.immediate;
-
-  void select(PracticeFeedbackMode mode) => state = mode;
-}
-
-final practiceFeedbackModeProvider =
-    NotifierProvider<PracticeFeedbackModeNotifier, PracticeFeedbackMode>(
-  PracticeFeedbackModeNotifier.new,
-);
 
 final practiceCatalogProvider =
     FutureProvider.autoDispose<PracticeCatalog>((ref) async {

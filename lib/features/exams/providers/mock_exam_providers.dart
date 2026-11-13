@@ -32,11 +32,6 @@ final mockInstructionsProvider = FutureProvider.autoDispose
       return ref.read(mockExamRepositoryProvider).fetchInstructions(examId);
     }, retry: noProviderRetry);
 
-final mockPreflightProvider = FutureProvider.autoDispose
-    .family<MockPreflight, int>((ref, attemptId) async {
-      return ref.read(mockExamRepositoryProvider).fetchPreflight(attemptId);
-    }, retry: noProviderRetry);
-
 final mockResultProvider = FutureProvider.autoDispose
     .family<MockAttemptResult, int>((ref, attemptId) async {
       return ref.read(mockExamRepositoryProvider).fetchResult(attemptId);

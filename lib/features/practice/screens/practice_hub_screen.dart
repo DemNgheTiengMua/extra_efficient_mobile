@@ -34,14 +34,10 @@ class _PracticeHubScreenState extends ConsumerState<PracticeHubScreen> {
       _startError = null;
     });
     try {
-      final source = ref.read(practiceQuestionSourceProvider);
-      final feedback = ref.read(practiceFeedbackModeProvider);
       final sessionId = await ref.read(practiceRepositoryProvider).startSession(
             sectionId: sectionId,
             topicId: topicId,
             cefrLevelCode: cefrLevelCode,
-            questionSource: source,
-            feedbackMode: feedback,
           );
       if (!mounted) return;
       if (sessionId > 0) {
@@ -173,8 +169,6 @@ class _DrillsView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final catalogAsync = ref.watch(practiceCatalogProvider);
-    final selectedSource = ref.watch(practiceQuestionSourceProvider);
-    final selectedFeedback = ref.watch(practiceFeedbackModeProvider);
 
     return catalogAsync.when(
       loading: () => const Center(child: FCircularProgress()),
@@ -219,54 +213,6 @@ class _DrillsView extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
             ],
-            PlacardPanel(
-              title: 'SESSION CONFIGURATION',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('QUESTION SOURCE', style: SignageTypography.label()),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      for (final src in PracticeQuestionSource.values) ...[
-                        Expanded(
-                          child: _SelectionChip(
-                            label: src.label,
-                            selected: selectedSource == src,
-                            onPress: () => ref
-                                .read(practiceQuestionSourceProvider.notifier)
-                                .select(src),
-                          ),
-                        ),
-                        if (src != PracticeQuestionSource.values.last)
-                          const SizedBox(width: 8),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text('FEEDBACK MODE', style: SignageTypography.label()),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      for (final mode in PracticeFeedbackMode.values) ...[
-                        Expanded(
-                          child: _SelectionChip(
-                            label: mode.label,
-                            selected: selectedFeedback == mode,
-                            onPress: () => ref
-                                .read(practiceFeedbackModeProvider.notifier)
-                                .select(mode),
-                          ),
-                        ),
-                        if (mode != PracticeFeedbackMode.values.last)
-                          const SizedBox(width: 8),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
             Text(
               '${catalog.sectionNoun.toUpperCase()} CATALOG',
               style: SignageTypography.title().copyWith(fontSize: 18),
@@ -372,7 +318,7 @@ class _UnfinishedSessionBanner extends StatelessWidget {
     required this.onResume,
   });
 
-  final UnfinishedPracticeSession session;
+  final PracticeSession session;
   final VoidCallback onResume;
 
   @override
@@ -403,44 +349,6 @@ class _UnfinishedSessionBanner extends StatelessWidget {
             onPress: onResume,
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SelectionChip extends StatelessWidget {
-  const _SelectionChip({
-    required this.label,
-    required this.selected,
-    required this.onPress,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onPress;
-
-  @override
-  Widget build(BuildContext context) {
-    return FTappable(
-      onPress: onPress,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: selected ? SignageColors.ink : SignageColors.paper,
-          border: Border.all(color: SignageColors.ink, width: 2),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-          child: Center(
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: SignageTypography.label(
-                fontSize: 11,
-                color: selected ? SignageColors.paper : SignageColors.ink,
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

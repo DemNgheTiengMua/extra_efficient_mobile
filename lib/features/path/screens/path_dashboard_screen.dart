@@ -165,15 +165,27 @@ class _DashboardBody extends StatelessWidget {
   /// placement id, everything else by the attempt id. It expresses that in the
   /// resume action, so that URL is used when the action is the resume one. The
   /// fallback only runs when the server offered no resume action.
+  ///
+  /// A sitting that has a device gate is addressed through the gate, because
+  /// the sitting itself answers `preflight_required` until it has passed. One
+  /// door, one path - the same one the hub and the history rows use.
   String _resumeAttemptUrl(LearnerDashboard dashboard) {
     final action = dashboard.nextAction;
-    if (action != null && action.isResume && action.actionUrl.isNotEmpty) {
-      return action.actionUrl;
-    }
-    final attempt = dashboard.unfinishedAttempt!;
-    return attempt.isPlacement
-        ? '/placement'
-        : '/exams/attempts/${attempt.attemptId}';
+    final url = action != null && action.isResume && action.actionUrl.isNotEmpty
+        ? action.actionUrl
+        : (dashboard.unfinishedAttempt!.isPlacement
+              ? '/placement'
+              : '/exams/attempts/${dashboard.unfinishedAttempt!.attemptId}');
+    return _gatedUrl(url);
+  }
+
+  static final _gatedSitting = RegExp(
+    r'^/(placement/take|exams/attempts)/\d+$',
+  );
+
+  static String _gatedUrl(String url) {
+    final path = Uri.tryParse(url)?.path ?? url;
+    return _gatedSitting.hasMatch(path) ? '$url/preflight' : url;
   }
 }
 
@@ -424,6 +436,7 @@ class _UnfinishedAttemptCard extends StatelessWidget {
 
   final UnfinishedAttemptSummary attempt;
   final String resumeUrl;
+
   @override
   Widget build(BuildContext context) {
     return PlacardPanel(

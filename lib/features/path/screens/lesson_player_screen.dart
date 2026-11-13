@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:forui/forui.dart';
 
-import '../../../core/media/audio_media_adapter.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
 import '../../auth/auth_provider.dart';
@@ -23,11 +22,10 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
   int _currentIndex = 0;
   bool _initializedIndex = false;
   bool _completed = false;
-  bool _isAudioPlaying = false;
   final Map<int, String> _selectedOptions = {};
   final Map<int, MicroCheckResult> _microCheckResults = {};
   bool _isSubmittingCheck = false;
-  String? _actionError;
+  String? _error;
 
   @override
   void dispose() {
@@ -39,15 +37,16 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
     if (_initializedIndex) return;
     _initializedIndex = true;
     final maxIdx = lesson.cards.isEmpty ? 0 : lesson.cards.length - 1;
-    final initial = (progress?.lastViewedCardIndex ?? 0).clamp(0, maxIdx);
+    // `resumeCardIndex` is 1-based, so the page index is one lower.
+    final initial = (progress?.resumeCardOffset ?? 0).clamp(0, maxIdx);
     _currentIndex = initial;
-    _completed = progress?.completed ?? false;
+    _completed = progress?.isCompleted ?? false;
     _pageController = PageController(initialPage: initial);
   }
 
   bool _canAdvanceFrom(LessonCard card) {
     if (!card.isMicroCheck) return true;
-    return _microCheckResults[card.id]?.correct == true;
+    return _microCheckResults[card.id]?.isCorrect == true;
   }
 
   Future<void> _goPrevious() async {
@@ -66,22 +65,22 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
     final currentCard = lesson.cards[_currentIndex];
     if (!_canAdvanceFrom(currentCard)) return;
 
-    // Progress is a write: if it fails the card must not advance silently.
     try {
       await ref
           .read(pathRepositoryProvider)
           .markCardViewed(lesson.id, currentCard.id);
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _actionError = extractApiError(
-          e,
-          fallback: 'Could not save your progress in this lesson.',
+      // The view did not register, so moving on would silently lose it.
+      if (mounted) {
+        setState(
+          () => _error = extractApiError(
+            e,
+            fallback: 'Could not save your progress on this card.',
+          ),
         );
-      });
+      }
       return;
     }
-    if (!mounted) return;
 
     final next = _currentIndex + 1;
     setState(() => _currentIndex = next);
@@ -101,13 +100,14 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
           .read(pathRepositoryProvider)
           .markCardViewed(lesson.id, currentCard.id);
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _actionError = extractApiError(
-          e,
-          fallback: 'Could not save your progress in this lesson.',
+      if (mounted) {
+        setState(
+          () => _error = extractApiError(
+            e,
+            fallback: 'Could not save your progress on this card.',
+          ),
         );
-      });
+      }
       return;
     }
     if (mounted) {
@@ -123,7 +123,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
     if (selected == null) return;
     setState(() {
       _isSubmittingCheck = true;
-      _actionError = null;
+      _error = null;
     });
     try {
       final result = await ref.read(pathRepositoryProvider).submitMicroCheck(
@@ -135,29 +135,18 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
         setState(() => _microCheckResults[card.id] = result);
       }
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _actionError = extractApiError(
-          e,
-          fallback: 'Could not check this answer.',
+      if (mounted) {
+        setState(
+          () => _error = extractApiError(
+            e,
+            fallback: 'Could not check that answer.',
+          ),
         );
-      });
+      }
     } finally {
       if (mounted) {
         setState(() => _isSubmittingCheck = false);
       }
-    }
-  }
-
-  Future<void> _toggleAudio(String url) async {
-    final adapter = ref.read(audioMediaAdapterProvider);
-    if (_isAudioPlaying) {
-      await adapter.pause();
-      if (mounted) setState(() => _isAudioPlaying = false);
-    } else {
-      await adapter.setAudioUrl(url);
-      await adapter.play();
-      if (mounted) setState(() => _isAudioPlaying = true);
     }
   }
 
@@ -182,17 +171,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
           StateBlock(
             stamp: 'LESSON ERROR',
             title: 'Unable to load lesson',
-            description: extractApiError(
-              error,
-              fallback: 'This lesson could not be opened.',
-            ),
-            action: PlacardButton(
-              label: 'RETRY',
-              onPress: () {
-                ref.invalidate(lessonDetailProvider(widget.lessonId));
-                ref.invalidate(lessonProgressProvider(widget.lessonId));
-              },
-            ),
+            description: error.toString(),
           ),
         ],
       ),
@@ -256,6 +235,15 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
 
         return Column(
           children: [
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: PlacardAlert(
+                  variant: PlacardAlertVariant.danger,
+                  title: 'Could not save that',
+                  subtitle: _error,
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Row(
@@ -288,17 +276,10 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
                       card: card,
                       selectedOption: _selectedOptions[card.id],
                       checkResult: _microCheckResults[card.id],
-                      checkError: _actionError,
                       isSubmittingCheck: _isSubmittingCheck,
-                      isAudioPlaying: _isAudioPlaying,
-                      onSelectOption: (opt) => setState(() {
-                        _selectedOptions[card.id] = opt;
-                        _actionError = null;
-                      }),
+                      onSelectOption: (label) =>
+                          setState(() => _selectedOptions[card.id] = label),
                       onSubmitCheck: () => _submitMicroCheck(lesson, card),
-                      onToggleAudio: card.audioUrl != null
-                          ? () => _toggleAudio(card.audioUrl!)
-                          : null,
                     ),
                   );
                 },
@@ -357,23 +338,17 @@ class _LessonCardView extends StatelessWidget {
     required this.card,
     required this.selectedOption,
     required this.checkResult,
-    required this.checkError,
     required this.isSubmittingCheck,
-    required this.isAudioPlaying,
     required this.onSelectOption,
     required this.onSubmitCheck,
-    required this.onToggleAudio,
   });
 
   final LessonCard card;
   final String? selectedOption;
   final MicroCheckResult? checkResult;
-  final String? checkError;
   final bool isSubmittingCheck;
-  final bool isAudioPlaying;
   final ValueChanged<String> onSelectOption;
   final VoidCallback onSubmitCheck;
-  final VoidCallback? onToggleAudio;
 
   @override
   Widget build(BuildContext context) {
@@ -390,15 +365,6 @@ class _LessonCardView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
           ],
-          if (onToggleAudio != null) ...[
-            PlacardButton(
-              key: const Key('lesson-audio-btn'),
-              label: isAudioPlaying ? 'PAUSE AUDIO' : 'PLAY AUDIO',
-              variant: PlacardButtonVariant.secondary,
-              onPress: onToggleAudio,
-            ),
-            const SizedBox(height: 12),
-          ],
           if (card.isMicroCheck) ...[
             if (card.question != null) ...[
               Text(
@@ -407,15 +373,17 @@ class _LessonCardView extends StatelessWidget {
               ),
               const SizedBox(height: 12),
             ],
+            // The backend grades the label ("B"), so the label is the value the
+            // card carries — the text is what the learner reads beside it.
             for (final opt in card.options) ...[
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: FTappable(
-                  key: Key('micro-option-$opt'),
-                  onPress: () => onSelectOption(opt),
+                  key: Key('micro-option-${opt.label}'),
+                  onPress: () => onSelectOption(opt.label),
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: selectedOption == opt
+                      color: selectedOption == opt.label
                           ? SignageColors.ink
                           : SignageColors.paper,
                       border: Border.all(color: SignageColors.ink, width: 2),
@@ -425,15 +393,34 @@ class _LessonCardView extends StatelessWidget {
                         horizontal: 14,
                         vertical: 12,
                       ),
-                      child: Text(
-                        opt,
-                        style: SignageTypography.body(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: selectedOption == opt
-                              ? SignageColors.paper
-                              : SignageColors.ink,
-                        ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            child: Text(
+                              opt.label,
+                              style: SignageTypography.data(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: selectedOption == opt.label
+                                    ? SignageColors.paper
+                                    : SignageColors.ink,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              opt.text,
+                              style: SignageTypography.body(
+                                fontSize: 15,
+                                color: selectedOption == opt.label
+                                    ? SignageColors.paper
+                                    : SignageColors.ink,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -450,19 +437,18 @@ class _LessonCardView extends StatelessWidget {
             if (checkResult != null) ...[
               const SizedBox(height: 12),
               PlacardAlert(
-                variant: checkResult!.correct
+                variant: checkResult!.isCorrect
                     ? PlacardAlertVariant.success
                     : PlacardAlertVariant.danger,
-                title: checkResult!.correct ? 'CORRECT' : 'TRY AGAIN',
-                subtitle: checkResult!.explanation,
-              ),
-            ] else if (checkError != null) ...[
-              const SizedBox(height: 12),
-              PlacardAlert(
-                key: const Key('lesson-check-error'),
-                variant: PlacardAlertVariant.danger,
-                title: 'CHECK FAILED',
-                subtitle: checkError!,
+                title: checkResult!.isCorrect ? 'CORRECT' : 'TRY AGAIN',
+                // The key is revealed only by the graded check.
+                subtitle: checkResult!.isCorrect
+                    ? checkResult!.explanation
+                    : [
+                        if (checkResult!.correctOption != null)
+                          'The answer is ${checkResult!.correctOption}.',
+                        ?checkResult!.explanation,
+                      ].join(' '),
               ),
             ],
           ],

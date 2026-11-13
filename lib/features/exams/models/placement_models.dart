@@ -19,29 +19,6 @@ class PlacementScopeOption {
   final int credits;
 }
 
-class ReusableSkillMeasurement {
-  const ReusableSkillMeasurement({
-    required this.skill,
-    required this.band,
-    required this.expiresAt,
-    required this.canReuse,
-  });
-
-  factory ReusableSkillMeasurement.fromJson(Map<String, dynamic> json) {
-    return ReusableSkillMeasurement(
-      skill: (json['skill'] as String?) ?? '',
-      band: (json['band'] as String?) ?? '',
-      expiresAt: DateTime.tryParse((json['expiresAt'] as String?) ?? ''),
-      canReuse: (json['canReuse'] as bool?) ?? false,
-    );
-  }
-
-  final String skill;
-  final String band;
-  final DateTime? expiresAt;
-  final bool canReuse;
-}
-
 /// One placement exam offered by the catalogue.
 class PlacementCatalogExam {
   const PlacementCatalogExam({
@@ -145,28 +122,79 @@ class PlacementCatalog {
       : allSkillsRetakeCredits;
 }
 
-class PlacementPreflight {
-  const PlacementPreflight({
-    required this.audioSampleUrl,
+/// One row of `GET /api/learner/placement/preflight`'s `offers[]`.
+///
+/// This is the *pre-start* view: what the placement will measure. The
+/// per-sitting device gate is [PreflightStatus] instead.
+class PlacementSkillOffer {
+  const PlacementSkillOffer({
+    required this.skillCode,
+    required this.skillName,
+    required this.modality,
     required this.requiresMicrophone,
-    required this.reusableSkills,
+    required this.requiresAudio,
+    required this.canReuse,
+    this.levelCode,
   });
 
-  factory PlacementPreflight.fromJson(Map<String, dynamic> json) {
-    final rawSkills = json['reusableSkills'] as List<dynamic>? ?? const [];
-    return PlacementPreflight(
-      audioSampleUrl: (json['audioSampleUrl'] as String?) ?? '',
+  factory PlacementSkillOffer.fromJson(Map<String, dynamic> json) {
+    return PlacementSkillOffer(
+      skillCode: (json['skillCode'] as String?) ?? '',
+      skillName: (json['skillName'] as String?) ?? '',
+      modality: (json['modality'] as String?) ?? '',
       requiresMicrophone: (json['requiresMicrophone'] as bool?) ?? false,
-      reusableSkills: rawSkills
-          .whereType<Map<String, dynamic>>()
-          .map(ReusableSkillMeasurement.fromJson)
-          .toList(),
+      requiresAudio: (json['requiresAudio'] as bool?) ?? false,
+      canReuse: (json['canReuse'] as bool?) ?? false,
+      levelCode: json['levelCode'] as String?,
     );
   }
 
-  final String audioSampleUrl;
+  final String skillCode;
+  final String skillName;
+  final String modality;
   final bool requiresMicrophone;
-  final List<ReusableSkillMeasurement> reusableSkills;
+  final bool requiresAudio;
+  final bool canReuse;
+  final String? levelCode;
+
+  /// Only a measurement the backend says is reusable may be carried over.
+  bool get isReusable => canReuse && levelCode != null && levelCode!.isNotEmpty;
+}
+
+/// `GET /api/learner/placement/preflight` — the pre-start capability view.
+class PlacementPreflight {
+  const PlacementPreflight({
+    required this.offers,
+    required this.requiresMicrophone,
+    required this.requiresAudio,
+    required this.hasReusableSkills,
+    required this.isStartable,
+  });
+
+  factory PlacementPreflight.fromJson(Map<String, dynamic> json) {
+    final rawOffers = json['offers'] as List<dynamic>? ?? const [];
+    return PlacementPreflight(
+      offers: rawOffers
+          .whereType<Map<String, dynamic>>()
+          .map(PlacementSkillOffer.fromJson)
+          .toList(),
+      requiresMicrophone: (json['requiresMicrophone'] as bool?) ?? false,
+      requiresAudio: (json['requiresAudio'] as bool?) ?? false,
+      hasReusableSkills: (json['hasReusableSkills'] as bool?) ?? false,
+      isStartable: (json['isStartable'] as bool?) ?? false,
+    );
+  }
+
+  final List<PlacementSkillOffer> offers;
+  final bool requiresMicrophone;
+  final bool requiresAudio;
+  final bool hasReusableSkills;
+
+  /// The single gate the start endpoint itself enforces.
+  final bool isStartable;
+
+  List<PlacementSkillOffer> get reusableSkills =>
+      offers.where((offer) => offer.isReusable).toList();
 }
 
 class PlacementOption {
@@ -201,7 +229,7 @@ class PlacementQuestion {
     required this.prompt,
     required this.options,
     this.passageText,
-    this.audioUrl,
+    this.audioPath,
     this.audioStartMs,
     this.audioEndMs,
     this.selectedOptionId,
@@ -226,18 +254,20 @@ class PlacementQuestion {
           (json['questionId'] as num?)?.toInt() ??
           (json['id'] as num?)?.toInt() ??
           0,
-      index: (json['index'] as num?)?.toInt() ?? fallbackIdx,
-      skill: ((json['skill'] as String?) ?? 'reading').toLowerCase(),
+      index: (json['displayOrder'] as num?)?.toInt() ?? fallbackIdx,
+      // `modality` is the backend's own field; `skill`/`skillCode` are the
+      // certificate's codes. Keep one lowercase word for the room's branches.
+      skill: ((json['modality'] as String?) ??
+              (json['skill'] as String?) ??
+              'reading')
+          .toLowerCase(),
       sectionName: (json['sectionName'] as String?) ?? '',
-      prompt: (json['prompt'] as String?) ?? (json['stem'] as String?) ?? '',
-      passageText: json['passageText'] as String?,
-      audioUrl: json['audioUrl'] as String?,
-      audioStartMs:
-          (json['audioStartMs'] as num?)?.toInt() ??
-          (json['startMs'] as num?)?.toInt(),
-      audioEndMs:
-          (json['audioEndMs'] as num?)?.toInt() ??
-          (json['endMs'] as num?)?.toInt(),
+      prompt:
+          (json['stem'] as String?) ?? (json['prompt'] as String?) ?? '',
+      passageText: (json['passage'] as String?) ?? json['passageText'] as String?,
+      audioPath: (json['audioPath'] as String?) ?? json['audioUrl'] as String?,
+      audioStartMs: (json['audioStartMs'] as num?)?.toInt(),
+      audioEndMs: (json['audioEndMs'] as num?)?.toInt(),
       options: rawOptions
           .whereType<Map<String, dynamic>>()
           .map(PlacementOption.fromJson)
@@ -248,7 +278,7 @@ class PlacementQuestion {
       isFlagged: (json['isFlagged'] as bool?) ?? false,
       prepSeconds: (json['prepSeconds'] as num?)?.toInt(),
       responseSeconds: (json['responseSeconds'] as num?)?.toInt(),
-      wordFloor: (json['wordFloor'] as num?)?.toInt(),
+      wordFloor: (json['minWords'] as num?)?.toInt(),
       skillId: (json['skillId'] as num?)?.toInt(),
       unitNumber: (json['unitNumber'] as num?)?.toInt(),
       groupId: (json['groupId'] as num?)?.toInt(),
@@ -269,7 +299,7 @@ class PlacementQuestion {
       sectionName: sectionName,
       prompt: prompt,
       passageText: passageText,
-      audioUrl: audioUrl,
+      audioPath: audioPath,
       audioStartMs: audioStartMs,
       audioEndMs: audioEndMs,
       options: options,
@@ -300,7 +330,10 @@ class PlacementQuestion {
   final String sectionName;
   final String prompt;
   final String? passageText;
-  final String? audioUrl;
+
+  /// The backend's `audioPath` — a root-relative app path, which may not resolve
+  /// (pitfall d). The room plays it when it does and says so when it cannot.
+  final String? audioPath;
   final int? audioStartMs;
   final int? audioEndMs;
   final List<PlacementOption> options;
@@ -322,6 +355,8 @@ class PlacementSitting {
     required this.expiresAt,
     required this.status,
     required this.questions,
+    this.totalQuestions = 0,
+    this.answeredCount = 0,
     this.activeSkillId,
     this.activeUnitNumber,
     this.activeGroupId,
@@ -344,6 +379,9 @@ class PlacementSitting {
           DateTime.now().toUtc().add(const Duration(minutes: 20)),
       status: (json['status'] as String?) ?? 'in_progress',
       questions: questions,
+      totalQuestions:
+          (json['totalQuestions'] as num?)?.toInt() ?? questions.length,
+      answeredCount: (json['answeredCount'] as num?)?.toInt() ?? 0,
       activeSkillId: (json['activeSkillId'] as num?)?.toInt(),
       activeUnitNumber: (json['activeUnitNumber'] as num?)?.toInt(),
       activeGroupId: (json['activeGroupId'] as num?)?.toInt(),
@@ -357,10 +395,15 @@ class PlacementSitting {
   final DateTime expiresAt;
   final String status;
   final List<PlacementQuestion> questions;
+  final int totalQuestions;
+  final int answeredCount;
   final int? activeSkillId;
   final int? activeUnitNumber;
   final int? activeGroupId;
   final DateTime? phaseDeadlineAt;
+
+  /// The backend's own terminal-status words, plus an empty paper.
+  bool get isOpen => status == 'in_progress';
 }
 
 /// The sitting is over (already graded, abandoned or expired).

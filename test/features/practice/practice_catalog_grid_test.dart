@@ -248,6 +248,7 @@ void main() {
       -300,
       scrollable: find.byType(Scrollable).last,
     );
+    await tester.pumpAndSettle();
     expect(find.text('RESUME SESSION'), findsOneWidget);
     expect(find.text('Incomplete Sentences'), findsOneWidget);
   });

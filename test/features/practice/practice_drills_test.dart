@@ -158,20 +158,30 @@ void main() {
       if (options.path == '/api/learner/practice/sessions' &&
           options.method == 'POST') {
         startedPayload = body as Map<String, dynamic>;
-        return FakeHttpClientAdapter.jsonResponse({
-          'sessionId': 42,
-          'title': 'Part 5: Incomplete Sentences',
-          'feedbackMode': startedPayload?['feedbackMode'] ?? 'immediate',
-        });
+        return FakeHttpClientAdapter.jsonResponse(
+          practiceSession(
+            sessionId: 42,
+            sectionId: 5,
+            sectionCode: 'P5',
+            sectionName: 'Incomplete Sentences',
+            questionCount: 0,
+          ),
+        );
       }
       if (options.path == '/api/learner/practice/sessions/42/take' &&
           options.method == 'GET') {
-        return FakeHttpClientAdapter.jsonResponse({
-          'sessionId': 42,
-          'title': 'Part 5: Incomplete Sentences',
-          'feedbackMode': 'end',
-          'questions': [],
-        });
+        return FakeHttpClientAdapter.jsonResponse(
+          practiceTakeResponse(
+            session: practiceSession(
+              sessionId: 42,
+              sectionId: 5,
+              sectionCode: 'P5',
+              sectionName: 'Incomplete Sentences',
+              questionCount: 0,
+            ),
+            questions: const [],
+          ),
+        );
       }
       return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
     });
@@ -216,16 +226,7 @@ void main() {
     );
     expect(find.text('Verb Tenses'), findsOneWidget);
 
-    // Scroll back up to select WRONG ONLY and END OF SESSION, then start Part 5 drill.
-    await tester.scrollUntilVisible(
-      find.text('WRONG ONLY'),
-      -200,
-      scrollable: find.byType(Scrollable).last,
-    );
-    await tester.tap(find.text('WRONG ONLY'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('END OF SESSION'));
-    await tester.pumpAndSettle();
+    // Scroll back up and start the Part 5 drill.
     await tester.scrollUntilVisible(
       find.byKey(const Key('start-section-5')),
       200,
@@ -235,8 +236,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(startedPayload?['sectionId'], 5);
-    expect(startedPayload?['questionSource'], 'wrong');
-    expect(startedPayload?['feedbackMode'], 'end');
+    // The start request names only what the backend reads: a question source
+    // and a feedback mode are not fields on `StartPracticeRequest`.
+    expect(startedPayload?.containsKey('questionSource'), isFalse);
+    expect(startedPayload?.containsKey('feedbackMode'), isFalse);
 
     // Navigate back to PRACTICE and switch certificate in ACCOUNT.
     await tester.tap(find.byKey(const Key('session-back-button')));

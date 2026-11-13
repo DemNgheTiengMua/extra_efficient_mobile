@@ -32,27 +32,14 @@ class _PlacementOverviewScreenState
   bool _starting = false;
   String? _errorMessage;
 
-  Future<void> _runAudioCheck(String sampleUrl) async {
-    final audio = ref.read(audioMediaAdapterProvider);
-    final url = sampleUrl.isNotEmpty
-        ? sampleUrl
-        : '/media/placement-listening-placeholder.wav';
-    try {
-      await audio.setAudioUrl(url);
-      await audio.play();
-      await audio.stop();
-      if (!mounted) return;
-      setState(() {
-        _audioChecked = true;
-        _errorMessage = null;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _audioChecked = false;
-        _errorMessage = 'Audio check failed: $e';
-      });
-    }
+  /// The pre-start sheet has no per-sitting sample URL, so this is the explicit
+  /// UI-only confirmation. It never touches a path that would 404 and never
+  /// blocks the start control on playback.
+  void _runAudioCheck() {
+    setState(() {
+      _audioChecked = true;
+      _errorMessage = null;
+    });
   }
 
   Future<void> _runMicCheck() async {
@@ -98,7 +85,9 @@ class _PlacementOverviewScreenState
           );
       ref.invalidate(learnerContextProvider);
       if (!mounted) return;
-      context.go('/placement/take/$placementId');
+      // A freshly started sitting must pass the same device gate as a resumed
+      // one - the sitting itself answers `preflight_required` until it does.
+      context.go('/placement/take/$placementId/preflight');
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -231,7 +220,7 @@ class _PlacementOverviewScreenState
                                 key: const Key('resume-placement-btn'),
                                 label: 'RESUME',
                                 onPress: () => context.go(
-                                  '/placement/take/${catalog.activePlacementId}?resume=1',
+                                  '/placement/take/${catalog.activePlacementId}/preflight',
                                 ),
                               ),
                             ),
@@ -384,13 +373,13 @@ class _PlacementOverviewScreenState
                               children: [
                                 Expanded(
                                   child: Text(
-                                    item.skill.toUpperCase(),
+                                    item.skillName.toUpperCase(),
                                     style: SignageTypography.label(
                                       fontSize: 12,
                                     ),
                                   ),
                                 ),
-                                PlacardBadge.info(item.band),
+                                PlacardBadge.info(item.levelCode!),
                               ],
                             ),
                           ),
@@ -434,10 +423,11 @@ class _PlacementOverviewScreenState
                       const SizedBox(height: 8),
                       PlacardButton(
                         key: const Key('preflight-audio-check-btn'),
-                        label: 'TEST AUDIO OUTPUT',
+                        label: _audioChecked
+                            ? 'CONFIRMED'
+                            : 'CONFIRM AUDIO OUTPUT WORKS',
                         variant: PlacardButtonVariant.secondary,
-                        onPress: () =>
-                            _runAudioCheck(preflight?.audioSampleUrl ?? ''),
+                        onPress: _runAudioCheck,
                       ),
                       if ((preflight?.requiresMicrophone ?? true) &&
                           (isFirstPlacement ||

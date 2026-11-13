@@ -1,0 +1,73 @@
+{
+  "certId": 1,
+  "certCode": "TOEIC",
+  "examId": 2,
+  "offers": [
+    {
+      "skillId": 1,
+      "skillCode": "LIST",
+      "skillName": "Listening",
+      "modality": "listening",
+      "requiresMicrophone": false,
+      "requiresAudio": true,
+      "levelCode": null,
+      "positionInBand": null,
+      "measuredAt": null,
+      "expiresAt": null,
+      "canReuse": false,
+      "isAged": false
+    },
+    {
+      "skillId": 2,
+      "skillCode": "READ",
+      "skillName": "Reading",
+      "modality": "reading",
+      "requiresMicrophone": false,
+      "requiresAudio": false,
+      "levelCode": null,
+      "positionInBand": null,
+      "measuredAt": null,
+      "expiresAt": null,
+      "canReuse": false,
+      "isAged": false
+    },
+    {
+      "skillId": 3,
+      "skillCode": "SPEA",
+      "skillName": "Speaking",
+      "modality": "speaking",
+      "requiresMicrophone": true,
+      "requiresAudio": false,
+      "levelCode": null,
+      "positionInBand": null,
+      "measuredAt": null,
+      "expiresAt": null,
+      "canReuse": false,
+      "isAged": false
+    },
+    {
+      "skillId": 4,
+      "skillCode": "WRIT",
+      "skillName": "Writing",
+      "modality": "writing",
+      "requiresMicrophone": false,
+      "requiresAudio": false,
+      "levelCode": null,
+      "positionInBand": null,
+      "measuredAt": null,
+      "expiresAt": null,
+      "canReuse": false,
+      "isAged": false
+    }
+  ],
+  "cooldownUntil": null,
+  "cooldownWaived": false,
+  "hasReusableSkills": false,
+  "isStartable": true,
+  "requiresMicrophone": true,
+  "requiresAudio": true,
+  "isRetake": false,
+  "allSkillsRetakeCredits": 5,
+  "listeningAndReadingRetakeCredits": 3,
+  "creditBalance": null
+}
