@@ -9,39 +9,46 @@ final mockExamRepositoryProvider = Provider<MockExamRepository>((ref) {
   return MockExamRepository(ref.watch(dioProvider));
 });
 
-final mockExamsProvider =
-    FutureProvider.autoDispose<List<MockExamSummary>>((ref) async {
-  ref.watch(certificateScopeVersionProvider);
-  return ref.read(mockExamRepositoryProvider).fetchMockExams();
-});
+/// These reads each have a visible RETRY control on screen, so Riverpod's
+/// default ten-attempt, ~38-second retry would only delay the same answer.
+/// A failure should reach the error branch immediately.
+Duration? _noRetry(int retryCount, Object error) => null;
 
-final examHistoryProvider =
-    FutureProvider.autoDispose<List<ExamHistoryItem>>((ref) async {
+final mockExamsProvider = FutureProvider.autoDispose<MockExamCatalogue>((
+  ref,
+) async {
+  ref.watch(certificateScopeVersionProvider);
+  return ref.read(mockExamRepositoryProvider).fetchCatalogue();
+}, retry: _noRetry);
+
+final examHistoryProvider = FutureProvider.autoDispose<ExamHistory>((
+  ref,
+) async {
   ref.watch(certificateScopeVersionProvider);
   return ref.read(mockExamRepositoryProvider).fetchExamHistory();
-});
+}, retry: _noRetry);
 
 final mockInstructionsProvider = FutureProvider.autoDispose
     .family<MockExamInstructions, int>((ref, examId) async {
-  return ref.read(mockExamRepositoryProvider).fetchInstructions(examId);
-});
+      return ref.read(mockExamRepositoryProvider).fetchInstructions(examId);
+    }, retry: _noRetry);
 
 final mockPreflightProvider = FutureProvider.autoDispose
     .family<MockPreflight, int>((ref, attemptId) async {
-  return ref.read(mockExamRepositoryProvider).fetchPreflight(attemptId);
-});
+      return ref.read(mockExamRepositoryProvider).fetchPreflight(attemptId);
+    }, retry: _noRetry);
 
 final mockResultProvider = FutureProvider.autoDispose
     .family<MockAttemptResult, int>((ref, attemptId) async {
-  return ref.read(mockExamRepositoryProvider).fetchResult(attemptId);
-});
+      return ref.read(mockExamRepositoryProvider).fetchResult(attemptId);
+    }, retry: _noRetry);
 
 final examInsightProvider = FutureProvider.autoDispose
     .family<ExamAiInsight, int>((ref, attemptId) async {
-  return ref.read(mockExamRepositoryProvider).fetchExamInsight(attemptId);
-});
+      return ref.read(mockExamRepositoryProvider).fetchExamInsight(attemptId);
+    }, retry: _noRetry);
 
 final mockReviewProvider = FutureProvider.autoDispose
     .family<MockAttemptReview, int>((ref, attemptId) async {
-  return ref.read(mockExamRepositoryProvider).fetchReview(attemptId);
-});
+      return ref.read(mockExamRepositoryProvider).fetchReview(attemptId);
+    }, retry: _noRetry);

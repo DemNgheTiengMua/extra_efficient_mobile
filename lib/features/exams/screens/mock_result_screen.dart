@@ -114,21 +114,16 @@ class _MockResultScreenState extends ConsumerState<MockResultScreen> {
               ? null
               : (delta >= 0 ? '+$delta' : '$delta');
           final splits = [
-            for (final s in result.skillBreakdowns)
-              ScoreSplit(
-                label: s.skill,
-                value: '${s.scaledScore}',
-              ),
+            for (final s in result.skillScores)
+              ScoreSplit(label: s.skillName, value: '${s.scaledScore}'),
           ];
 
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               ScorePlacard(
-                totalScore: '${result.totalScaledScore}',
-                caption: deltaStr != null
-                    ? '${result.examTitle} · BAND ${result.overallBand}'
-                    : '${result.examTitle} · BAND ${result.overallBand}',
+                totalScore: '${result.displayTotalScore}',
+                caption: '${result.examName} · BAND ${result.bandLabel}',
                 splits: splits,
               ),
               if (deltaStr != null) ...[
@@ -145,24 +140,24 @@ class _MockResultScreenState extends ConsumerState<MockResultScreen> {
                 ),
               ],
               const SizedBox(height: 12),
-              CefrBandBar(currentBand: result.cefrBand),
+              if (result.isBanded) CefrBandBar(currentBand: result.bandCode!),
               const SizedBox(height: 16),
               PlacardPanel(
                 title: 'SKILL BREAKDOWN',
                 child: Column(
                   children: [
-                    for (final s in result.skillBreakdowns)
+                    for (final s in result.skillScores)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              s.skill.toUpperCase(),
+                              s.skillName.toUpperCase(),
                               style: SignageTypography.label(fontSize: 12),
                             ),
                             Text(
-                              '${s.rawScore}/${s.maxRawScore} RAW',
+                              '${s.rawScore}/${s.totalQuestions} RAW',
                               style: SignageTypography.data(
                                 fontSize: 13,
                                 color: SignageColors.inkMuted,
@@ -205,7 +200,8 @@ class _MockResultScreenState extends ConsumerState<MockResultScreen> {
                           PlacardAlert(
                             variant: PlacardAlertVariant.warning,
                             title: 'INSIGHT GENERATION FAILED',
-                            subtitle: insight.errorMessage ??
+                            subtitle:
+                                insight.failureReason ??
                                 'Please retry generating your insight.',
                           ),
                           const SizedBox(height: 10),

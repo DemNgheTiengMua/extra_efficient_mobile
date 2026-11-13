@@ -1,0 +1,32 @@
+{
+  "placementId": 1,
+  "attemptId": 3,
+  "isGraded": false,
+  "freeResponseCount": 5,
+  "gradedFreeResponseCount": 1,
+  "failedFreeResponseCount": 0,
+  "totalScore": 340,
+  "bandCode": null,
+  "bandName": null,
+  "skillScores": [
+    {
+      "skillId": 1,
+      "skillCode": "LIST",
+      "skillName": "Listening",
+      "rawScore": 3,
+      "totalQuestions": 10,
+      "scaledScore": 130,
+      "bandCode": null
+    },
+    {
+      "skillId": 2,
+      "skillCode": "READ",
+      "skillName": "Reading",
+      "rawScore": 5,
+      "totalQuestions": 14,
+      "scaledScore": 210,
+      "bandCode": null
+    }
+  ],
+  "stageDescriptor": "Checking coherence & task achievement..."
+}
