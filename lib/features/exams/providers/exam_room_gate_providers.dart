@@ -49,11 +49,8 @@ class ExamRoomGate {
   ///
   /// The [attemptId] is the one the status payload reported. A placement has no
   /// verify route of its own - it adapts an attempt, and the attempt's route is
-  /// what marks it verified.
-  Future<PreflightStatus> verifyPreflight(
-    SittingKind kind, {
-    required int attemptId,
-  }) =>
+  /// what marks it verified - so the kind is not needed here.
+  Future<PreflightStatus> verifyPreflight({required int attemptId}) =>
       attemptRepository.verifyPreflight(attemptId);
 }
 

@@ -120,7 +120,6 @@ class _ExamPreflightScreenState extends ConsumerState<ExamPreflightScreen> {
     });
     try {
       await ref.read(examRoomGateProvider).verifyPreflight(
-            widget.kind,
             attemptId: status.attemptId,
           );
     } catch (e) {
@@ -146,7 +145,6 @@ class _ExamPreflightScreenState extends ConsumerState<ExamPreflightScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final gate = ref.watch(examRoomGateProvider);
     final statusAsync = ref.watch(
       preflightStatusProvider(
         SittingRef(kind: widget.kind, sittingId: widget.sittingId),
@@ -206,7 +204,7 @@ class _ExamPreflightScreenState extends ConsumerState<ExamPreflightScreen> {
       child: statusAsync.when(
         loading: () => const Center(child: FCircularProgress()),
         error: (err, _) {
-          final stop = _stopForGateError(err, gate: gate);
+          final stop = _stopForGateError(err);
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -356,7 +354,7 @@ class _ExamPreflightScreenState extends ConsumerState<ExamPreflightScreen> {
   /// A gate that cannot even be read is still a dead end the learner must be
   /// able to leave. A finished sitting routes to its result; anything else
   /// explains itself and offers the hub.
-  ExamRoomStop _stopForGateError(Object err, {required ExamRoomGate gate}) {
+  ExamRoomStop _stopForGateError(Object err) {
     if (isSittingOver(err)) {
       return ExamRoomStop(
         stamp: 'FINISHED',
