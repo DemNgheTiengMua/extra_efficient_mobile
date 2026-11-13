@@ -167,12 +167,11 @@ class MentorBooking {
     this.focusArea,
     this.slotStartsAt,
     this.meetLink,
-    this.rating,
-    this.reviewText,
+    this.review,
   });
 
   factory MentorBooking.fromJson(Map<String, dynamic> json) {
-    final review = json['review'] as Map<String, dynamic>?;
+    final review = json['review'];
     return MentorBooking(
       id: (json['bookingId'] as num?)?.toInt() ?? 0,
       mentorId: (json['mentorId'] as num?)?.toInt() ?? 0,
@@ -183,8 +182,9 @@ class MentorBooking {
       focusArea: json['focusArea'] as String?,
       slotStartsAt: json['startAt'] as String?,
       meetLink: json['meetLink'] as String?,
-      rating: (review?['rating'] as num?)?.toInt(),
-      reviewText: review?['text'] as String?,
+      review: review is Map<String, dynamic>
+          ? MentorReview.fromJson(review)
+          : null,
     );
   }
 
@@ -197,11 +197,49 @@ class MentorBooking {
   final String? focusArea;
   final String? slotStartsAt;
   final String? meetLink;
-  final int? rating;
-  final String? reviewText;
+
+  /// The nested `review` object, null until the session is rated.
+  final MentorReview? review;
+
+  int? get rating => review?.rating;
+
+  String? get reviewText => review?.text;
 
   bool get canCancel => status == 'confirmed' || status == 'pending';
 
   /// The backend's finished status is `done`.
-  bool get canRate => status == 'done' && rating == null;
+  bool get canRate => status == 'done' && review == null;
+
+  /// A meeting link is offered only for a live session: a finished booking must
+  /// not send the learner to a room that has ended.
+  bool get canJoinMeet =>
+      status == 'confirmed' && (meetLink?.trim().isNotEmpty ?? false);
+}
+
+/// `CancelBookingResultDto`: the refund the backend actually granted.
+///
+/// `refundedCredits` is 0 when the booking was cancelled outside the refund
+/// window, so it is reported, never assumed to equal the price.
+class CancelBookingResult {
+  const CancelBookingResult({
+    required this.bookingId,
+    required this.status,
+    required this.refundedCredits,
+    this.cancelledAt,
+  });
+
+  factory CancelBookingResult.fromJson(Map<String, dynamic> json) {
+    final cancelledAt = json['cancelledAt'] as String?;
+    return CancelBookingResult(
+      bookingId: (json['bookingId'] as num?)?.toInt() ?? 0,
+      status: (json['status'] as String? ?? 'cancelled').toLowerCase(),
+      refundedCredits: (json['refundedCredits'] as num?)?.toInt() ?? 0,
+      cancelledAt: cancelledAt == null ? null : DateTime.parse(cancelledAt),
+    );
+  }
+
+  final int bookingId;
+  final String status;
+  final int refundedCredits;
+  final DateTime? cancelledAt;
 }

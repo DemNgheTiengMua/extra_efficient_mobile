@@ -230,6 +230,8 @@ class _BookingRow extends ConsumerStatefulWidget {
 class _BookingRowState extends ConsumerState<_BookingRow> {
   bool _isCancelling = false;
   String? _launchError;
+  String? _cancelError;
+  String? _cancelNotice;
 
   Future<void> _joinMeeting(String url) async {
     final launched =
@@ -243,18 +245,37 @@ class _BookingRowState extends ConsumerState<_BookingRow> {
   }
 
   Future<void> _cancel() async {
-    setState(() => _isCancelling = true);
+    setState(() {
+      _isCancelling = true;
+      _cancelError = null;
+      _cancelNotice = null;
+    });
     try {
-      await ref.read(mentorRepositoryProvider).cancelBooking(widget.booking.id);
+      final result =
+          await ref.read(mentorRepositoryProvider).cancelBooking(widget.booking.id);
+      // The booking is cancelled and the ledger refunded; refresh both so the
+      // refunded credit is visible on the wallet placard straight away.
       await Future.wait([
         ref.read(mentorBookingsProvider.notifier).refresh(),
         ref.read(walletSummaryProvider.notifier).refresh(),
         ref.read(learnerContextProvider.notifier).refreshContext(),
       ]);
-    } finally {
-      if (mounted) {
-        setState(() => _isCancelling = false);
-      }
+      if (!mounted) return;
+      setState(() {
+        _isCancelling = false;
+        _cancelNotice = result.refundedCredits > 0
+            ? 'Booking cancelled. ${result.refundedCredits} credits refunded.'
+            : 'Booking cancelled. No credits were refunded.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isCancelling = false;
+        _cancelError = extractApiError(
+          e,
+          fallback: 'Could not cancel this booking.',
+        );
+      });
     }
   }
 
@@ -278,7 +299,7 @@ class _BookingRowState extends ConsumerState<_BookingRow> {
                 label: booking.status.toUpperCase(),
                 variant: switch (booking.status) {
                   'confirmed' => PlacardBadgeVariant.info,
-                  'completed' => PlacardBadgeVariant.success,
+                  'done' => PlacardBadgeVariant.success,
                   'cancelled' => PlacardBadgeVariant.danger,
                   _ => PlacardBadgeVariant.muted,
                 },
@@ -295,10 +316,12 @@ class _BookingRowState extends ConsumerState<_BookingRow> {
               ),
             ),
           ],
-          if (booking.rating != null) ...[
+          if (booking.review != null) ...[
             const SizedBox(height: 4),
             Text(
-              'Rated: ${booking.rating}/5${booking.reviewText != null ? ' — ${booking.reviewText}' : ''}',
+              'Rated: ${booking.review!.rating}/5'
+              '${booking.reviewText != null ? ' — ${booking.reviewText}' : ''}',
+              key: Key('booking-review-${booking.id}'),
               style: SignageTypography.data(
                 fontSize: 12,
                 color: SignageColors.signGreen,
@@ -314,11 +337,29 @@ class _BookingRowState extends ConsumerState<_BookingRow> {
             ),
             const SizedBox(height: 10),
           ],
+          if (_cancelError != null) ...[
+            PlacardAlert(
+              key: Key('cancel-error-${booking.id}'),
+              variant: PlacardAlertVariant.danger,
+              title: 'Could not cancel booking',
+              subtitle: _cancelError,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (_cancelNotice != null) ...[
+            PlacardAlert(
+              key: Key('cancel-notice-${booking.id}'),
+              variant: PlacardAlertVariant.success,
+              title: _cancelNotice!,
+            ),
+            const SizedBox(height: 10),
+          ],
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              if (booking.meetLink != null && booking.canCancel)
+              // Only a live session with a link offers JOIN MEET.
+              if (booking.canJoinMeet)
                 PlacardButton(
                   key: Key('join-meet-button-${booking.id}'),
                   label: 'JOIN MEET',
@@ -644,7 +685,7 @@ class _RateBookingViewState extends ConsumerState<_RateBookingView> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = extractApiError(e, fallback: 'Could not submit this rating.');
           _isSubmitting = false;
         });
       }

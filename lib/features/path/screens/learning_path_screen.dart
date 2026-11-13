@@ -80,8 +80,8 @@ class _NoPathBody extends ConsumerWidget {
               onPress: () => ref.invalidate(targetBandGoalProvider),
             ),
           ),
-          data: (view) {
-            if (view == null) {
+          data: (goal) {
+            if (goal == null) {
               return const StateBlock(
                 stamp: 'NO LEARNING PATH',
                 title: 'Sign in to build a learning path',
@@ -89,7 +89,7 @@ class _NoPathBody extends ConsumerWidget {
                     'A path is built from your measured band and your target band.',
               );
             }
-            return _generateBlock(context, ref, view);
+            return _generateBlock(context, ref, goal);
           },
         ),
       ],
@@ -99,10 +99,10 @@ class _NoPathBody extends ConsumerWidget {
   Widget _generateBlock(
     BuildContext context,
     WidgetRef ref,
-    TargetBandView view,
+    TargetBandGoal goal,
   ) {
-    final currentBand = view.currentBandCode;
-    if (!view.hasTargetBand) {
+    final currentBand = goal.currentBandCode;
+    if (!goal.hasTargetBand) {
       return StateBlock(
         stamp: 'NO LEARNING PATH',
         title: 'Choose a target band first',
@@ -122,7 +122,7 @@ class _NoPathBody extends ConsumerWidget {
       stamp: 'NO LEARNING PATH',
       title: 'Generate your learning path',
       description:
-          'Build a week-by-week sequence aimed at ${_bandLabel(view.targetBandCode!)}'
+          'Build a week-by-week sequence aimed at ${_bandLabel(goal.targetBandCode!)}'
           '${currentBand == null ? '' : ' from ${_bandLabel(currentBand)}'}.',
       action: PlacardButton(
         key: const Key('generate-learning-path-btn'),

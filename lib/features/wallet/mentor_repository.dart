@@ -68,21 +68,31 @@ class MentorRepository {
     return MentorBooking.fromJson(response.data ?? const <String, dynamic>{});
   }
 
-  Future<void> cancelBooking(int bookingId) async {
-    await _dio.post<void>('/api/mentors/bookings/$bookingId/cancel');
+  /// `POST .../cancel` - returns the refund the backend decided.
+  Future<CancelBookingResult> cancelBooking(int bookingId) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/mentors/bookings/$bookingId/cancel',
+    );
+    return CancelBookingResult.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
   }
 
-  Future<void> rateBooking(
+  /// `POST .../rate` - answers a `MentorReviewDto`, not the booking.
+  Future<MentorReview> rateBooking(
     int bookingId, {
     required int rating,
     String? text,
   }) async {
-    await _dio.post<void>(
+    final response = await _dio.post<Map<String, dynamic>>(
       '/api/mentors/bookings/$bookingId/rate',
       data: {
         'rating': rating,
         'text': text,
       },
+    );
+    return MentorReview.fromJson(
+      response.data ?? const <String, dynamic>{},
     );
   }
 }

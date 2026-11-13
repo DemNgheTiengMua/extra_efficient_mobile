@@ -39,9 +39,9 @@ final dashboardInsightProvider =
       DashboardInsightNotifier.new,
     );
 
-class TargetBandGoalNotifier extends AsyncNotifier<TargetBandView?> {
+class TargetBandGoalNotifier extends AsyncNotifier<TargetBandGoal?> {
   @override
-  Future<TargetBandView?> build() async {
+  Future<TargetBandGoal?> build() async {
     final auth = ref.watch(authNotifierProvider);
     ref.watch(certificateScopeVersionProvider);
     if (!auth.isAuthenticated) return null;
@@ -78,7 +78,7 @@ class TargetBandGoalNotifier extends AsyncNotifier<TargetBandView?> {
 }
 
 final targetBandGoalProvider =
-    AsyncNotifierProvider<TargetBandGoalNotifier, TargetBandView?>(
+    AsyncNotifierProvider<TargetBandGoalNotifier, TargetBandGoal?>(
       TargetBandGoalNotifier.new,
     );
 

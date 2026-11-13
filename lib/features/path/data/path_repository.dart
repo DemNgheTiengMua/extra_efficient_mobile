@@ -33,11 +33,11 @@ class PathRepository {
     return fetchDashboardInsight(certId: certId);
   }
 
-  Future<TargetBandView> fetchTargetBand() async {
+  Future<TargetBandGoal> fetchTargetBand() async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/learner/target-band',
     );
-    return TargetBandView.fromJson(response.data ?? const <String, dynamic>{});
+    return TargetBandGoal.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   Future<void> updateTargetBand(String targetBandCode) async {
@@ -220,11 +220,10 @@ class PathRepository {
     return LessonProgress.fromJson(response.data ?? const <String, dynamic>{});
   }
 
-  Future<LessonProgress> markCardViewed(int lessonId, int cardId) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      '/api/learner/lessons/$lessonId/cards/$cardId/view',
-    );
-    return LessonProgress.fromJson(response.data ?? const <String, dynamic>{});
+  /// Records a card view. The backend answers `{success: true}`, not a progress
+  /// view, so the caller refetches progress rather than reading this result.
+  Future<void> markCardViewed(int lessonId, int cardId) async {
+    await _dio.post<void>('/api/learner/lessons/$lessonId/cards/$cardId/view');
   }
 
   Future<MicroCheckResult> submitMicroCheck({

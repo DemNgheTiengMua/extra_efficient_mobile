@@ -102,5 +102,14 @@ Map<String, dynamic> startStepResultPayload() =>
 Map<String, dynamic> stepNotFoundPayload() =>
     _asMap(loadFixture('learner_learning_path_step_not_found'));
 
+/// `GET /api/learner/lessons/{id}`: four named option fields and the card's own
+/// `cardType`, with `correctOption` withheld.
+Map<String, dynamic> lessonDetailPayload() =>
+    _asMap(loadFixture('learner_lesson_detail'));
+
+/// `GET /api/learner/lessons/{id}/progress`.
+Map<String, dynamic> lessonProgressPayload() =>
+    _asMap(loadFixture('learner_lesson_progress'));
+
 Map<String, dynamic> _asMap(dynamic json) =>
     Map<String, dynamic>.from(json as Map);

@@ -243,26 +243,24 @@ void main() {
 
   group('GET /api/learner/target-band', () {
     test('with no goal: the outer target is null and "" is absent', () {
-      final view = TargetBandView.fromJson(targetBandNoGoalPayload());
+      final goal = TargetBandGoal.fromJson(targetBandNoGoalPayload());
 
-      expect(view.hasTargetBand, isFalse);
-      expect(view.targetBandCode, isNull);
-      // The live oddity: `goal.targetBandCode` is "" while the outer is null.
-      expect(view.goal!.targetBandCode, isNull);
-      expect(view.currentBandCode, isNull);
-      expect(view.currentTotalScore, isNull);
+      expect(goal.hasTargetBand, isFalse);
+      expect(goal.targetBandCode, isNull);
+      expect(goal.currentBandCode, isNull);
+      expect(goal.currentTotalScore, isNull);
     });
 
     test('offers the certificate\'s own bands with their score ranges', () {
-      final view = TargetBandView.fromJson(targetBandNoGoalPayload());
+      final goal = TargetBandGoal.fromJson(targetBandNoGoalPayload());
 
-      expect(view.availableBands, hasLength(6));
+      expect(goal.availableBands, hasLength(6));
       expect(
-        view.availableBands.map((b) => b.code),
+        goal.availableBands.map((b) => b.code),
         ['below_A1', 'A1', 'A2', 'B1', 'B2', 'C1'],
       );
 
-      final beginner = view.availableBands[1];
+      final beginner = goal.availableBands[1];
       expect(beginner.name, 'Beginner');
       expect(beginner.minTotal, 120);
       expect(beginner.maxTotal, 220);
@@ -270,16 +268,109 @@ void main() {
       expect(beginner.rangeText, '120 to 220 points');
     });
 
-    test('with a saved goal: the band, the assessed band and the flags', () {
-      final view = TargetBandView.fromJson(targetBandWithGoalPayload());
+    test('with a saved goal: the band and the certificate flags', () {
+      final goal = TargetBandGoal.fromJson(targetBandWithGoalPayload());
 
-      expect(view.hasTargetBand, isTrue);
-      expect(view.targetBandCode, 'B2');
-      expect(view.goal!.currentBandCode, 'below_A1');
-      expect(view.goal!.targetBandCode, 'B2');
-      // A goal with no deadline has no verdict; null is "cannot judge".
-      expect(view.goal!.status, isNull);
-      expect(view.availableBands.where((b) => b.isTarget).single.code, 'B2');
+      expect(goal.hasTargetBand, isTrue);
+      expect(goal.targetBandCode, 'B2');
+      expect(goal.currentBandCode, 'below_A1');
+      expect(goal.availableBands.where((b) => b.isTarget).single.code, 'B2');
+    });
+  });
+
+  group('GET /api/learner/lessons/{id}', () {
+    late LessonDetail lesson;
+
+    setUpAll(() {
+      lesson = LessonDetail.fromJson(lessonDetailPayload());
+    });
+
+    test('reads lessonId, the topic and the module', () {
+      expect(lesson.id, 1);
+      expect(lesson.title, 'Present Continuous Tense');
+      expect(lesson.summary, startsWith('Master the present continuous'));
+      expect(lesson.estimatedMinutes, 5);
+      expect(lesson.topicCode, 'R-GRAM');
+      expect(lesson.topicName, startsWith('Morphosyntactic'));
+      expect(lesson.cefrLevel, 'B1');
+      expect(lesson.module, 'primary');
+      expect(lesson.hasRemedialModule, isFalse);
+      expect(lesson.cards, hasLength(2));
+    });
+
+    test('reads cardId, cardType and contentMarkdown', () {
+      final rule = lesson.cards.first;
+
+      expect(rule.id, 1);
+      expect(rule.type, 'rule');
+      expect(
+        rule.title,
+        'Rule: Present Continuous for Ongoing Actions',
+      );
+      expect(
+        rule.body,
+        'Use am/is/are + verb-ing for something happening now.',
+      );
+      expect(rule.isMicroCheck, isFalse);
+      expect(rule.options, isEmpty);
+    });
+
+    test('a micro-check card derives its options from optionA-D', () {
+      final check = lesson.cards.last;
+
+      expect(check.id, 4);
+      expect(check.type, 'micro_check');
+      expect(check.isMicroCheck, isTrue);
+      expect(check.question, contains('The marketing team'));
+      expect(check.options.map((o) => o.label), ['A', 'B', 'C', 'D']);
+      expect(check.options.map((o) => o.text), [
+        'evaluates',
+        'is evaluating',
+        'evaluated',
+        'evaluating',
+      ]);
+      // The key is withheld on the lesson payload; only the graded check
+      // reveals it.
+      expect(check.body, startsWith('Choose the correct option'));
+    });
+  });
+
+  group('GET /api/learner/lessons/{id}/progress', () {
+    test('reads the real progress fields and the 1-based resume index', () {
+      final progress = LessonProgress.fromJson(lessonProgressPayload());
+
+      expect(progress.cardsCompleted, 1);
+      expect(progress.totalCards, 2);
+      expect(progress.isCompleted, isFalse);
+      expect(progress.lastViewedCardId, 1);
+      expect(progress.resumeCardIndex, 1);
+      expect(progress.resumeCardOffset, 0);
+      expect(progress.module, 'primary');
+    });
+
+    test('resumeCardIndex is 1-based, so card two is page offset one', () {
+      final progress = LessonProgress.fromJson({
+        ...lessonProgressPayload(),
+        'resumeCardIndex': 2,
+      });
+
+      expect(progress.resumeCardIndex, 2);
+      expect(progress.resumeCardOffset, 1);
+    });
+  });
+
+  group('POST /api/learner/lessons/{id}/cards/{cardId}/micro-check', () {
+    test('reads isCorrect, the revealed correctOption and the explanation', () {
+      final result = MicroCheckResult.fromJson({
+        'isCorrect': true,
+        'correctOption': 'B',
+        'explanation': 'The time adverbial frames an action in progress.',
+        'categoryId': 1,
+      });
+
+      expect(result.isCorrect, isTrue);
+      expect(result.correctOption, 'B');
+      expect(result.explanation, startsWith('The time adverbial'));
     });
   });
 

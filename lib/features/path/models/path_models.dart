@@ -393,62 +393,88 @@ class AiInsight {
   bool get isDone => status.toLowerCase() == 'done';
 }
 
-/// One band of the certificate's own ladder (`CefrBandInfoDto`). The ladder is
-/// the certificate's, not a shared six-rung one, so it is fed by the payload.
-class CefrBandInfo {
-  const CefrBandInfo({
-    required this.code,
-    required this.name,
-    required this.minTotal,
-    required this.maxTotal,
-    this.isReached = false,
-    this.isCurrent = false,
-    this.isTarget = false,
+/// One selectable band: `{code, name, minTotal, maxTotal, description, isCurrent, isTarget}`.
+class TargetBandGoal {
+  const TargetBandGoal({
+    this.currentBandCode,
+    this.targetBandCode,
+    this.targetDate,
+    this.weeklyStudyHours,
+    this.currentBandName,
+    this.currentTotalScore,
+    this.availableBands = const [],
   });
 
-  factory CefrBandInfo.fromJson(Map<String, dynamic> json) {
-    return CefrBandInfo(
-      code: json['code']?.toString() ?? '',
-      name: json['name']?.toString() ?? '',
-      minTotal: _asInt(json['minTotal']) ?? 0,
-      maxTotal: _asInt(json['maxTotal']) ?? 0,
-      isReached: json['isReached'] == true,
-      isCurrent: json['isCurrent'] == true,
-      isTarget: json['isTarget'] == true,
+  factory TargetBandGoal.fromJson(Map<String, dynamic> json) {
+    // The backend sends availableBands as objects, not bare codes. Coercing them
+    // with toString() renders "Instance of '_Map'", so read the code explicitly.
+    final bandsRaw = json['availableBands'] as List<dynamic>? ?? const [];
+    final bands = bandsRaw
+        .whereType<Map<String, dynamic>>()
+        .map(BandOption.fromJson)
+        .toList(growable: false);
+
+    final goal = json['goal'] is Map<String, dynamic>
+        ? json['goal'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+
+    // `goal.targetBandCode` is "" when unset while the outer one is null; both
+    // mean "no target", so normalise the empty string away.
+    final outerTarget = json['targetBandCode']?.toString();
+    final goalTarget = goal['targetBandCode']?.toString();
+    final target = (outerTarget != null && outerTarget.isNotEmpty)
+        ? outerTarget
+        : (goalTarget != null && goalTarget.isNotEmpty ? goalTarget : null);
+
+    return TargetBandGoal(
+      // The assessed band is reported at the top level; the goal's own column is
+      // the fallback, because a goal records the band it was set from.
+      currentBandCode:
+          _asString(json['currentBandCode']) ?? _asString(goal['currentBandCode']),
+      currentBandName: json['currentBandName']?.toString(),
+      currentTotalScore: _asNum(json['currentTotalScore'])?.toInt(),
+      targetBandCode: target,
+      // The deadline and the pace are the saved goal's own columns, so they
+      // arrive nested under `goal`.
+      targetDate: _asString(json['targetDate']) ?? _asString(goal['targetDate']),
+      weeklyStudyHours: _asNum(json['weeklyStudyHours']) ??
+          _asNum(goal['weeklyStudyHours']),
+      availableBands: bands,
     );
   }
 
-  final String code;
-  final String name;
-  final int minTotal;
-  final int maxTotal;
-  final bool isReached;
-  final bool isCurrent;
-  final bool isTarget;
+  final String? currentBandCode;
+  final String? currentBandName;
+  final int? currentTotalScore;
+  final String? targetBandCode;
+  final String? targetDate;
+  final num? weeklyStudyHours;
+  final List<BandOption> availableBands;
 
-  String get rangeText => '$minTotal to $maxTotal points';
+  /// A path can only be generated towards a band that has been chosen, because
+  /// `POST /learning-path/generate` answers 422 without one.
+  bool get hasTargetBand => targetBandCode != null;
 }
 
-/// One band a goal may aim at (`TargetBandOptionDto`), with the backend's
-/// ready-to-print range and its own current/target flags.
-class TargetBandOption {
-  const TargetBandOption({
+/// One selectable band: `{code, name, minTotal, maxTotal, description, isCurrent, isTarget}`.
+class BandOption {
+  const BandOption({
     required this.code,
     required this.name,
-    required this.minTotal,
-    required this.maxTotal,
+    this.minTotal,
+    this.maxTotal,
     this.description,
     this.isCurrent = false,
     this.isTarget = false,
   });
 
-  factory TargetBandOption.fromJson(Map<String, dynamic> json) {
-    return TargetBandOption(
+  factory BandOption.fromJson(Map<String, dynamic> json) {
+    return BandOption(
       code: json['code']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
-      minTotal: _asInt(json['minTotal']) ?? 0,
-      maxTotal: _asInt(json['maxTotal']) ?? 0,
-      description: _asString(json['description']),
+      minTotal: _asNum(json['minTotal'])?.toInt(),
+      maxTotal: _asNum(json['maxTotal'])?.toInt(),
+      description: json['description']?.toString(),
       isCurrent: json['isCurrent'] == true,
       isTarget: json['isTarget'] == true,
     );
@@ -456,133 +482,106 @@ class TargetBandOption {
 
   final String code;
   final String name;
-  final int minTotal;
-  final int maxTotal;
+  final int? minTotal;
+  final int? maxTotal;
   final String? description;
   final bool isCurrent;
   final bool isTarget;
 
-  String get rangeText =>
-      description ?? '$minTotal to $maxTotal points';
-}
-
-/// The saved goal's verdict (`GoalStatusDto`). `status` is null whenever there
-/// is nothing to answer — no deadline — which is not a refusal.
-class GoalStatus {
-  const GoalStatus({
-    this.currentBandCode,
-    this.targetBandCode,
-    this.targetDate,
-    this.weeklyStudyHours,
-    this.requiredHours,
-    this.availableHours,
-    this.status,
-    this.suggestedWeeklyHours,
-    this.earliestFeasibleDate,
-  });
-
-  factory GoalStatus.fromJson(Map<String, dynamic> json) {
-    return GoalStatus(
-      currentBandCode: _asString(json['currentBandCode']),
-      // Live, `targetBandCode` is "" while the outer one is null. "" is absent.
-      targetBandCode: _asString(json['targetBandCode']),
-      targetDate: _asString(json['targetDate']),
-      weeklyStudyHours: _asNum(json['weeklyStudyHours']),
-      requiredHours: _asInt(json['requiredHours']),
-      availableHours: _asNum(json['availableHours']),
-      status: _asString(json['status']),
-      suggestedWeeklyHours: _asInt(json['suggestedWeeklyHours']),
-      earliestFeasibleDate: _asString(json['earliestFeasibleDate']),
-    );
+  /// e.g. "Below A1 · 10–119 points"
+  String get label {
+    final range = (minTotal != null && maxTotal != null)
+        ? ' · $minTotal–$maxTotal points'
+        : '';
+    return '$name$range';
   }
 
-  final String? currentBandCode;
-  final String? targetBandCode;
-  final String? targetDate;
-  final num? weeklyStudyHours;
-  final int? requiredHours;
-  final num? availableHours;
-  final String? status;
-  final int? suggestedWeeklyHours;
-  final String? earliestFeasibleDate;
+  /// The backend's own ready-to-print range, falling back to the two totals
+  /// when it sends none.
+  String get rangeText =>
+      (description != null && description!.isNotEmpty)
+          ? description!
+          : (minTotal != null && maxTotal != null
+                ? '$minTotal to $maxTotal points'
+                : '');
 }
 
-/// `GET /api/learner/target-band` as the envelope it is: the certificate's real
-/// bands (each with its score range) plus whatever goal is already saved.
-class TargetBandView {
-  const TargetBandView({
-    this.activeCert = const DashboardCertificate(),
-    this.currentBandCode,
-    this.currentTotalScore,
-    this.currentBandName,
-    this.targetBandCode,
-    this.cefrBands = const [],
-    this.availableBands = const [],
-    this.goal,
+/// What the backend can say about whether practice still matches the placed
+/// band (`CalibrationViewDto`). `proposal` is null when there is nothing to
+/// propose, and [reason] says which of the reasons that is.
+class CalibrationStatus {
+  const CalibrationStatus({
+    this.placedBandCode = '',
+    this.placedBandName,
+    this.validAnswerCount = 0,
+    this.requiredValidAnswerCount = 0,
+    this.excludedRushedCount = 0,
+    this.observedAccuracyPct,
+    this.reason = '',
+    this.proposal,
   });
 
-  factory TargetBandView.fromJson(Map<String, dynamic> json) {
-    final bandsRaw = json['availableBands'] as List<dynamic>? ?? const [];
-    final cefrRaw = json['cefrBands'] as List<dynamic>? ?? const [];
-    final goalRaw = json['goal'];
-    return TargetBandView(
-      activeCert: json['activeCert'] is Map<String, dynamic>
-          ? DashboardCertificate.fromJson(
-              json['activeCert'] as Map<String, dynamic>,
-            )
-          : const DashboardCertificate(),
-      currentBandCode: _asString(json['currentBandCode']),
-      currentTotalScore: _asInt(json['currentTotalScore']),
-      currentBandName: _asString(json['currentBandName']),
-      targetBandCode: _asString(json['targetBandCode']),
-      cefrBands: cefrRaw
-          .whereType<Map<String, dynamic>>()
-          .map(CefrBandInfo.fromJson)
-          .toList(growable: false),
-      availableBands: bandsRaw
-          .whereType<Map<String, dynamic>>()
-          .map(TargetBandOption.fromJson)
-          .toList(growable: false),
-      goal: goalRaw is Map<String, dynamic>
-          ? GoalStatus.fromJson(goalRaw)
+  factory CalibrationStatus.fromJson(Map<String, dynamic> json) {
+    final rawProposal = json['proposal'];
+    return CalibrationStatus(
+      placedBandCode: json['placedBandCode']?.toString() ?? '',
+      placedBandName: json['placedBandName']?.toString(),
+      validAnswerCount: _asNum(json['validAnswerCount'])?.toInt() ?? 0,
+      requiredValidAnswerCount:
+          _asNum(json['requiredValidAnswerCount'])?.toInt() ?? 0,
+      excludedRushedCount: _asNum(json['excludedRushedCount'])?.toInt() ?? 0,
+      observedAccuracyPct: _asNum(json['observedAccuracyPct']),
+      reason: json['reason']?.toString() ?? '',
+      proposal: rawProposal is Map<String, dynamic>
+          ? CalibrationProposal.fromJson(rawProposal)
           : null,
     );
   }
 
-  final DashboardCertificate activeCert;
-  final String? currentBandCode;
-  final int? currentTotalScore;
-  final String? currentBandName;
-  final String? targetBandCode;
-  final List<CefrBandInfo> cefrBands;
-  final List<TargetBandOption> availableBands;
-  final GoalStatus? goal;
+  final String placedBandCode;
+  final String? placedBandName;
+  final int validAnswerCount;
+  final int requiredValidAnswerCount;
+  final int excludedRushedCount;
+  final num? observedAccuracyPct;
+  final String reason;
+  final CalibrationProposal? proposal;
 
-  /// A path can only be generated towards a band that has been chosen.
-  bool get hasTargetBand => targetBandCode != null;
+  /// A proposal exists only when the backend offers one; there is no band to
+  /// adjust towards otherwise.
+  bool get hasProposal => proposal != null;
+
+  /// Enough answers for the comparison to mean anything.
+  bool get hasEnoughAnswers => validAnswerCount >= requiredValidAnswerCount;
 }
 
-class CalibrationStatus {
-  const CalibrationStatus({
-    this.pending = false,
-    this.currentTargetBandCode,
-    this.recommendedBandCode,
-    this.reason,
+class CalibrationProposal {
+  const CalibrationProposal({
+    required this.proposedBandCode,
+    required this.proposedBandName,
+    required this.observedAccuracyPct,
+    required this.validAnswerCount,
+    required this.requiredAccuracyPct,
+    required this.evidence,
   });
 
-  factory CalibrationStatus.fromJson(Map<String, dynamic> json) {
-    return CalibrationStatus(
-      pending: json['pending'] == true || json['status'] == 'pending',
-      currentTargetBandCode: json['currentTargetBandCode']?.toString(),
-      recommendedBandCode: json['recommendedBandCode']?.toString(),
-      reason: json['reason']?.toString(),
+  factory CalibrationProposal.fromJson(Map<String, dynamic> json) {
+    return CalibrationProposal(
+      proposedBandCode: json['proposedBandCode']?.toString() ?? '',
+      proposedBandName: json['proposedBandName']?.toString() ?? '',
+      observedAccuracyPct: _asNum(json['observedAccuracyPct']) ?? 0,
+      validAnswerCount: _asNum(json['validAnswerCount'])?.toInt() ?? 0,
+      requiredAccuracyPct: _asNum(json['requiredAccuracyPct'])?.toInt() ?? 0,
+      evidence: json['evidence']?.toString() ?? '',
     );
   }
 
-  final bool pending;
-  final String? currentTargetBandCode;
-  final String? recommendedBandCode;
-  final String? reason;
+  final String proposedBandCode;
+  final String proposedBandName;
+  final num observedAccuracyPct;
+  final int validAnswerCount;
+  final int requiredAccuracyPct;
+  final String evidence;
 }
 
 /// `PathStepDto`: one step's coordinate and state, before it starts.
@@ -797,7 +796,7 @@ class LearningPathOverview {
       remainingMinutes: _asInt(json['remainingMinutes']) ?? 0,
       cefrBands: cefrRaw
           .whereType<Map<String, dynamic>>()
-          .map(CefrBandInfo.fromJson)
+          .map(BandOption.fromJson)
           .toList(growable: false),
       openSteps: stepsOf(json['openSteps']),
       nextStepId: _asInt(json['nextStepId']),
@@ -831,7 +830,7 @@ class LearningPathOverview {
   final int completedSteps;
   final int totalEstimatedMinutes;
   final int remainingMinutes;
-  final List<CefrBandInfo> cefrBands;
+  final List<BandOption> cefrBands;
   final List<PathStep> openSteps;
   final int? nextStepId;
   final List<LearningPathWeek> weeks;
@@ -893,6 +892,21 @@ class PathStepUnavailable implements Exception {
   String toString() => message;
 }
 
+/// One answer choice on a `micro_check` card. The backend sends four separate
+/// fields (`optionA`–`optionD`) and grades against a single-letter label, so the
+/// label — not the text — is what a submission carries.
+class LessonOption {
+  const LessonOption({required this.label, required this.text});
+
+  final String label;
+  final String text;
+}
+
+/// One card of a lesson module (`LessonCardDto`).
+///
+/// `cardType` is `rule | pitfall | example | micro_check`. Only a `micro_check`
+/// carries a prompt and options, and `correctOption` is **null** on the lesson
+/// payload even for one — the key is revealed by the graded micro-check.
 class LessonCard {
   const LessonCard({
     required this.id,
@@ -901,19 +915,31 @@ class LessonCard {
     this.body,
     this.question,
     this.options = const [],
-    this.audioUrl,
+    this.displayOrder = 0,
   });
 
   factory LessonCard.fromJson(Map<String, dynamic> json) {
-    final optsRaw = json['options'] as List<dynamic>? ?? const [];
+    // Options are four named fields, not a list. Read the label alongside its
+    // text so a submission sends "B", which is what the grader compares.
+    final options = <LessonOption>[
+      for (final entry in const [
+        ('A', 'optionA'),
+        ('B', 'optionB'),
+        ('C', 'optionC'),
+        ('D', 'optionD'),
+      ])
+        if (_asString(json[entry.$2]) case final text?)
+          LessonOption(label: entry.$1, text: text),
+    ];
+
     return LessonCard(
-      id: _asInt(json['id']) ?? _asInt(json['cardId']) ?? 0,
-      type: json['type']?.toString() ?? 'rule',
+      id: _asInt(json['cardId']) ?? 0,
+      type: json['cardType']?.toString() ?? '',
       title: json['title']?.toString() ?? '',
-      body: json['body']?.toString() ?? json['content']?.toString(),
-      question: json['question']?.toString(),
-      options: optsRaw.map((e) => e.toString()).toList(growable: false),
-      audioUrl: json['audioUrl']?.toString(),
+      body: _asString(json['contentMarkdown']),
+      question: _asString(json['questionPrompt']),
+      options: options,
+      displayOrder: _asInt(json['displayOrder']) ?? 0,
     );
   }
 
@@ -922,8 +948,8 @@ class LessonCard {
   final String title;
   final String? body;
   final String? question;
-  final List<String> options;
-  final String? audioUrl;
+  final List<LessonOption> options;
+  final int displayOrder;
 
   bool get isMicroCheck => type.toLowerCase() == 'micro_check';
 }
@@ -932,60 +958,104 @@ class LessonDetail {
   const LessonDetail({
     required this.id,
     required this.title,
+    this.summary,
+    this.estimatedMinutes = 0,
     this.cards = const [],
+    this.topicCode = '',
+    this.topicName = '',
+    this.cefrLevel = '',
+    this.module = 'primary',
+    this.hasRemedialModule = false,
   });
 
   factory LessonDetail.fromJson(Map<String, dynamic> json) {
     final cardsRaw = json['cards'] as List<dynamic>? ?? const [];
     return LessonDetail(
-      id: _asInt(json['id']) ?? 0,
-      title: json['title']?.toString() ?? 'Lesson',
+      id: _asInt(json['lessonId']) ?? 0,
+      title: json['title']?.toString() ?? '',
+      summary: _asString(json['summary']),
+      estimatedMinutes: _asInt(json['estimatedMinutes']) ?? 0,
       cards: cardsRaw
           .whereType<Map<String, dynamic>>()
           .map(LessonCard.fromJson)
           .toList(growable: false),
+      topicCode: json['topicCode']?.toString() ?? '',
+      topicName: json['topicName']?.toString() ?? '',
+      cefrLevel: json['cefrLevel']?.toString() ?? '',
+      module: json['module']?.toString() ?? 'primary',
+      hasRemedialModule: json['hasRemedialModule'] == true,
     );
   }
 
   final int id;
   final String title;
+  final String? summary;
+  final int estimatedMinutes;
   final List<LessonCard> cards;
+  final String topicCode;
+  final String topicName;
+  final String cefrLevel;
+  final String module;
+  final bool hasRemedialModule;
 }
 
+/// `LessonProgressDto`: where the learner stopped inside one module.
+///
+/// [resumeCardIndex] is 1-based, as the service computes it, so the reader opens
+/// on `resumeCardIndex - 1`.
 class LessonProgress {
   const LessonProgress({
-    this.viewedCount = 0,
-    this.totalCount = 0,
-    this.lastViewedCardIndex = 0,
-    this.completed = false,
+    this.cardsCompleted = 0,
+    this.totalCards = 0,
+    this.isCompleted = false,
+    this.lastViewedCardId,
+    this.resumeCardIndex = 1,
+    this.module = 'primary',
   });
 
   factory LessonProgress.fromJson(Map<String, dynamic> json) {
     return LessonProgress(
-      viewedCount: _asInt(json['viewedCount']) ?? 0,
-      totalCount: _asInt(json['totalCount']) ?? 0,
-      lastViewedCardIndex: _asInt(json['lastViewedCardIndex']) ?? 0,
-      completed: json['completed'] == true,
+      cardsCompleted: _asInt(json['cardsCompleted']) ?? 0,
+      totalCards: _asInt(json['totalCards']) ?? 0,
+      isCompleted: json['isCompleted'] == true,
+      lastViewedCardId: _asInt(json['lastViewedCardId']),
+      resumeCardIndex: _asInt(json['resumeCardIndex']) ?? 1,
+      module: json['module']?.toString() ?? 'primary',
     );
   }
 
-  final int viewedCount;
-  final int totalCount;
-  final int lastViewedCardIndex;
-  final bool completed;
+  final int cardsCompleted;
+  final int totalCards;
+  final bool isCompleted;
+  final int? lastViewedCardId;
+
+  /// 1-based position of the card the reader opens on.
+  final int resumeCardIndex;
+  final String module;
+
+  /// The 0-based page index `resumeCardIndex` names.
+  int get resumeCardOffset => resumeCardIndex <= 0 ? 0 : resumeCardIndex - 1;
 }
 
+/// `MicroCheckResultDto`: the verdict the backend grades, and the only place the
+/// correct option is revealed.
 class MicroCheckResult {
-  const MicroCheckResult({required this.correct, this.explanation});
+  const MicroCheckResult({
+    required this.isCorrect,
+    this.correctOption,
+    this.explanation,
+  });
 
   factory MicroCheckResult.fromJson(Map<String, dynamic> json) {
     return MicroCheckResult(
-      correct: json['correct'] == true,
-      explanation: json['explanation']?.toString(),
+      isCorrect: json['isCorrect'] == true,
+      correctOption: _asString(json['correctOption']),
+      explanation: _asString(json['explanation']),
     );
   }
 
-  final bool correct;
+  final bool isCorrect;
+  final String? correctOption;
   final String? explanation;
 }
 

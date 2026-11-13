@@ -1,0 +1,18 @@
+{
+  "isCorrect": true,
+  "selectedOptionId": 161,
+  "correctOptionId": 161,
+  "explanation": "The question asks for a recommendation, and A answers it.",
+  "transcript": null,
+  "isSessionFinished": false,
+  "nextQuestionDisplayOrder": 5,
+  "isSaved": false,
+  "acceptedAnswersJson": null,
+  "correctOptionIds": [
+    161
+  ],
+  "responseText": null,
+  "selectedOptionIdsJson": null,
+  "savedQuestionId": null,
+  "cefrLevelCode": null
+}

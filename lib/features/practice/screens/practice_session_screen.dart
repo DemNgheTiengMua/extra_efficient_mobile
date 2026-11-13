@@ -23,18 +23,27 @@ class PracticeSessionScreen extends ConsumerStatefulWidget {
 class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
   bool _loading = true;
   String? _error;
-  PracticeSessionTake? _session;
+  PracticeSessionTake? _take;
   int _currentIndex = 0;
 
   final Map<int, int> _selectedOptions = {};
   final Map<int, String> _writingResponses = {};
   final Map<int, TextEditingController> _writingControllers = {};
+
+  /// address → savedQuestionId. Seeded from the take payload so a question that
+  /// arrived already saved can be un-saved rather than re-saved.
   final Map<int, int?> _savedQuestionIds = {};
+
   final Map<int, String> _hints = {};
   final Map<int, PracticeAnswerResult> _results = {};
+
   bool _submitting = false;
+  bool _requestingHint = false;
   bool _isPlayingAudio = false;
-  String? _bookmarkError;
+
+  /// The backend's own refusal for the last write, kept per action so a failed
+  /// submit and a failed hint each report their own sentence.
+  String? _writeError;
 
   bool _showingSummary = false;
   PracticeSummary? _summary;
@@ -54,16 +63,12 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
     super.dispose();
   }
 
-  TextEditingController _controllerFor(int questionId) {
+  TextEditingController _controllerFor(int address) {
     return _writingControllers.putIfAbsent(
-      questionId,
-      () => TextEditingController(text: _writingResponses[questionId] ?? ''),
+      address,
+      () => TextEditingController(text: _writingResponses[address] ?? ''),
     );
   }
-
-  /// The address the backend gave this question: its row id, else the pinned
-  /// item version. A pool item has no row id, and `0` would 404.
-  int _addressOf(PracticeQuestion q) => q.address ?? q.displayOrder;
 
   int _countWords(String text) {
     final trimmed = text.trim();
@@ -71,30 +76,47 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
     return trimmed.split(RegExp(r'\s+')).length;
   }
 
+  List<PracticeQuestion> get _questions => _take?.questions ?? const [];
+
+  PracticeQuestion? get _question =>
+      _currentIndex < _questions.length ? _questions[_currentIndex] : null;
+
+  bool _isSaved(PracticeQuestion q) =>
+      _savedQuestionIds.containsKey(q.address)
+          ? _savedQuestionIds[q.address] != null
+          : q.isSaved;
+
   Future<void> _toggleBookmark(PracticeQuestion q) async {
-    final key = _addressOf(q);
-    final currentSavedId = _savedQuestionIds[key] ?? q.savedQuestionId;
+    final address = q.address;
+    final savedId = _savedQuestionIds.containsKey(address)
+        ? _savedQuestionIds[address]
+        : q.savedQuestionId;
     final repo = ref.read(practiceRepositoryProvider);
     try {
-      if (currentSavedId != null && currentSavedId > 0) {
-        await repo.deleteSavedQuestion(currentSavedId);
+      if (savedId != null) {
+        await repo.deleteSavedQuestion(savedId);
         if (!mounted) return;
-        setState(() => _savedQuestionIds[key] = null);
+        setState(() => _savedQuestionIds[address] = null);
       } else {
-        // Save by the address the question actually holds: POSTing a pool
-        // item's 0 to the questions route files nothing.
+        // Save by whichever handle the question holds: a pool item has no row
+        // id, and filing its 0 against the questions route saves nothing.
         final result = await repo.saveQuestionAddress(
           questionId: q.questionId,
           itemVersionId: q.itemVersionId,
         );
         if (!mounted) return;
-        setState(() => _savedQuestionIds[key] = result.savedQuestionId);
+        setState(
+          () => _savedQuestionIds[address] =
+              result.isSaved ? result.savedQuestionId : null,
+        );
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _bookmarkError =
-            extractApiError(e, fallback: 'Could not update saved question');
+        _writeError = extractApiError(
+          e,
+          fallback: 'Could not update saved question',
+        );
       });
     }
   }
@@ -110,88 +132,118 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
           .fetchSessionTake(widget.sessionId);
       if (!mounted) return;
       setState(() {
-        _session = take;
+        _take = take;
+        // Open on the question the server names as current, so a resumed
+        // session continues where it was left rather than restarting at Q1.
+        final opening = take.openingQuestion;
+        _currentIndex = opening == null
+            ? 0
+            : take.questions.indexWhere((q) => q.address == opening.address);
+        if (_currentIndex < 0) _currentIndex = 0;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = extractApiError(
+          e,
+          fallback: 'The session could not be loaded.',
+        );
         _loading = false;
       });
     }
   }
 
   Future<void> _playAudio(PracticeQuestion q) async {
-    final url = q.audioUrl;
-    if (url == null || url.isEmpty) return;
+    final path = q.audioPath;
+    if (path == null || path.isEmpty) return;
     final audio = ref.read(audioMediaAdapterProvider);
-    await audio.setAudioUrl(
-      url,
-      clipStart: q.clipStartMs != null
-          ? Duration(milliseconds: q.clipStartMs!)
-          : null,
-      clipEnd:
-          q.clipEndMs != null ? Duration(milliseconds: q.clipEndMs!) : null,
-    );
-    await audio.play();
-    if (mounted) {
+    try {
+      await audio.setAudioUrl(
+        path,
+        clipStart: q.audioStartMs != null
+            ? Duration(milliseconds: q.audioStartMs!)
+            : null,
+        clipEnd:
+            q.audioEndMs != null ? Duration(milliseconds: q.audioEndMs!) : null,
+      );
+      await audio.play();
+      if (!mounted) return;
       setState(() => _isPlayingAudio = true);
+    } catch (e) {
+      // A path the backend cannot serve must not crash the room, and must not
+      // look like a working player either.
+      if (!mounted) return;
+      setState(() {
+        _writeError = extractApiError(e, fallback: 'The audio could not play.');
+      });
     }
   }
 
   Future<void> _stopAudio() async {
     await ref.read(audioMediaAdapterProvider).stop();
-    if (mounted) {
-      setState(() => _isPlayingAudio = false);
-    }
+    if (!mounted) return;
+    setState(() => _isPlayingAudio = false);
   }
 
   Future<void> _requestHint(PracticeQuestion q) async {
-    final hint = await ref
-        .read(practiceRepositoryProvider)
-        .requestHint(widget.sessionId, _addressOf(q));
-    if (!mounted) return;
+    if (_requestingHint) return;
     setState(() {
-      _hints[_addressOf(q)] = hint;
+      _requestingHint = true;
+      _writeError = null;
     });
+    try {
+      final hint = await ref
+          .read(practiceRepositoryProvider)
+          .requestHint(widget.sessionId, q.address);
+      if (!mounted) return;
+      setState(() => _hints[q.address] = hint);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _writeError = extractApiError(
+          e,
+          fallback: 'The hint could not be revealed.',
+        );
+      });
+    } finally {
+      if (mounted) setState(() => _requestingHint = false);
+    }
   }
 
   Future<void> _submitAnswer(PracticeQuestion q) async {
     if (_submitting) return;
-    if (q.isWriting) {
-      final text = (_writingResponses[_addressOf(q)] ?? '').trim();
-      if (text.isEmpty) return;
-      setState(() => _submitting = true);
-      try {
-        final result = await ref.read(practiceRepositoryProvider).submitAnswer(
-              widget.sessionId,
-              _addressOf(q),
-              selectedOptionId: null,
-              responseText: text,
-            );
-        if (!mounted) return;
-        setState(() {
-          _results[_addressOf(q)] = result;
-        });
-      } finally {
-        if (mounted) setState(() => _submitting = false);
-      }
-      return;
-    }
+    final address = q.address;
+    final text = (_writingResponses[address] ?? '').trim();
+    final selectedId = _selectedOptions[address];
+    if (q.isWriting ? text.isEmpty : selectedId == null) return;
 
-    final selectedId = _selectedOptions[_addressOf(q)];
-    if (selectedId == null) return;
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _writeError = null;
+    });
     try {
       final result = await ref.read(practiceRepositoryProvider).submitAnswer(
             widget.sessionId,
-            _addressOf(q),
-            selectedOptionId: selectedId,
+            address,
+            selectedOptionId: q.isWriting ? null : selectedId,
+            responseText: q.isWriting ? text : null,
           );
       if (!mounted) return;
       setState(() {
-        _results[_addressOf(q)] = result;
+        _results[address] = result;
+        // The backend answers a saved question with its bookmark row id.
+        if (result.isSaved && result.savedQuestionId != null) {
+          _savedQuestionIds[address] = result.savedQuestionId;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _writeError = extractApiError(
+          e,
+          fallback: 'The answer could not be submitted.',
+        );
       });
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -199,14 +251,19 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
   }
 
   Future<void> _openSummary() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final repo = ref.read(practiceRepositoryProvider);
     try {
-      final repo = ref.read(practiceRepositoryProvider);
       final summary = await repo.fetchSummary(widget.sessionId);
       PracticeInsight? insight;
       try {
         insight = await repo.fetchInsight(widget.sessionId);
-      } catch (_) {}
+      } catch (_) {
+        // The insight is a bonus; its absence must not hide the score.
+      }
       if (!mounted) return;
       setState(() {
         _summary = summary;
@@ -217,23 +274,57 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = extractApiError(
+          e,
+          fallback: 'The summary could not be loaded.',
+        );
         _loading = false;
       });
     }
   }
 
   Future<void> _retryInsight() async {
-    final updated = await ref
-        .read(practiceRepositoryProvider)
-        .retryInsight(widget.sessionId);
-    if (!mounted) return;
-    setState(() => _insight = updated);
+    try {
+      final updated = await ref
+          .read(practiceRepositoryProvider)
+          .retryInsight(widget.sessionId);
+      if (!mounted) return;
+      setState(() => _insight = updated);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _insight = PracticeInsight(
+          status: 'failed',
+          errorMessage: extractApiError(
+            e,
+            fallback: 'The insight could not be generated.',
+          ),
+        );
+      });
+    }
+  }
+
+  void _goToNext(PracticeAnswerResult result) {
+    // The backend names the next display order; fall back to the next row.
+    final next = result.nextQuestionDisplayOrder;
+    final index = next == null
+        ? _currentIndex + 1
+        : _questions.indexWhere((q) => q.displayOrder == next);
+    setState(() {
+      _currentIndex = index >= 0 && index < _questions.length
+          ? index
+          : _currentIndex + 1;
+      _isPlayingAudio = false;
+      _writeError = null;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final title = _session?.title ?? 'PRACTICE SESSION #${widget.sessionId}';
+    final session = _take?.session;
+    final title = session == null || session.sectionName.isEmpty
+        ? 'PRACTICE SESSION #${widget.sessionId}'
+        : '${session.sectionCode} · ${session.sectionName}';
 
     return FScaffold(
       childPad: false,
@@ -279,27 +370,27 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
         onDone: () => context.pop(),
       );
     }
-    final session = _session;
-    if (session == null || session.questions.isEmpty) {
+    final q = _question;
+    if (q == null) {
       return const Center(
         child: StateBlock(
           stamp: 'SESSION',
-          title: 'Practice Session Ready',
-          description: 'No questions loaded in this session.',
+          title: 'No questions in this session',
+          description:
+              'This drill arrived without a question. Go back and start another.',
         ),
       );
     }
 
-    final q = session.questions[_currentIndex];
-    final selectedId = _selectedOptions[_addressOf(q)];
-    final writingText = _writingResponses[_addressOf(q)] ?? '';
+    final address = q.address;
+    final selectedId = _selectedOptions[address];
+    final writingText = _writingResponses[address] ?? '';
     final wordCount = _countWords(writingText);
-    final isSaved =
-        (_savedQuestionIds[_addressOf(q)] ?? q.savedQuestionId ?? 0) > 0;
-    final result = _results[_addressOf(q)];
-    final hint = _hints[_addressOf(q)];
-    final isLast = _currentIndex == session.questions.length - 1;
-    final isImmediate = session.feedbackMode == PracticeFeedbackMode.immediate;
+    final result = _results[address];
+    final hint = _hints[address] ?? q.hint;
+    final hintRequested = _hints.containsKey(address) || q.hintUsed;
+    final isLast = _currentIndex == _questions.length - 1;
+    final isSaved = _isSaved(q);
     final canSubmit = q.isWriting
         ? writingText.trim().isNotEmpty
         : selectedId != null;
@@ -309,14 +400,13 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
       children: [
         Row(
           children: [
-            PlacardBadge.info(
-              'Q${_currentIndex + 1}/${session.questions.length}',
-            ),
+            PlacardBadge.info('Q${q.displayOrder}/${q.totalQuestions}'),
             const SizedBox(width: 8),
-            PlacardBadge.muted(session.feedbackMode.label),
+            if (q.cefrLevelCode != null)
+              PlacardBadge.muted(q.cefrLevelCode!),
             const Spacer(),
             PlacardButton(
-              key: Key('bookmark-question-${_addressOf(q)}'),
+              key: Key('bookmark-question-$address'),
               label: isSaved ? 'SAVED' : 'SAVE QUESTION',
               variant: isSaved
                   ? PlacardButtonVariant.ink
@@ -327,31 +417,25 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        if (_bookmarkError != null) ...[
+        if (_writeError != null) ...[
           PlacardAlert(
-            key: const Key('bookmark-error'),
-            title: _bookmarkError!,
+            key: const Key('practice-write-error'),
+            title: 'Action failed',
+            subtitle: _writeError,
             variant: PlacardAlertVariant.danger,
           ),
           const SizedBox(height: 12),
         ],
-        if (q.audioUrl != null && q.audioUrl!.isNotEmpty) ...[
+        if (q.audioPath != null && q.audioPath!.isNotEmpty) ...[
           PlacardPanel(
             title: 'AUDIO TRACK',
-            child: Row(
-              children: [
-                Expanded(
-                  child: PlacardButton(
-                    key: const Key('practice-play-audio'),
-                    label: _isPlayingAudio ? 'STOP AUDIO' : 'PLAY AUDIO',
-                    variant: _isPlayingAudio
-                        ? PlacardButtonVariant.ink
-                        : PlacardButtonVariant.primary,
-                    onPress: () =>
-                        _isPlayingAudio ? _stopAudio() : _playAudio(q),
-                  ),
-                ),
-              ],
+            child: PlacardButton(
+              key: const Key('practice-play-audio'),
+              label: _isPlayingAudio ? 'STOP AUDIO' : 'PLAY AUDIO',
+              variant: _isPlayingAudio
+                  ? PlacardButtonVariant.ink
+                  : PlacardButtonVariant.primary,
+              onPress: () => _isPlayingAudio ? _stopAudio() : _playAudio(q),
             ),
           ),
           const SizedBox(height: 12),
@@ -360,8 +444,8 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (q.passageText != null && q.passageText!.isNotEmpty) ...[
-                Text(q.passageText!, style: SignageTypography.body()),
+              if (q.passage != null && q.passage!.isNotEmpty) ...[
+                Text(q.passage!, style: SignageTypography.body()),
                 const SizedBox(height: 12),
                 const Divider(color: SignageColors.lineSoft, height: 1),
                 const SizedBox(height: 12),
@@ -379,13 +463,16 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
                   spacing: 8,
                   runSpacing: 6,
                   children: [
-                    if (q.wordFloor != null)
-                      PlacardBadge.info('MIN ${q.wordFloor} WORDS'),
+                    if (q.minWords != null)
+                      PlacardBadge.info('MIN ${q.minWords} WORDS'),
+                    if (q.maxWords != null)
+                      PlacardBadge.muted('MAX ${q.maxWords} WORDS'),
                     PlacardBadge(
                       label: '$wordCount WORDS',
-                      variant: q.wordFloor == null || wordCount >= q.wordFloor!
-                          ? PlacardBadgeVariant.success
-                          : PlacardBadgeVariant.warning,
+                      variant:
+                          q.minWords == null || wordCount >= q.minWords!
+                              ? PlacardBadgeVariant.success
+                              : PlacardBadgeVariant.warning,
                     ),
                   ],
                 ),
@@ -413,34 +500,30 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
                 FTextField.multiline(
                   key: const Key('writing-response-input'),
                   control: FTextFieldControl.managed(
-                    controller: _controllerFor(_addressOf(q)),
+                    controller: _controllerFor(address),
                     onChange: (value) {
-                      setState(() {
-                        _writingResponses[_addressOf(q)] = value.text;
-                      });
+                      setState(() => _writingResponses[address] = value.text);
                     },
                   ),
                   hint: 'Write your response here...',
                   minLines: 4,
                   maxLines: 8,
-                  enabled: !(result != null && isImmediate),
+                  enabled: result == null,
                 ),
               ] else ...[
                 for (final opt in q.options) ...[
                   _OptionTile(
                     option: opt,
                     selected: selectedId == opt.optionId,
-                    isCorrectOption:
-                        isImmediate && result?.correctOptionId == opt.optionId,
-                    isWrongSelected: isImmediate &&
-                        result != null &&
-                        !result.isCorrect &&
+                    isCorrectOption: result?.correctOptionId == opt.optionId,
+                    isWrongSelected: result != null &&
+                        result.isCorrect == false &&
                         selectedId == opt.optionId,
-                    onTap: result != null && isImmediate
+                    onTap: result != null
                         ? null
                         : () {
                             setState(() {
-                              _selectedOptions[_addressOf(q)] = opt.optionId;
+                              _selectedOptions[address] = opt.optionId;
                             });
                           },
                   ),
@@ -453,60 +536,86 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
         const SizedBox(height: 12),
         if (hint != null && hint.isNotEmpty) ...[
           PlacardAlert(
+            key: const Key('practice-hint'),
             title: 'HINT',
             subtitle: hint,
             variant: PlacardAlertVariant.warning,
           ),
           const SizedBox(height: 12),
+        ] else if (hintRequested) ...[
+          // `hintUsed` can be true beside a null `hint`: the item has none.
+          const PlacardAlert(
+            key: Key('practice-hint-empty'),
+            title: 'No hint for this question',
+            variant: PlacardAlertVariant.info,
+          ),
+          const SizedBox(height: 12),
         ] else ...[
           PlacardButton(
+            key: const Key('practice-request-hint'),
             label: 'REQUEST HINT',
             variant: PlacardButtonVariant.secondary,
-            onPress: () => _requestHint(q),
+            isLoading: _requestingHint,
+            onPress: result != null ? null : () => _requestHint(q),
           ),
           const SizedBox(height: 12),
         ],
         if (result == null)
           PlacardButton(
-            label: isImmediate ? 'CHECK ANSWER' : 'SUBMIT ANSWER',
+            label: 'CHECK ANSWER',
             isLoading: _submitting,
             onPress: !canSubmit ? null : () => _submitAnswer(q),
-          ),
-        if (result != null && isImmediate) ...[
+          )
+        else ...[
           PlacardAlert(
-            title: result.isCorrect ? 'CORRECT' : 'INCORRECT',
-            subtitle: result.generalExplanation,
-            variant: result.isCorrect
-                ? PlacardAlertVariant.success
-                : PlacardAlertVariant.danger,
+            key: const Key('practice-result'),
+            title: switch (result.isCorrect) {
+              true => 'CORRECT',
+              false => 'INCORRECT',
+              // A productive answer is recorded but not graded: saying "wrong"
+              // would be a claim the backend did not make.
+              null => 'ANSWER RECORDED',
+            },
+            subtitle: result.explanation,
+            variant: switch (result.isCorrect) {
+              true => PlacardAlertVariant.success,
+              false => PlacardAlertVariant.danger,
+              null => PlacardAlertVariant.info,
+            },
           ),
-          if (result.selectedOptionRationale != null) ...[
+          if (result.correctOptionId != null) ...[
             const SizedBox(height: 8),
             PlacardPanel(
-              title: 'OPTION RATIONALE',
+              title: 'CORRECT ANSWER',
               child: Text(
-                result.selectedOptionRationale!,
+                _optionLabelFor(q, result.correctOptionId!),
                 style: SignageTypography.body(fontSize: 14),
               ),
             ),
           ],
           const SizedBox(height: 12),
-        ],
-        if (result != null)
           PlacardButton(
-            label: isLast ? 'VIEW SUMMARY' : 'NEXT QUESTION',
+            label: result.isSessionFinished || isLast
+                ? 'VIEW SUMMARY'
+                : 'NEXT QUESTION',
             variant: PlacardButtonVariant.ink,
-            onPress: isLast
+            onPress: result.isSessionFinished || isLast
                 ? _openSummary
-                : () {
-                    setState(() {
-                      _currentIndex++;
-                      _isPlayingAudio = false;
-                    });
-                  },
+                : () => _goToNext(result),
           ),
+        ],
       ],
     );
+  }
+
+  /// The correct option as the learner saw it, e.g. `B. On the table.`
+  String _optionLabelFor(PracticeQuestion q, int optionId) {
+    for (final opt in q.options) {
+      if (opt.optionId == optionId) {
+        return opt.text.isEmpty ? opt.label : '${opt.label}. ${opt.text}';
+      }
+    }
+    return 'Option $optionId';
   }
 }
 
@@ -585,16 +694,35 @@ class _SummaryView extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${summary.accuracyPercent}%',
+                '${summary.accuracyPercentage}%',
                 style: SignageTypography.displayScore(),
               ),
               const SizedBox(height: 4),
               Text(
-                '${summary.correctCount}/${summary.totalCount} CORRECT',
+                '${summary.correctCount}/${summary.totalQuestions} CORRECT',
                 style: SignageTypography.label(
                   fontSize: 13,
                   color: SignageColors.bandScoreCaption,
                 ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        PlacardPanel(
+          child: Row(
+            children: [
+              _SummaryStat(
+                label: 'ANSWERED',
+                value: '${summary.answeredCount}',
+              ),
+              _SummaryStat(
+                label: 'SKIPPED',
+                value: '${summary.skippedCount}',
+              ),
+              _SummaryStat(
+                label: 'HINTS',
+                value: '${summary.hintUsedCount}',
               ),
             ],
           ),
@@ -628,40 +756,8 @@ class _SummaryView extends StatelessWidget {
           title: 'QUESTION BREAKDOWN',
           child: Column(
             children: [
-              for (final item in summary.items) ...[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    item.isCorrect
-                        ? const PlacardBadge.success('CORRECT')
-                        : const PlacardBadge.danger('WRONG'),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.stem,
-                            style: SignageTypography.body(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          if (item.generalExplanation != null) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              item.generalExplanation!,
-                              style: SignageTypography.body(
-                                fontSize: 13,
-                                color: SignageColors.inkMuted,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              for (final item in summary.questions) ...[
+                _SummaryRow(item: item),
                 const SizedBox(height: 12),
               ],
             ],
@@ -673,3 +769,98 @@ class _SummaryView extends StatelessWidget {
     );
   }
 }
+
+class _SummaryStat extends StatelessWidget {
+  const _SummaryStat({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: SignageTypography.label(
+              fontSize: 11,
+              color: SignageColors.inkMuted,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: SignageTypography.data(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryRow extends StatelessWidget {
+  const _SummaryRow({required this.item});
+
+  final PracticeSummaryItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    // The key and explanation ship even for a question the learner skipped, so
+    // a null `isCorrect` is "not answered" and must not be painted as wrong.
+    final badge = switch (item.isCorrect) {
+      true => const PlacardBadge.success('CORRECT'),
+      false => const PlacardBadge.danger('WRONG'),
+      null => const PlacardBadge.muted('NOT ANSWERED'),
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            badge,
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${item.displayOrder}. ${item.stem}',
+                style: SignageTypography.body(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (item.correctOptionLabel != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Answer: ${item.correctOptionLabel}. ${item.correctOptionText ?? ''}'
+                .trim(),
+            style: SignageTypography.body(
+              fontSize: 13,
+              color: SignageColors.greenInk,
+            ),
+          ),
+        ],
+        if (item.explanation != null && item.explanation!.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            item.explanation!,
+            style: SignageTypography.body(
+              fontSize: 13,
+              color: SignageColors.inkMuted,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+

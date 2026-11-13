@@ -32,29 +32,17 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
     super.dispose();
   }
 
-  void _syncControllers(TargetBandView view) {
+  void _syncControllers(TargetBandGoal goal) {
     if (_initializedFromData) return;
     _initializedFromData = true;
-    _selectedTargetBand = view.targetBandCode;
-    _targetDateController.text = view.goal?.targetDate ?? '';
-    final hours = view.goal?.weeklyStudyHours;
-    _weeklyHoursController.text = hours != null ? '$hours' : '';
+    _selectedTargetBand = goal.targetBandCode;
+    _targetDateController.text = goal.targetDate ?? '';
+    _weeklyHoursController.text =
+        goal.weeklyStudyHours != null ? '${goal.weeklyStudyHours}' : '';
   }
 
-  /// The band the learner was assessed at. `GET /target-band` reports it at the
-  /// top level; `goal.currentBandCode` is only what a goal previously recorded,
-  /// so the payload's own assessment wins and null means "use the assessed
-  /// band" (`SetGoalRequest.CurrentBandCode` is nullable for exactly that).
-  String? _currentBand(TargetBandView view) {
-    if (view.currentBandCode != null) return view.currentBandCode;
-    final goalBand = view.goal?.currentBandCode;
-    // The recorded goal may be stale by a calibration, so only use it as a
-    // fallback when the payload measured nothing else.
-    return goalBand;
-  }
-
-  Future<void> _saveGoal(TargetBandView view) async {
-    final target = _selectedTargetBand ?? view.targetBandCode;
+  Future<void> _saveGoal(TargetBandGoal goal) async {
+    final target = _selectedTargetBand ?? goal.targetBandCode;
     if (target == null || target.isEmpty) {
       setState(() => _errorMessage = 'Please select a target band.');
       return;
@@ -72,7 +60,7 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
       final hours = hoursText.isEmpty ? null : num.tryParse(hoursText);
 
       await ref.read(targetBandGoalProvider.notifier).saveGoal(
-            currentBandCode: _currentBand(view),
+            currentBandCode: goal.currentBandCode,
             targetBandCode: target,
             targetDate: dateText.isEmpty ? null : dateText,
             weeklyStudyHours: hours,
@@ -93,8 +81,8 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
     }
   }
 
-  Future<void> _saveTargetBandOnly(TargetBandView view) async {
-    final target = _selectedTargetBand ?? view.targetBandCode;
+  Future<void> _saveTargetBandOnly(TargetBandGoal goal) async {
+    final target = _selectedTargetBand ?? goal.targetBandCode;
     if (target == null || target.isEmpty) {
       setState(() => _errorMessage = 'Please select a target band.');
       return;
@@ -182,15 +170,15 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
             title: 'Could not load target band',
             description: error.toString(),
           ),
-          data: (view) {
-            if (view == null) return const SizedBox.shrink();
-            _syncControllers(view);
-            final selected = _selectedTargetBand ?? view.targetBandCode;
+          data: (goal) {
+            if (goal == null) return const SizedBox.shrink();
+            _syncControllers(goal);
+            final selected = _selectedTargetBand ?? goal.targetBandCode;
 
             return PlacardPanel(
               title: 'TARGET BAND & STUDY GOAL',
               trailing: PlacardBadge.info(
-                'CURRENT ${view.currentBandCode == null ? '--' : _bandLabel(view.currentBandCode!)}',
+                'CURRENT ${goal.currentBandCode == null ? '--' : _bandCodeLabel(goal.currentBandCode!)}',
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -200,29 +188,64 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
                     style: SignageTypography.label(fontSize: 12),
                   ),
                   const SizedBox(height: 8),
-                  if (view.availableBands.isEmpty)
-                    Text(
-                      'This certificate reports no bands, so no target can be '
-                      'chosen.',
-                      style: SignageTypography.body(
-                        fontSize: 14,
-                        color: SignageColors.inkMuted,
-                      ),
-                    )
-                  else
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final band in view.availableBands)
-                          _BandOptionRow(
-                            band: band,
-                            selected: selected == band.code,
-                            onSelect: () => setState(() {
-                              _selectedTargetBand = band.code;
-                            }),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final band in goal.availableBands)
+                        FTappable(
+                          key: Key('target-band-${band.code}'),
+                          onPress: () => setState(() {
+                            _selectedTargetBand = band.code;
+                          }),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: selected == band.code
+                                  ? SignageColors.ink
+                                  : SignageColors.paper,
+                              border: Border.all(
+                                color: SignageColors.ink,
+                                width: 2,
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${_bandCodeLabel(band.code)} · ${band.name}'
+                                        .toUpperCase(),
+                                    style: SignageTypography.data(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: selected == band.code
+                                          ? SignageColors.paper
+                                          : SignageColors.ink,
+                                    ),
+                                  ),
+                                  // The band's own score range, as the
+                                  // certificate defines it.
+                                  Text(
+                                    band.rangeText,
+                                    style: SignageTypography.body(
+                                      fontSize: 12,
+                                      color: selected == band.code
+                                          ? SignageColors.paper
+                                          : SignageColors.inkMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
+                  ),
                   const SizedBox(height: 16),
                   FTextField(
                     key: const Key('target-date-input'),
@@ -253,7 +276,7 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
                     key: const Key('save-goal-btn'),
                     label: 'SAVE STUDY GOAL',
                     isLoading: _isSaving,
-                    onPress: () => _saveGoal(view),
+                    onPress: () => _saveGoal(goal),
                   ),
                   const SizedBox(height: 8),
                   PlacardButton(
@@ -261,7 +284,7 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
                     label: 'SET TARGET BAND ONLY',
                     variant: PlacardButtonVariant.secondary,
                     isLoading: _isSaving,
-                    onPress: () => _saveTargetBandOnly(view),
+                    onPress: () => _saveTargetBandOnly(goal),
                   ),
                 ],
               ),
@@ -281,27 +304,35 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
           ),
           data: (calibration) {
             if (calibration == null) return const SizedBox.shrink();
+            final proposal = calibration.proposal;
             return PlacardPanel(
               title: 'BAND CALIBRATION',
-              trailing: calibration.pending
-                  ? const PlacardBadge.warning('PENDING')
+              trailing: proposal != null
+                  ? const PlacardBadge.warning('SUGGESTED')
                   : const PlacardBadge.muted('NONE'),
-              child: calibration.pending
+              child: proposal != null
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (calibration.recommendedBandCode != null)
-                          Text(
-                            'RECOMMENDED TARGET: ${calibration.recommendedBandCode!.toUpperCase()}',
-                            style: SignageTypography.label(fontSize: 13),
+                        Text(
+                          'SUGGESTED TARGET: ${proposal.proposedBandName.toUpperCase()}',
+                          style: SignageTypography.label(fontSize: 13),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          proposal.evidence,
+                          style: SignageTypography.body(fontSize: 15),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${proposal.observedAccuracyPct.toStringAsFixed(0)}% accuracy over '
+                          '${proposal.validAnswerCount} answers (needs '
+                          '${proposal.requiredAccuracyPct}%)',
+                          style: SignageTypography.data(
+                            fontSize: 12,
+                            color: SignageColors.inkMuted,
                           ),
-                        if (calibration.reason != null) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            calibration.reason!,
-                            style: SignageTypography.body(fontSize: 15),
-                          ),
-                        ],
+                        ),
                         const SizedBox(height: 12),
                         Row(
                           children: [
@@ -328,7 +359,9 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
                       ],
                     )
                   : Text(
-                      'No calibration adjustments pending.',
+                      calibration.reason == 'below_threshold'
+                          ? 'Your practice still matches ${calibration.placedBandName ?? calibration.placedBandCode}.'
+                          : 'No calibration adjustments pending.',
                       style: SignageTypography.body(
                         fontSize: 14,
                         color: SignageColors.inkMuted,
@@ -342,78 +375,8 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
   }
 }
 
-/// One band of the certificate's own ladder, with the backend's ready-to-print
-/// score range. The ladder is the payload's, never a hardcoded six-rung one.
-class _BandOptionRow extends StatelessWidget {
-  const _BandOptionRow({
-    required this.band,
-    required this.selected,
-    required this.onSelect,
-  });
-
-  final TargetBandOption band;
-  final bool selected;
-  final VoidCallback onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final detail = [
-      band.name,
-      band.rangeText,
-      if (band.isCurrent) 'YOUR BAND',
-      if (band.isTarget) 'CURRENT TARGET',
-    ].join(' • ');
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: FTappable(
-        key: Key('target-band-${band.code}'),
-        onPress: onSelect,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: selected ? SignageColors.ink : SignageColors.paper,
-            border: Border.all(color: SignageColors.ink, width: 2),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 44,
-                  child: Text(
-                    _bandLabel(band.code),
-                    style: SignageTypography.data(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: selected
-                          ? SignageColors.paper
-                          : SignageColors.ink,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    detail,
-                    style: SignageTypography.body(
-                      fontSize: 13,
-                      color: selected
-                          ? SignageColors.paper
-                          : SignageColors.inkMuted,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// `below_A1` is the server's code for the band the signage bar paints `<A1`.
-String _bandLabel(String code) {
+String _bandCodeLabel(String code) {
   final lower = code.toLowerCase();
   if (lower == 'below_a1' || lower == '<a1') return '<A1';
   return code.toUpperCase();

@@ -45,17 +45,6 @@ class MockExamRepository {
         0;
   }
 
-  Future<int> resumeByAuthorizationCode(String authorizationCode) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      '/api/learner/attempts/resume',
-      data: {'authorizationCode': authorizationCode},
-    );
-    final data = response.data ?? const <String, dynamic>{};
-    return (data['attemptId'] as num?)?.toInt() ??
-        (data['id'] as num?)?.toInt() ??
-        0;
-  }
-
   Future<MockPreflight> fetchPreflight(int attemptId) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/learner/attempts/$attemptId/preflight',

@@ -307,4 +307,31 @@ void main() {
     expect(insightRequests, 0);
     expect(find.text('PATH INSIGHT'), findsNothing);
   });
+
+  testWidgets(
+    'a redirect the app has not registered does not crash the screen',
+    (tester) async {
+      useTallViewport(tester);
+      // The backend's NEXT ACTION can name `/learning-path/steps/{id}`, which
+      // this table has no route for. The global fallback is #12's; this only
+      // proves the path screen survives the push.
+      final adapter = adapterWith(
+        learningPath: learningPathActivePayload(),
+        targetBand: targetBandWithGoalPayload(),
+        stepStart: {
+          ...startStepResultPayload(),
+          'redirectUrl': '/learning-path/steps/1',
+        },
+      );
+
+      await tester.pumpWidget(buildApp(adapter));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('start-step-1')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
+
