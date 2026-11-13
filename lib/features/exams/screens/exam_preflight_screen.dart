@@ -20,14 +20,10 @@ class ExamPreflightScreen extends ConsumerStatefulWidget {
     super.key,
     required this.kind,
     required this.sittingId,
-    this.resume = false,
   });
 
   final SittingKind kind;
   final int sittingId;
-
-  /// Used only for prose and for where an already-finished sitting goes.
-  final bool resume;
 
   @override
   ConsumerState<ExamPreflightScreen> createState() =>

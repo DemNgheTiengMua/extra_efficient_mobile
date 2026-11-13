@@ -84,34 +84,6 @@ class PlacementRepository {
     );
   }
 
-  /// Progress facts for an unfinished sitting: which skills are done, which is
-  /// active, how many answers were synced.
-  ///
-  /// This payload carries **no questions** by design. A finished sitting answers
-  /// 400 `placement_not_active`, which is a terminal state, not a failure —
-  /// [PlacementNotActiveException] says so and callers route to the result.
-  Future<PlacementResumeStatus> fetchResumeStatus(int placementId) async {
-    try {
-      final response = await _dio.get<Map<String, dynamic>>(
-        '/api/learner/placement/take/$placementId/resume',
-      );
-      return PlacementResumeStatus.fromJson(
-        response.data ?? const <String, dynamic>{},
-      );
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 400 &&
-          _errorCode(e.response?.data) == 'placement_not_active') {
-        throw PlacementNotActiveException(placementId);
-      }
-      rethrow;
-    }
-  }
-
-  static String? _errorCode(Object? data) {
-    if (data is Map<String, dynamic>) return data['code'] as String?;
-    return null;
-  }
-
   Future<void> saveAnswer(
     int placementId,
     int questionId, {
