@@ -7,6 +7,7 @@ import 'package:extra_efficient_mobile/core/media/audio_media_adapter.dart';
 import 'package:extra_efficient_mobile/core/network/dio_client.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
 import 'package:extra_efficient_mobile/features/path/screens/learning_path_screen.dart';
+
 import '../../helpers/fake_http_adapter.dart';
 
 void main() {
@@ -55,26 +56,50 @@ void main() {
         }
         if (options.path == '/api/learner/dashboard') {
           return FakeHttpClientAdapter.jsonResponse({
-            'currentBandCode': 'B1',
-            'targetBandCode': 'B2',
-            'scaledScore': 620,
-            'placementCompleted': true,
-            'hasLearningPath': hasPath,
+            'certificate': {
+              'code': 'TOEIC',
+              'name': 'TOEIC Listening & Reading',
+              'sectionNoun': 'Part',
+            },
+            'nextAction': {
+              'eyebrow': 'NEXT ON YOUR PATH',
+              'title': 'Open this step',
+              'description': 'Week 1 of your path is still open.',
+              'actionLabel': 'Open this step',
+              'actionUrl': '/path/learning-path',
+              'severity': 'info',
+              'cascadeStep': 'next_step',
+              'metaLabel': 'WEEK 1',
+            },
+            'goal': {
+              'currentBandCode': 'below_A1',
+              'currentBandName': 'Below A1',
+              'currentScore': 10,
+              'currentSource': 'mock',
+              'targetBandCode': 'B1',
+              'targetBandName': 'Intermediate',
+              'completedPathSteps': 0,
+              'totalPathSteps': 0,
+              'scoreDisplayFactor': 1,
+              'hasNoMeasurement': false,
+            },
+            'skills': <Map<String, dynamic>>[],
+            'attemptCount': 1,
+            'practiceCount': 0,
           });
         }
         if (options.path == '/api/learner/insights/dashboard') {
           return FakeHttpClientAdapter.jsonResponse({
-            'status': 'ready',
-            'narrative': 'Steady progress.',
+            'status': 'done',
+            'formattedNarrative': 'Steady progress.',
           });
         }
         if (options.path == '/api/learner/learning-path' &&
             options.method == 'GET') {
           if (!hasPath) {
-            return FakeHttpClientAdapter.jsonResponse(
-              {'message': 'No learning path yet'},
-              statusCode: 404,
-            );
+            return FakeHttpClientAdapter.jsonResponse({
+              'message': 'No learning path yet',
+            }, statusCode: 404);
           }
           return FakeHttpClientAdapter.jsonResponse({
             'currentBandCode': 'B1',
@@ -140,18 +165,24 @@ void main() {
         }
         if (options.path == '/api/learner/insights/path' &&
             options.method == 'GET') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'status': 'ready',
-            'narrative': 'Week 1 focuses on grammar foundations.',
-          });
+          return FakeHttpClientAdapter.jsonResponse(
+            pathInsightRetried == 0
+                // RETRY is offered only for a failed insight; the backend
+                // rejects a retry for any other status.
+                ? {'status': 'failed', 'failureReason': 'model timeout'}
+                : {
+                    'status': 'done',
+                    'narrative': 'Refreshed path insight: 2 modules remaining.',
+                    'formattedNarrative':
+                        'Refreshed path insight: 2 modules remaining.',
+                  },
+          );
         }
         if (options.path == '/api/learner/insights/path/retry' &&
             options.method == 'POST') {
           pathInsightRetried++;
-          return FakeHttpClientAdapter.jsonResponse({
-            'status': 'ready',
-            'narrative': 'Refreshed path insight: 2 modules remaining.',
-          });
+          // The real retry endpoint answers 204 and the app refetches.
+          return FakeHttpClientAdapter.jsonResponse(null, statusCode: 204);
         }
         if (options.path == '/api/learner/lessons/14' &&
             options.method == 'GET') {
@@ -194,7 +225,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('open-learning-path-btn')));
+      final openPathBtn = find.byKey(const Key('open-learning-path-btn'));
+      await tester.scrollUntilVisible(openPathBtn, 200);
+      await tester.pumpAndSettle();
+      await tester.tap(openPathBtn);
       await tester.pumpAndSettle();
 
       // Initially no path -> Generate button is shown.
@@ -245,7 +279,10 @@ void main() {
       await tester.tap(resetBtn);
       await tester.pumpAndSettle();
       expect(resetCalled, 1);
-      expect(find.byKey(const Key('generate-learning-path-btn')), findsOneWidget);
+      expect(
+        find.byKey(const Key('generate-learning-path-btn')),
+        findsOneWidget,
+      );
 
       // Regenerate and start step 101.
       await tester.tap(find.byKey(const Key('generate-learning-path-btn')));

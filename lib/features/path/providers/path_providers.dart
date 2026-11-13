@@ -36,8 +36,8 @@ class DashboardInsightNotifier extends AsyncNotifier<AiInsight?> {
 
 final dashboardInsightProvider =
     AsyncNotifierProvider<DashboardInsightNotifier, AiInsight?>(
-  DashboardInsightNotifier.new,
-);
+      DashboardInsightNotifier.new,
+    );
 
 class TargetBandGoalNotifier extends AsyncNotifier<TargetBandGoal?> {
   @override
@@ -62,7 +62,9 @@ class TargetBandGoalNotifier extends AsyncNotifier<TargetBandGoal?> {
     String? targetDate,
     num? weeklyStudyHours,
   }) async {
-    final updated = await ref.read(pathRepositoryProvider).saveGoal(
+    final updated = await ref
+        .read(pathRepositoryProvider)
+        .saveGoal(
           currentBandCode: currentBandCode,
           targetBandCode: targetBandCode,
           targetDate: targetDate,
@@ -75,8 +77,8 @@ class TargetBandGoalNotifier extends AsyncNotifier<TargetBandGoal?> {
 
 final targetBandGoalProvider =
     AsyncNotifierProvider<TargetBandGoalNotifier, TargetBandGoal?>(
-  TargetBandGoalNotifier.new,
-);
+      TargetBandGoalNotifier.new,
+    );
 
 class CalibrationNotifier extends AsyncNotifier<CalibrationStatus?> {
   @override
@@ -99,8 +101,8 @@ class CalibrationNotifier extends AsyncNotifier<CalibrationStatus?> {
 
 final calibrationProvider =
     AsyncNotifierProvider<CalibrationNotifier, CalibrationStatus?>(
-  CalibrationNotifier.new,
-);
+      CalibrationNotifier.new,
+    );
 
 class LearningPathNotifier extends AsyncNotifier<LearningPathOverview?> {
   @override
@@ -141,8 +143,8 @@ class LearningPathNotifier extends AsyncNotifier<LearningPathOverview?> {
 
 final learningPathProvider =
     AsyncNotifierProvider<LearningPathNotifier, LearningPathOverview?>(
-  LearningPathNotifier.new,
-);
+      LearningPathNotifier.new,
+    );
 
 class PathInsightNotifier extends AsyncNotifier<AiInsight?> {
   @override
@@ -150,6 +152,8 @@ class PathInsightNotifier extends AsyncNotifier<AiInsight?> {
     final auth = ref.watch(authNotifierProvider);
     ref.watch(certificateScopeVersionProvider);
     if (!auth.isAuthenticated) return null;
+    // The screen only watches this provider once an active path exists, because
+    // `GET /insights/path` answers 404 LEARNING_PATH_NOT_FOUND without one.
     return ref.watch(pathRepositoryProvider).fetchPathInsight();
   }
 
@@ -163,19 +167,23 @@ class PathInsightNotifier extends AsyncNotifier<AiInsight?> {
 
 final pathInsightProvider =
     AsyncNotifierProvider<PathInsightNotifier, AiInsight?>(
-  PathInsightNotifier.new,
-);
+      PathInsightNotifier.new,
+    );
 
-final lessonDetailProvider =
-    FutureProvider.family<LessonDetail?, int>((ref, lessonId) async {
+final lessonDetailProvider = FutureProvider.family<LessonDetail?, int>((
+  ref,
+  lessonId,
+) async {
   final auth = ref.watch(authNotifierProvider);
   ref.watch(certificateScopeVersionProvider);
   if (!auth.isAuthenticated) return null;
   return ref.watch(pathRepositoryProvider).fetchLesson(lessonId);
 });
 
-final lessonProgressProvider =
-    FutureProvider.family<LessonProgress?, int>((ref, lessonId) async {
+final lessonProgressProvider = FutureProvider.family<LessonProgress?, int>((
+  ref,
+  lessonId,
+) async {
   final auth = ref.watch(authNotifierProvider);
   ref.watch(certificateScopeVersionProvider);
   if (!auth.isAuthenticated) return null;
