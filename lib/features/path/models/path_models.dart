@@ -399,18 +399,34 @@ class TargetBandGoal {
     this.targetBandCode,
     this.targetDate,
     this.weeklyStudyHours,
-    this.availableBands = const ['<A1', 'A1', 'A2', 'B1', 'B2', 'C1'],
+    this.currentBandName,
+    this.currentTotalScore,
+    this.availableBands = const [],
   });
 
   factory TargetBandGoal.fromJson(Map<String, dynamic> json) {
-    final bandsRaw = json['availableBands'] as List<dynamic>?;
-    final bands = bandsRaw != null && bandsRaw.isNotEmpty
-        ? bandsRaw.map((e) => e.toString()).toList(growable: false)
-        : const ['<A1', 'A1', 'A2', 'B1', 'B2', 'C1'];
+    // The backend sends availableBands as objects, not bare codes. Coercing them
+    // with toString() renders "Instance of '_Map'", so read the code explicitly.
+    final bandsRaw = json['availableBands'] as List<dynamic>? ?? const [];
+    final bands = bandsRaw
+        .whereType<Map<String, dynamic>>()
+        .map(BandOption.fromJson)
+        .toList(growable: false);
+
+    // `goal.targetBandCode` is "" when unset while the outer one is null; both
+    // mean "no target", so normalise the empty string away.
+    final outerTarget = json['targetBandCode']?.toString();
+    final goalTarget = (json['goal'] as Map<String, dynamic>?)?['targetBandCode']
+        ?.toString();
+    final target = (outerTarget != null && outerTarget.isNotEmpty)
+        ? outerTarget
+        : (goalTarget != null && goalTarget.isNotEmpty ? goalTarget : null);
 
     return TargetBandGoal(
       currentBandCode: json['currentBandCode']?.toString(),
-      targetBandCode: json['targetBandCode']?.toString(),
+      currentBandName: json['currentBandName']?.toString(),
+      currentTotalScore: _asNum(json['currentTotalScore'])?.toInt(),
+      targetBandCode: target,
       targetDate: json['targetDate']?.toString(),
       weeklyStudyHours: _asNum(json['weeklyStudyHours']),
       availableBands: bands,
@@ -418,33 +434,131 @@ class TargetBandGoal {
   }
 
   final String? currentBandCode;
+  final String? currentBandName;
+  final int? currentTotalScore;
   final String? targetBandCode;
   final String? targetDate;
   final num? weeklyStudyHours;
-  final List<String> availableBands;
+  final List<BandOption> availableBands;
 }
 
-class CalibrationStatus {
-  const CalibrationStatus({
-    this.pending = false,
-    this.currentTargetBandCode,
-    this.recommendedBandCode,
-    this.reason,
+/// One selectable band: `{code, name, minTotal, maxTotal, description, isCurrent, isTarget}`.
+class BandOption {
+  const BandOption({
+    required this.code,
+    required this.name,
+    this.minTotal,
+    this.maxTotal,
+    this.description,
+    this.isCurrent = false,
+    this.isTarget = false,
   });
 
-  factory CalibrationStatus.fromJson(Map<String, dynamic> json) {
-    return CalibrationStatus(
-      pending: json['pending'] == true || json['status'] == 'pending',
-      currentTargetBandCode: json['currentTargetBandCode']?.toString(),
-      recommendedBandCode: json['recommendedBandCode']?.toString(),
-      reason: json['reason']?.toString(),
+  factory BandOption.fromJson(Map<String, dynamic> json) {
+    return BandOption(
+      code: json['code']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      minTotal: _asNum(json['minTotal'])?.toInt(),
+      maxTotal: _asNum(json['maxTotal'])?.toInt(),
+      description: json['description']?.toString(),
+      isCurrent: json['isCurrent'] == true,
+      isTarget: json['isTarget'] == true,
     );
   }
 
-  final bool pending;
-  final String? currentTargetBandCode;
-  final String? recommendedBandCode;
-  final String? reason;
+  final String code;
+  final String name;
+  final int? minTotal;
+  final int? maxTotal;
+  final String? description;
+  final bool isCurrent;
+  final bool isTarget;
+
+  /// e.g. "Below A1 · 10–119 points"
+  String get label {
+    final range = (minTotal != null && maxTotal != null)
+        ? ' · $minTotal–$maxTotal points'
+        : '';
+    return '$name$range';
+  }
+}
+
+/// What the backend can say about whether practice still matches the placed
+/// band (`CalibrationViewDto`). `proposal` is null when there is nothing to
+/// propose, and [reason] says which of the reasons that is.
+class CalibrationStatus {
+  const CalibrationStatus({
+    this.placedBandCode = '',
+    this.placedBandName,
+    this.validAnswerCount = 0,
+    this.requiredValidAnswerCount = 0,
+    this.excludedRushedCount = 0,
+    this.observedAccuracyPct,
+    this.reason = '',
+    this.proposal,
+  });
+
+  factory CalibrationStatus.fromJson(Map<String, dynamic> json) {
+    final rawProposal = json['proposal'];
+    return CalibrationStatus(
+      placedBandCode: json['placedBandCode']?.toString() ?? '',
+      placedBandName: json['placedBandName']?.toString(),
+      validAnswerCount: _asNum(json['validAnswerCount'])?.toInt() ?? 0,
+      requiredValidAnswerCount:
+          _asNum(json['requiredValidAnswerCount'])?.toInt() ?? 0,
+      excludedRushedCount: _asNum(json['excludedRushedCount'])?.toInt() ?? 0,
+      observedAccuracyPct: _asNum(json['observedAccuracyPct']),
+      reason: json['reason']?.toString() ?? '',
+      proposal: rawProposal is Map<String, dynamic>
+          ? CalibrationProposal.fromJson(rawProposal)
+          : null,
+    );
+  }
+
+  final String placedBandCode;
+  final String? placedBandName;
+  final int validAnswerCount;
+  final int requiredValidAnswerCount;
+  final int excludedRushedCount;
+  final num? observedAccuracyPct;
+  final String reason;
+  final CalibrationProposal? proposal;
+
+  /// A proposal exists only when the backend offers one; there is no band to
+  /// adjust towards otherwise.
+  bool get hasProposal => proposal != null;
+
+  /// Enough answers for the comparison to mean anything.
+  bool get hasEnoughAnswers => validAnswerCount >= requiredValidAnswerCount;
+}
+
+class CalibrationProposal {
+  const CalibrationProposal({
+    required this.proposedBandCode,
+    required this.proposedBandName,
+    required this.observedAccuracyPct,
+    required this.validAnswerCount,
+    required this.requiredAccuracyPct,
+    required this.evidence,
+  });
+
+  factory CalibrationProposal.fromJson(Map<String, dynamic> json) {
+    return CalibrationProposal(
+      proposedBandCode: json['proposedBandCode']?.toString() ?? '',
+      proposedBandName: json['proposedBandName']?.toString() ?? '',
+      observedAccuracyPct: _asNum(json['observedAccuracyPct']) ?? 0,
+      validAnswerCount: _asNum(json['validAnswerCount'])?.toInt() ?? 0,
+      requiredAccuracyPct: _asNum(json['requiredAccuracyPct'])?.toInt() ?? 0,
+      evidence: json['evidence']?.toString() ?? '',
+    );
+  }
+
+  final String proposedBandCode;
+  final String proposedBandName;
+  final num observedAccuracyPct;
+  final int validAnswerCount;
+  final int requiredAccuracyPct;
+  final String evidence;
 }
 
 class PathModuleItem {

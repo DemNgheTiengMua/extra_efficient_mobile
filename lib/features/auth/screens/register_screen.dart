@@ -183,6 +183,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 expand: false,
                 onPress: () => context.go('/verify-email'),
               ),
+              const SizedBox(width: 8),
               PlacardButton(
                 key: const Key('back-to-sign-in-button'),
                 label: 'BACK TO SIGN IN',

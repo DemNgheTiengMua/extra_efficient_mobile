@@ -193,13 +193,13 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
                     children: [
                       for (final band in goal.availableBands)
                         FTappable(
-                          key: Key('target-band-$band'),
+                          key: Key('target-band-${band.code}'),
                           onPress: () => setState(() {
-                            _selectedTargetBand = band;
+                            _selectedTargetBand = band.code;
                           }),
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              color: selected == band
+                              color: selected == band.code
                                   ? SignageColors.ink
                                   : SignageColors.paper,
                               border: Border.all(
@@ -213,11 +213,11 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
                                 vertical: 10,
                               ),
                               child: Text(
-                                band.toUpperCase(),
+                                band.label.toUpperCase(),
                                 style: SignageTypography.data(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
-                                  color: selected == band
+                                  color: selected == band.code
                                       ? SignageColors.paper
                                       : SignageColors.ink,
                                 ),
@@ -285,27 +285,35 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
           ),
           data: (calibration) {
             if (calibration == null) return const SizedBox.shrink();
+            final proposal = calibration.proposal;
             return PlacardPanel(
               title: 'BAND CALIBRATION',
-              trailing: calibration.pending
-                  ? const PlacardBadge.warning('PENDING')
+              trailing: proposal != null
+                  ? const PlacardBadge.warning('SUGGESTED')
                   : const PlacardBadge.muted('NONE'),
-              child: calibration.pending
+              child: proposal != null
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (calibration.recommendedBandCode != null)
-                          Text(
-                            'RECOMMENDED TARGET: ${calibration.recommendedBandCode!.toUpperCase()}',
-                            style: SignageTypography.label(fontSize: 13),
+                        Text(
+                          'SUGGESTED TARGET: ${proposal.proposedBandName.toUpperCase()}',
+                          style: SignageTypography.label(fontSize: 13),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          proposal.evidence,
+                          style: SignageTypography.body(fontSize: 15),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${proposal.observedAccuracyPct.toStringAsFixed(0)}% accuracy over '
+                          '${proposal.validAnswerCount} answers (needs '
+                          '${proposal.requiredAccuracyPct}%)',
+                          style: SignageTypography.data(
+                            fontSize: 12,
+                            color: SignageColors.inkMuted,
                           ),
-                        if (calibration.reason != null) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            calibration.reason!,
-                            style: SignageTypography.body(fontSize: 15),
-                          ),
-                        ],
+                        ),
                         const SizedBox(height: 12),
                         Row(
                           children: [
@@ -332,7 +340,9 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
                       ],
                     )
                   : Text(
-                      'No calibration adjustments pending.',
+                      calibration.reason == 'below_threshold'
+                          ? 'Your practice still matches ${calibration.placedBandName ?? calibration.placedBandCode}.'
+                          : 'No calibration adjustments pending.',
                       style: SignageTypography.body(
                         fontSize: 14,
                         color: SignageColors.inkMuted,
