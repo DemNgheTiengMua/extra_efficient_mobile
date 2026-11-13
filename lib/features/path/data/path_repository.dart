@@ -24,21 +24,20 @@ class PathRepository {
     return AiInsight.fromJson(response.data ?? const <String, dynamic>{});
   }
 
+  /// Retry answers `204 No Content`, so the refreshed insight is fetched again.
   Future<AiInsight> retryDashboardInsight({int? certId}) async {
-    final response = await _dio.post<Map<String, dynamic>>(
+    await _dio.post<void>(
       '/api/learner/insights/dashboard/retry',
       queryParameters: certId != null ? {'certId': certId} : null,
     );
-    return AiInsight.fromJson(response.data ?? const <String, dynamic>{});
+    return fetchDashboardInsight(certId: certId);
   }
 
   Future<TargetBandGoal> fetchTargetBand() async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/learner/target-band',
     );
-    return TargetBandGoal.fromJson(
-      response.data ?? const <String, dynamic>{},
-    );
+    return TargetBandGoal.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   Future<TargetBandGoal> updateTargetBand(String targetBandCode) async {
@@ -46,9 +45,7 @@ class PathRepository {
       '/api/learner/target-band',
       data: {'targetBandCode': targetBandCode},
     );
-    return TargetBandGoal.fromJson(
-      response.data ?? const <String, dynamic>{},
-    );
+    return TargetBandGoal.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   Future<TargetBandGoal> saveGoal({
@@ -66,9 +63,7 @@ class PathRepository {
         'weeklyStudyHours': weeklyStudyHours,
       },
     );
-    return TargetBandGoal.fromJson(
-      response.data ?? const <String, dynamic>{},
-    );
+    return TargetBandGoal.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   Future<CalibrationStatus> fetchCalibration() async {
@@ -92,15 +87,17 @@ class PathRepository {
     );
   }
 
+  /// `GET /learning-path` is the existence switch: `hasActivePath: false` means
+  /// there is no path to show. A payload without the flag predates it, so a 200
+  /// is trusted rather than treated as empty.
   Future<LearningPathOverview?> fetchLearningPath() async {
     try {
       final response = await _dio.get<Map<String, dynamic>>(
         '/api/learner/learning-path',
       );
       final data = response.data;
-      if (data == null || data['hasPath'] == false) {
-        return null;
-      }
+      if (data == null) return null;
+      if (data['hasActivePath'] == false) return null;
       return LearningPathOverview.fromJson(data);
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
@@ -127,32 +124,37 @@ class PathRepository {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/learner/learning-path/steps/$stepId',
     );
-    return PathModuleItem.fromJson(
-      response.data ?? const <String, dynamic>{},
-    );
+    return PathModuleItem.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   Future<PathModuleItem> startStep(int stepId) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/api/learner/learning-path/steps/$stepId/start',
     );
-    return PathModuleItem.fromJson(
-      response.data ?? const <String, dynamic>{},
-    );
+    return PathModuleItem.fromJson(response.data ?? const <String, dynamic>{});
   }
 
-  Future<AiInsight> fetchPathInsight() async {
-    final response = await _dio.get<Map<String, dynamic>>(
-      '/api/learner/insights/path',
-    );
-    return AiInsight.fromJson(response.data ?? const <String, dynamic>{});
+  /// `GET /insights/path` answers `404 LEARNING_PATH_NOT_FOUND` whenever there
+  /// is no active path. That is a designed empty state, so it maps to null and
+  /// is never surfaced as an error.
+  Future<AiInsight?> fetchPathInsight() async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/api/learner/insights/path',
+      );
+      return AiInsight.fromJson(response.data ?? const <String, dynamic>{});
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        return null;
+      }
+      rethrow;
+    }
   }
 
-  Future<AiInsight> retryPathInsight() async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      '/api/learner/insights/path/retry',
-    );
-    return AiInsight.fromJson(response.data ?? const <String, dynamic>{});
+  /// Retry answers `204 No Content`, so the refreshed insight is fetched again.
+  Future<AiInsight?> retryPathInsight() async {
+    await _dio.post<void>('/api/learner/insights/path/retry');
+    return fetchPathInsight();
   }
 
   Future<LessonDetail> fetchLesson(int id, {String? module}) async {
