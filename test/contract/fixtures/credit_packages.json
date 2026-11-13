@@ -1,0 +1,55 @@
+﻿[
+    {
+        "packageId":  2,
+        "name":  "Starter Pack",
+        "credits":  5,
+        "price":  100000.00,
+        "isActive":  true,
+        "isFeatured":  false,
+        "features":  "5 full-exam / grading credits\nAccess to AI mentor feedback\nNever expires",
+        "displayOrder":  1,
+        "ordersSold":  0,
+        "totalRevenue":  0,
+        "featureList":  [
+                            "5 full-exam / grading credits",
+                            "Access to AI mentor feedback",
+                            "Never expires"
+                        ]
+    },
+    {
+        "packageId":  1,
+        "name":  "Intensive Pack",
+        "credits":  10,
+        "price":  190000.00,
+        "isActive":  true,
+        "isFeatured":  true,
+        "features":  "10 full-exam / grading credits\nDetailed weakness diagnostic\nPriority AI mentor evaluation\nNever expires",
+        "displayOrder":  2,
+        "ordersSold":  0,
+        "totalRevenue":  0,
+        "featureList":  [
+                            "10 full-exam / grading credits",
+                            "Detailed weakness diagnostic",
+                            "Priority AI mentor evaluation",
+                            "Never expires"
+                        ]
+    },
+    {
+        "packageId":  3,
+        "name":  "Master Pack",
+        "credits":  20,
+        "price":  360000.00,
+        "isActive":  true,
+        "isFeatured":  false,
+        "features":  "20 full-exam / grading credits\nComplete path unlocking\n1-on-1 human mentor booking\nNever expires",
+        "displayOrder":  3,
+        "ordersSold":  0,
+        "totalRevenue":  0,
+        "featureList":  [
+                            "20 full-exam / grading credits",
+                            "Complete path unlocking",
+                            "1-on-1 human mentor booking",
+                            "Never expires"
+                        ]
+    }
+]
