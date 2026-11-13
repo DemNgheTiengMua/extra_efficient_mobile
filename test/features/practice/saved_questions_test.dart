@@ -253,13 +253,12 @@ void main() {
         });
       }
       if (options.path == '/api/learner/practice/catalog') {
-        return FakeHttpClientAdapter.jsonResponse({
-          'sectionNoun': 'Part',
-          'sections': [],
-        });
+        return FakeHttpClientAdapter.jsonResponse(
+          practiceCatalogResponse(sections: const []),
+        );
       }
       if (options.path == '/api/learner/practice/matrix') {
-        return FakeHttpClientAdapter.jsonResponse({'levels': [], 'topics': []});
+        return FakeHttpClientAdapter.jsonResponse(const <dynamic>[]);
       }
       if (options.path == '/api/learner/saved-questions' &&
           options.method == 'GET') {
@@ -333,22 +332,27 @@ void main() {
         });
       }
       if (options.path == '/api/learner/practice/catalog') {
-        return FakeHttpClientAdapter.jsonResponse({
-          'sectionNoun': 'Part',
-          'sections': [
-            {
-              'sectionId': 5,
-              'title': 'Part 5: Incomplete Sentences',
-              'skill': 'reading',
-              'accuracyPercent': null,
-              'cooldownActive': false,
-              'isSpeaking': false,
-            },
-          ],
-        });
+        return FakeHttpClientAdapter.jsonResponse(
+          practiceCatalogResponse(
+            sections: [
+              practiceSection(
+                sectionId: 5,
+                code: 'P5',
+                name: 'Incomplete Sentences',
+                availableQuestionCount: 9,
+                expectedQuestionCount: 30,
+              ),
+            ],
+          ),
+        );
       }
       if (options.path == '/api/learner/practice/matrix') {
-        return FakeHttpClientAdapter.jsonResponse({'levels': [], 'topics': []});
+        return FakeHttpClientAdapter.jsonResponse(const <dynamic>[]);
+      }
+      if (options.path == '/api/learner/practice/free-drill') {
+        return FakeHttpClientAdapter.jsonResponse(
+          practiceFreeDrillResponse(),
+        );
       }
       if (options.path == '/api/learner/practice/sessions' &&
           options.method == 'POST') {
@@ -536,13 +540,12 @@ void main() {
         });
       }
       if (options.path == '/api/learner/practice/catalog') {
-        return FakeHttpClientAdapter.jsonResponse({
-          'sectionNoun': 'Part',
-          'sections': [],
-        });
+        return FakeHttpClientAdapter.jsonResponse(
+          practiceCatalogResponse(sections: const []),
+        );
       }
       if (options.path == '/api/learner/practice/matrix') {
-        return FakeHttpClientAdapter.jsonResponse({'levels': [], 'topics': []});
+        return FakeHttpClientAdapter.jsonResponse(const <dynamic>[]);
       }
       if (options.path == '/api/learner/saved-questions' &&
           options.method == 'GET') {
@@ -612,13 +615,12 @@ void main() {
         });
       }
       if (options.path == '/api/learner/practice/catalog') {
-        return FakeHttpClientAdapter.jsonResponse({
-          'sectionNoun': 'Part',
-          'sections': [],
-        });
+        return FakeHttpClientAdapter.jsonResponse(
+          practiceCatalogResponse(sections: const []),
+        );
       }
       if (options.path == '/api/learner/practice/matrix') {
-        return FakeHttpClientAdapter.jsonResponse({'levels': [], 'topics': []});
+        return FakeHttpClientAdapter.jsonResponse(const <dynamic>[]);
       }
       if (options.path == '/api/learner/saved-questions' &&
           options.method == 'GET') {
