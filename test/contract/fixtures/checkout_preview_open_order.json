@@ -1,0 +1,24 @@
+﻿{
+    "packageId":  1,
+    "packageName":  "Intensive Pack",
+    "credits":  10,
+    "price":  190000.00,
+    "currentBalance":  0,
+    "balanceAfter":  10,
+    "openOrder":  {
+                      "orderId":  2005,
+                      "orderCode":  "DH-20261113-0103",
+                      "paymentNo":  103,
+                      "packageId":  1,
+                      "packageName":  "Intensive Pack",
+                      "credits":  10,
+                      "amount":  190000.00,
+                      "status":  "pending",
+                      "gateway":  "mock",
+                      "gatewayTxnRef":  "MOCK-103",
+                      "gatewayErrorCode":  null,
+                      "createdAt":  "2026-11-13T17:10:21.6069789+00:00",
+                      "paidAt":  null,
+                      "checkoutUrl":  null
+                  }
+}

@@ -13,19 +13,11 @@ class WalletRepository {
     return WalletSummary.fromJson(response.data ?? const <String, dynamic>{});
   }
 
+  /// `GET /api/packages` answers a bare array of `PackageDto`.
   Future<List<CreditPackage>> getPackages() async {
-    final response = await _dio.get<dynamic>('/api/packages');
-    final data = response.data;
-    final List<dynamic> list;
-    if (data is List<dynamic>) {
-      list = data;
-    } else if (data is Map<String, dynamic>) {
-      list = (data['packages'] ?? data['items'] ?? const <dynamic>[])
-          as List<dynamic>;
-    } else {
-      list = const <dynamic>[];
-    }
-    return list
+    final response = await _dio.get<List<dynamic>>('/api/packages');
+    final data = response.data ?? const <dynamic>[];
+    return data
         .whereType<Map<String, dynamic>>()
         .map(CreditPackage.fromJson)
         .toList(growable: false);

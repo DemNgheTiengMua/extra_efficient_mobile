@@ -178,8 +178,8 @@ class _CreditsAndOrdersViewState extends ConsumerState<_CreditsAndOrdersView> {
           padding: const EdgeInsets.all(16),
           children: [
             ScorePlacard(
-              totalScore: '${wallet.derivedBalance}',
-              caption: 'LEDGER BALANCE (PURCHASED − USED)',
+              totalScore: '${wallet.balance}',
+              caption: 'LEDGER BALANCE (INCLUDING ADMIN GRANTS)',
               splits: [
                 ScoreSplit(
                   label: 'PURCHASED',
@@ -191,7 +191,7 @@ class _CreditsAndOrdersViewState extends ConsumerState<_CreditsAndOrdersView> {
                 ),
                 ScoreSplit(
                   label: 'BALANCE',
-                  value: '${wallet.derivedBalance}',
+                  value: '${wallet.balance}',
                 ),
               ],
             ),
@@ -312,10 +312,10 @@ class _PackageRow extends StatelessWidget {
                       ],
                     ],
                   ),
-                  if (package.description.isNotEmpty) ...[
+                  if (package.features.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
-                      package.description,
+                      package.features,
                       style: SignageTypography.body(
                         fontSize: 13,
                         color: SignageColors.inkMuted,
@@ -387,7 +387,7 @@ class _LedgerSection extends StatelessWidget {
                         Expanded(
                           flex: 3,
                           child: Text(
-                            'REASON / PROVENANCE',
+                            'REASON / NOTE',
                             style: SignageTypography.label(
                               fontSize: 11,
                               color: SignageColors.paper,
@@ -431,9 +431,17 @@ class _LedgerSection extends StatelessWidget {
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              if (entries[i].provenance.isNotEmpty)
+                              if (entries[i].note.isNotEmpty)
                                 Text(
-                                  entries[i].provenance,
+                                  entries[i].note,
+                                  style: SignageTypography.data(
+                                    fontSize: 12,
+                                    color: SignageColors.inkMuted,
+                                  ),
+                                ),
+                              if (entries[i].orderCode != null)
+                                Text(
+                                  entries[i].orderCode!,
                                   style: SignageTypography.data(
                                     fontSize: 12,
                                     color: SignageColors.inkMuted,
