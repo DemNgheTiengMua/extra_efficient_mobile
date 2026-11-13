@@ -5,21 +5,8 @@ import '../auth/auth_provider.dart';
 import 'wallet_models.dart';
 import 'wallet_repository.dart';
 
-/// Abstraction for launching external payment / Meet URLs, overridable in tests.
-abstract class UrlLauncherAdapter {
-  Future<bool> launchExternalUrl(String url);
-}
-
-class NoopUrlLauncherAdapter implements UrlLauncherAdapter {
-  const NoopUrlLauncherAdapter();
-
-  @override
-  Future<bool> launchExternalUrl(String url) async => false;
-}
-
-final urlLauncherAdapterProvider = Provider<UrlLauncherAdapter>(
-  (ref) => const NoopUrlLauncherAdapter(),
-);
+export '../../core/platform/external_url_launcher.dart'
+    show UrlLauncherAdapter, urlLauncherAdapterProvider;
 
 final walletRepositoryProvider = Provider<WalletRepository>((ref) {
   return WalletRepository(ref.watch(dioProvider));

@@ -1,4 +1,8 @@
 // Models for Wallet, Ledger, Credit Packages, Orders, and Checkout Gateway.
+//
+// Field names are the backend's own, verified against the running API:
+// `WalletDto`, `CreditLedgerEntryDto`, `OrderDto`, `PaymentResultDto`,
+// `PackageDto`, `CheckoutPreviewDto`, `CreateOrderResponse`.
 
 enum OrderStatus {
   pending,
@@ -6,7 +10,6 @@ enum OrderStatus {
   paid,
   failed,
   expired,
-  cancelled,
   unknown;
 
   static OrderStatus fromString(String? value) {
@@ -16,7 +19,6 @@ enum OrderStatus {
       'paid' => OrderStatus.paid,
       'failed' => OrderStatus.failed,
       'expired' => OrderStatus.expired,
-      'cancelled' || 'canceled' => OrderStatus.cancelled,
       _ => OrderStatus.unknown,
     };
   }
@@ -64,37 +66,40 @@ String? _readNullableString(Map<String, dynamic> json, List<String> keys) {
   return null;
 }
 
+/// One row of the append-only credit ledger (`CreditLedgerEntryDto`).
 class LedgerEntry {
   const LedgerEntry({
     required this.id,
     required this.delta,
     required this.reason,
-    required this.provenance,
+    required this.note,
     required this.createdAt,
+    this.orderCode,
   });
 
   factory LedgerEntry.fromJson(Map<String, dynamic> json) {
     return LedgerEntry(
-      id: _readInt(json, ['id', 'ledgerId']),
-      delta: _readInt(json, ['delta', 'amount', 'credits']),
-      reason: _readString(json, ['reason', 'type'], fallback: 'adjustment'),
-      provenance: _readString(
-        json,
-        ['provenance', 'reference', 'referenceType', 'note', 'description'],
-      ),
-      createdAt: _readString(json, ['createdAt', 'timestamp']),
+      id: _readInt(json, ['txnId']),
+      delta: _readInt(json, ['delta']),
+      reason: _readString(json, ['reason'], fallback: 'adjustment'),
+      note: _readString(json, ['note']),
+      createdAt: _readString(json, ['createdAt']),
+      orderCode: _readNullableString(json, ['orderCode']),
     );
   }
 
   final int id;
   final int delta;
   final String reason;
-  final String provenance;
+  final String note;
   final String createdAt;
+  final String? orderCode;
 
   String get formattedDelta => delta >= 0 ? '+$delta' : '$delta';
 }
 
+/// A credit package order (`OrderDto` / `PaymentResultDto` /
+/// `CreateOrderResponse`).
 class WalletOrder {
   const WalletOrder({
     required this.orderCode,
@@ -104,27 +109,21 @@ class WalletOrder {
     required this.amountVnd,
     required this.status,
     required this.createdAt,
-    this.expiresAt,
     this.checkoutUrl,
     this.errorCode,
   });
 
   factory WalletOrder.fromJson(Map<String, dynamic> json) {
     return WalletOrder(
-      orderCode: _readString(json, ['orderCode', 'code']),
+      orderCode: _readString(json, ['orderCode']),
       packageId: _readInt(json, ['packageId']),
-      packageName: _readString(
-        json,
-        ['packageName', 'name'],
-        fallback: 'Credit Package',
-      ),
-      credits: _readInt(json, ['credits', 'creditAmount']),
-      amountVnd: _readInt(json, ['amountVnd', 'amount', 'priceVnd', 'price']),
+      packageName: _readString(json, ['packageName']),
+      credits: _readInt(json, ['credits']),
+      amountVnd: _readInt(json, ['amount']),
       status: OrderStatus.fromString(_readNullableString(json, ['status'])),
       createdAt: _readString(json, ['createdAt']),
-      expiresAt: _readNullableString(json, ['expiresAt']),
-      checkoutUrl: _readNullableString(json, ['checkoutUrl', 'paymentUrl']),
-      errorCode: _readNullableString(json, ['errorCode']),
+      checkoutUrl: _readNullableString(json, ['checkoutUrl']),
+      errorCode: _readNullableString(json, ['gatewayErrorCode']),
     );
   }
 
@@ -135,11 +134,45 @@ class WalletOrder {
   final int amountVnd;
   final OrderStatus status;
   final String createdAt;
-  final String? expiresAt;
   final String? checkoutUrl;
   final String? errorCode;
+
+  /// Fills the package facts `CreateOrderResponse` omits, without overwriting
+  /// values the backend already sent.
+  WalletOrder withPackage({
+    int? packageId,
+    String? packageName,
+    int? credits,
+  }) {
+    return WalletOrder(
+      orderCode: orderCode,
+      packageId: packageId ?? this.packageId,
+      packageName: packageName ?? this.packageName,
+      credits: credits ?? this.credits,
+      amountVnd: amountVnd,
+      status: status,
+      createdAt: createdAt,
+      checkoutUrl: checkoutUrl,
+      errorCode: errorCode,
+    );
+  }
+
+  WalletOrder copyWith({OrderStatus? status, String? errorCode}) {
+    return WalletOrder(
+      orderCode: orderCode,
+      packageId: packageId,
+      packageName: packageName,
+      credits: credits,
+      amountVnd: amountVnd,
+      status: status ?? this.status,
+      createdAt: createdAt,
+      checkoutUrl: checkoutUrl,
+      errorCode: errorCode ?? this.errorCode,
+    );
+  }
 }
 
+/// The learner's wallet (`WalletDto`).
 class WalletSummary {
   const WalletSummary({
     required this.creditsPurchased,
@@ -147,29 +180,18 @@ class WalletSummary {
     required this.balance,
     required this.ledger,
     required this.orders,
-    this.explicitOpenOrder,
   });
 
   factory WalletSummary.fromJson(Map<String, dynamic> json) {
-    final purchased = _readInt(
-      json,
-      ['creditsPurchased', 'purchased', 'totalPurchased'],
-    );
-    final used = _readInt(json, ['creditsUsed', 'used', 'totalUsed']);
-    final rawBalance = _readInt(
-      json,
-      ['balance', 'creditBalance'],
-      fallback: purchased - used,
-    );
-
-    final ledgerList = (json['ledger'] ?? json['entries']) as List<dynamic>?;
+    final ledgerList = json['ledger'] as List<dynamic>?;
     final ordersList = json['orders'] as List<dynamic>?;
-    final openOrderJson = json['openOrder'] as Map<String, dynamic>?;
 
     return WalletSummary(
-      creditsPurchased: purchased,
-      creditsUsed: used,
-      balance: rawBalance,
+      creditsPurchased: _readInt(json, ['creditsPurchased']),
+      creditsUsed: _readInt(json, ['creditsUsed']),
+      // The ledger balance is authoritative: it includes admin grants, which
+      // purchased-minus-used cannot express.
+      balance: _readInt(json, ['balance']),
       ledger: ledgerList == null
           ? const []
           : ledgerList
@@ -182,8 +204,6 @@ class WalletSummary {
               .whereType<Map<String, dynamic>>()
               .map(WalletOrder.fromJson)
               .toList(growable: false),
-      explicitOpenOrder:
-          openOrderJson == null ? null : WalletOrder.fromJson(openOrderJson),
     );
   }
 
@@ -192,16 +212,9 @@ class WalletSummary {
   final int balance;
   final List<LedgerEntry> ledger;
   final List<WalletOrder> orders;
-  final WalletOrder? explicitOpenOrder;
-
-  /// Derived balance from ledger totals (`creditsPurchased - creditsUsed`).
-  int get derivedBalance => creditsPurchased - creditsUsed;
 
   /// Returns the single open order (`pending` or `reconciling`) if one exists.
   WalletOrder? get openOrder {
-    if (explicitOpenOrder != null && explicitOpenOrder!.status.isOpen) {
-      return explicitOpenOrder;
-    }
     for (final order in orders) {
       if (order.status.isOpen) return order;
     }
@@ -209,6 +222,7 @@ class WalletSummary {
   }
 }
 
+/// A purchasable credit package (`PackageDto`).
 class CreditPackage {
   const CreditPackage({
     required this.id,
@@ -216,17 +230,17 @@ class CreditPackage {
     required this.credits,
     required this.priceVnd,
     required this.isFeatured,
-    required this.description,
+    required this.features,
   });
 
   factory CreditPackage.fromJson(Map<String, dynamic> json) {
     return CreditPackage(
-      id: _readInt(json, ['id', 'packageId']),
-      name: _readString(json, ['name', 'title'], fallback: 'Credit Package'),
-      credits: _readInt(json, ['credits', 'creditAmount']),
-      priceVnd: _readInt(json, ['priceVnd', 'price', 'amountVnd']),
-      isFeatured: (json['isFeatured'] ?? json['featured']) == true,
-      description: _readString(json, ['description', 'subtitle']),
+      id: _readInt(json, ['packageId']),
+      name: _readString(json, ['name']),
+      credits: _readInt(json, ['credits']),
+      priceVnd: _readInt(json, ['price']),
+      isFeatured: json['isFeatured'] == true,
+      features: _readString(json, ['features']),
     );
   }
 
@@ -235,31 +249,36 @@ class CreditPackage {
   final int credits;
   final int priceVnd;
   final bool isFeatured;
-  final String description;
+
+  /// Newline-separated feature list from the backend.
+  final String features;
+
+  List<String> get featureList => features
+      .split(RegExp(r'\r?\n'))
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList(growable: false);
 }
 
+/// The pre-order quote (`CheckoutPreviewDto`).
 class CheckoutPreview {
   const CheckoutPreview({
     required this.packageId,
     required this.packageName,
     required this.credits,
     required this.amountVnd,
-    required this.hasOpenOrder,
-    this.openOrderCode,
+    this.openOrder,
   });
 
   factory CheckoutPreview.fromJson(Map<String, dynamic> json) {
+    final openOrderJson = json['openOrder'] as Map<String, dynamic>?;
     return CheckoutPreview(
-      packageId: _readInt(json, ['packageId', 'id']),
-      packageName: _readString(
-        json,
-        ['packageName', 'name'],
-        fallback: 'Credit Package',
-      ),
-      credits: _readInt(json, ['credits', 'creditAmount']),
-      amountVnd: _readInt(json, ['amountVnd', 'priceVnd', 'amount']),
-      hasOpenOrder: (json['hasOpenOrder'] ?? false) == true,
-      openOrderCode: _readNullableString(json, ['openOrderCode']),
+      packageId: _readInt(json, ['packageId']),
+      packageName: _readString(json, ['packageName']),
+      credits: _readInt(json, ['credits']),
+      amountVnd: _readInt(json, ['price']),
+      openOrder:
+          openOrderJson == null ? null : WalletOrder.fromJson(openOrderJson),
     );
   }
 
@@ -267,8 +286,9 @@ class CheckoutPreview {
   final String packageName;
   final int credits;
   final int amountVnd;
-  final bool hasOpenOrder;
-  final String? openOrderCode;
+
+  /// The learner's already-open order, which blocks a second order.
+  final WalletOrder? openOrder;
 }
 
 /// Formats Vietnamese Dong amounts with thousands separators in monospace-friendly form.

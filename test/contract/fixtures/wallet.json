@@ -1,0 +1,123 @@
+﻿{
+    "balance":  11,
+    "creditsPurchased":  15,
+    "creditsUsed":  5,
+    "amountPurchased":  290000.00,
+    "paidOrderCount":  2,
+    "orders":  [
+                   {
+                       "orderId":  1003,
+                       "orderCode":  "DH-20261113-0051",
+                       "paymentNo":  51,
+                       "packageId":  2,
+                       "packageName":  "Starter Pack",
+                       "credits":  5,
+                       "amount":  100000.00,
+                       "status":  "failed",
+                       "gateway":  "mock",
+                       "gatewayTxnRef":  "MOCK-51",
+                       "gatewayErrorCode":  "MOCK_DECLINED",
+                       "createdAt":  "2026-11-13T10:46:20.5233943+00:00",
+                       "paidAt":  null,
+                       "checkoutUrl":  null
+                   },
+                   {
+                       "orderId":  2,
+                       "orderCode":  "DH-20261014-0002",
+                       "paymentNo":  2,
+                       "packageId":  2,
+                       "packageName":  "Starter Pack",
+                       "credits":  5,
+                       "amount":  100000.00,
+                       "status":  "paid",
+                       "gateway":  "mock",
+                       "gatewayTxnRef":  "plink-demo-5",
+                       "gatewayErrorCode":  null,
+                       "createdAt":  "2026-10-24T01:44:00.7236021+07:00",
+                       "paidAt":  "2026-10-24T01:44:00.7236021+07:00",
+                       "checkoutUrl":  null
+                   },
+                   {
+                       "orderId":  1,
+                       "orderCode":  "DH-20261014-0001",
+                       "paymentNo":  1,
+                       "packageId":  1,
+                       "packageName":  "Intensive Pack",
+                       "credits":  10,
+                       "amount":  190000.00,
+                       "status":  "paid",
+                       "gateway":  "mock",
+                       "gatewayTxnRef":  "plink-demo-10",
+                       "gatewayErrorCode":  null,
+                       "createdAt":  "2026-10-17T01:44:00.693929+07:00",
+                       "paidAt":  "2026-10-17T01:44:00.693929+07:00",
+                       "checkoutUrl":  null
+                   }
+               ],
+    "ledger":  [
+                   {
+                       "txnId":  1002,
+                       "reason":  "mock_exam_start",
+                       "delta":  -1,
+                       "note":  null,
+                       "createdAt":  "2026-11-13T16:00:43.0753765+00:00",
+                       "orderCode":  null
+                   },
+                   {
+                       "txnId":  1001,
+                       "reason":  "mock_exam_start",
+                       "delta":  -1,
+                       "note":  null,
+                       "createdAt":  "2026-11-13T15:43:21.9980661+00:00",
+                       "orderCode":  null
+                   },
+                   {
+                       "txnId":  5,
+                       "reason":  "mentor_booking",
+                       "delta":  -1,
+                       "note":  null,
+                       "createdAt":  "2026-11-10T01:44:01.8712985+07:00",
+                       "orderCode":  null
+                   },
+                   {
+                       "txnId":  6,
+                       "reason":  "admin_grant",
+                       "delta":  1,
+                       "note":  "Complaint make-good: audio stream stutter refund",
+                       "createdAt":  "2026-11-09T01:44:01.8868215+07:00",
+                       "orderCode":  null
+                   },
+                   {
+                       "txnId":  3,
+                       "reason":  "mock_exam_start",
+                       "delta":  -1,
+                       "note":  null,
+                       "createdAt":  "2026-11-08T01:44:01.7988621+07:00",
+                       "orderCode":  null
+                   },
+                   {
+                       "txnId":  4,
+                       "reason":  "mentor_booking",
+                       "delta":  -1,
+                       "note":  null,
+                       "createdAt":  "2026-11-06T01:44:01.8642311+07:00",
+                       "orderCode":  null
+                   },
+                   {
+                       "txnId":  2,
+                       "reason":  "purchase",
+                       "delta":  5,
+                       "note":  null,
+                       "createdAt":  "2026-10-24T01:44:00.724602+07:00",
+                       "orderCode":  "DH-20261014-0002"
+                   },
+                   {
+                       "txnId":  1,
+                       "reason":  "purchase",
+                       "delta":  10,
+                       "note":  null,
+                       "createdAt":  "2026-10-17T01:44:00.6954322+07:00",
+                       "orderCode":  "DH-20261014-0001"
+                   }
+               ]
+}

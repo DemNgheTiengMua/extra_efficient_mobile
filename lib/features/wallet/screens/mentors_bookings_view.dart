@@ -229,6 +229,18 @@ class _BookingRow extends ConsumerStatefulWidget {
 
 class _BookingRowState extends ConsumerState<_BookingRow> {
   bool _isCancelling = false;
+  String? _launchError;
+
+  Future<void> _joinMeeting(String url) async {
+    final launched =
+        await ref.read(urlLauncherAdapterProvider).launchExternalUrl(url);
+    if (!mounted) return;
+    setState(() {
+      _launchError = launched
+          ? null
+          : 'Could not open the meeting link. Copy it into a browser: $url';
+    });
+  }
 
   Future<void> _cancel() async {
     setState(() => _isCancelling = true);
@@ -294,6 +306,14 @@ class _BookingRowState extends ConsumerState<_BookingRow> {
             ),
           ],
           const SizedBox(height: 10),
+          if (_launchError != null) ...[
+            PlacardAlert(
+              variant: PlacardAlertVariant.danger,
+              title: 'Could not open link',
+              subtitle: _launchError,
+            ),
+            const SizedBox(height: 10),
+          ],
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -303,9 +323,7 @@ class _BookingRowState extends ConsumerState<_BookingRow> {
                   key: Key('join-meet-button-${booking.id}'),
                   label: 'JOIN MEET',
                   expand: false,
-                  onPress: () => ref
-                      .read(urlLauncherAdapterProvider)
-                      .launchExternalUrl(booking.meetLink!),
+                  onPress: () => _joinMeeting(booking.meetLink!),
                 ),
               if (booking.canCancel)
                 PlacardButton(
