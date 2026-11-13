@@ -6,7 +6,9 @@ import 'package:extra_efficient_mobile/app.dart';
 import 'package:extra_efficient_mobile/core/media/audio_media_adapter.dart';
 import 'package:extra_efficient_mobile/core/network/dio_client.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
+
 import '../../helpers/fake_http_adapter.dart';
+import 'path_fixtures.dart';
 
 void main() {
   testWidgets(
@@ -50,24 +52,26 @@ void main() {
           });
         }
         if (options.path == '/api/learner/dashboard') {
+          // The PATH tab needs a real envelope; only the action button matters
+          // here, and it navigates to the server's actionUrl.
           return FakeHttpClientAdapter.jsonResponse({
-            'currentBandCode': 'B1',
-            'targetBandCode': 'B2',
-            'scaledScore': 620,
+            ...dashboardMeasuredPayload(),
             'nextAction': {
-              'type': 'lesson',
+              'eyebrow': 'PICK UP YOUR PLAN',
               'title': 'Subject-Verb Agreement',
               'description': 'Resume lesson',
-              'actionLabel': 'OPEN LESSON',
-              'lessonId': 14,
+              'actionLabel': 'Open this step',
+              'actionUrl': '/path/lessons/14',
+              'severity': 'info',
+              'cascadeStep': 'next_step',
+              'metaLabel': 'WEEK 1',
             },
           });
         }
         if (options.path == '/api/learner/insights/dashboard') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'status': 'ready',
-            'narrative': 'Keep going.',
-          });
+          return FakeHttpClientAdapter.jsonResponse(
+            dashboardInsightPendingPayload(),
+          );
         }
         if (options.path == '/api/learner/lessons/14' &&
             options.method == 'GET') {

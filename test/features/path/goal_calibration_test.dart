@@ -7,6 +7,7 @@ import 'package:extra_efficient_mobile/core/media/audio_media_adapter.dart';
 import 'package:extra_efficient_mobile/core/network/dio_client.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
 import 'package:extra_efficient_mobile/features/path/screens/goal_calibration_screen.dart';
+
 import '../../helpers/fake_http_adapter.dart';
 
 void main() {
@@ -54,17 +55,42 @@ void main() {
         }
         if (options.path == '/api/learner/dashboard') {
           return FakeHttpClientAdapter.jsonResponse({
-            'currentBandCode': 'B1',
-            'targetBandCode': targetBand,
-            'scaledScore': 620,
-            'placementCompleted': true,
-            'hasLearningPath': true,
+            'certificate': {
+              'code': 'TOEIC',
+              'name': 'TOEIC Listening & Reading',
+              'sectionNoun': 'Part',
+            },
+            'nextAction': {
+              'eyebrow': 'SET THE TARGET',
+              'title': 'Choose the band you are working towards',
+              'description': 'Goals turn practice into a plan.',
+              'actionLabel': 'Set your target band',
+              'actionUrl': '/placement/target-band',
+              'severity': 'info',
+              'cascadeStep': 'next_step',
+              'metaLabel': 'NOW below_A1',
+            },
+            'goal': {
+              'currentBandCode': 'below_A1',
+              'currentBandName': 'Below A1',
+              'currentScore': 10,
+              'currentSource': 'mock',
+              'targetBandCode': targetBand,
+              'targetBandName': 'Intermediate',
+              'completedPathSteps': 0,
+              'totalPathSteps': 0,
+              'scoreDisplayFactor': 1,
+              'hasNoMeasurement': false,
+            },
+            'skills': <Map<String, dynamic>>[],
+            'attemptCount': 1,
+            'practiceCount': 0,
           });
         }
         if (options.path == '/api/learner/insights/dashboard') {
           return FakeHttpClientAdapter.jsonResponse({
-            'status': 'ready',
-            'narrative': 'Steady progress.',
+            'status': 'done',
+            'formattedNarrative': 'Steady progress.',
           });
         }
         if (options.path == '/api/learner/target-band' &&
@@ -125,7 +151,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('open-goal-calibration-btn')));
+      final goalBtn = find.byKey(const Key('open-goal-calibration-btn'));
+      await tester.scrollUntilVisible(goalBtn, 200);
+      await tester.pumpAndSettle();
+      await tester.tap(goalBtn);
       await tester.pumpAndSettle();
 
       expect(find.text('TARGET BAND & STUDY GOAL'), findsOneWidget);
@@ -138,10 +167,7 @@ void main() {
       await tester.tap(find.byKey(const Key('target-band-C1')));
       await tester.pumpAndSettle();
 
-      await tester.enterText(
-        find.byKey(const Key('weekly-hours-input')),
-        '10',
-      );
+      await tester.enterText(find.byKey(const Key('weekly-hours-input')), '10');
       await tester.pumpAndSettle();
 
       final goalScrollable = find

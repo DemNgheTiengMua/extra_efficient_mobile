@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../models/path_models.dart';
 import '../providers/path_providers.dart';
 
@@ -13,7 +14,6 @@ class LearningPathScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pathAsync = ref.watch(learningPathProvider);
-    final insightAsync = ref.watch(pathInsightProvider);
 
     return pathAsync.when(
       loading: () => ListView(
@@ -47,8 +47,7 @@ class LearningPathScreen extends ConsumerWidget {
               StateBlock(
                 stamp: 'NO LEARNING PATH',
                 title: 'Generate your personalized learning path',
-                description:
-                    'Build a weekly module sequence matched to your current and target band.',
+                description: 'Build a weekly module sequence matched to your current and target band.',
                 action: PlacardButton(
                   key: const Key('generate-learning-path-btn'),
                   label: 'GENERATE LEARNING PATH',
@@ -104,21 +103,71 @@ class LearningPathScreen extends ConsumerWidget {
               _PathModuleCard(module: module),
               const SizedBox(height: 12),
             ],
-            insightAsync.when(
-              loading: () => const PlacardPanel(
-                title: 'PATH INSIGHT',
-                child: Text('Generating path insight...'),
-              ),
-              error: (error, _) => PlacardPanel(
-                title: 'PATH INSIGHT',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    PlacardAlert(
-                      variant: PlacardAlertVariant.warning,
-                      title: 'Path insight unavailable',
-                      subtitle: error.toString(),
-                    ),
+            // Mounted only when a path exists: the insight describes a path, and
+            // without one the backend answers 404 LEARNING_PATH_NOT_FOUND.
+            const _PathInsightCard(),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PathInsightCard extends ConsumerWidget {
+  const _PathInsightCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ref
+        .watch(pathInsightProvider)
+        .when(
+          loading: () => const PlacardPanel(
+            title: 'PATH INSIGHT',
+            child: Text('Generating path insight...'),
+          ),
+          error: (error, _) => PlacardPanel(
+            title: 'PATH INSIGHT',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                PlacardAlert(
+                  variant: PlacardAlertVariant.warning,
+                  title: 'Path insight unavailable',
+                  subtitle: extractApiError(error, fallback: error.toString()),
+                ),
+                const SizedBox(height: 12),
+                PlacardButton(
+                  key: const Key('reload-path-insight-btn'),
+                  label: 'RELOAD INSIGHT',
+                  variant: PlacardButtonVariant.secondary,
+                  onPress: () => ref.invalidate(pathInsightProvider),
+                ),
+              ],
+            ),
+          ),
+          data: (insight) {
+            if (insight == null) return const SizedBox.shrink();
+            final body = insight.body;
+            return PlacardPanel(
+              title: 'PATH INSIGHT',
+              trailing: insight.isFailed
+                  ? const PlacardBadge.danger('FAILED')
+                  : insight.isPending
+                  ? const PlacardBadge.muted('PENDING')
+                  : const PlacardBadge.success('READY'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    body ??
+                        (insight.isFailed
+                            ? (insight.failureReason ??
+                                  'The path insight could not be generated.')
+                            : 'Generating path insight...'),
+                    style: SignageTypography.body(fontSize: 15),
+                  ),
+                  // The backend rejects a retry unless the insight failed.
+                  if (insight.isFailed) ...[
                     const SizedBox(height: 12),
                     PlacardButton(
                       key: const Key('retry-path-insight-btn'),
@@ -128,39 +177,11 @@ class LearningPathScreen extends ConsumerWidget {
                           ref.read(pathInsightProvider.notifier).retry(),
                     ),
                   ],
-                ),
+                ],
               ),
-              data: (insight) {
-                if (insight == null) return const SizedBox.shrink();
-                return PlacardPanel(
-                  title: 'PATH INSIGHT',
-                  trailing: insight.isFailed
-                      ? const PlacardBadge.danger('FAILED')
-                      : const PlacardBadge.success('READY'),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        insight.narrative,
-                        style: SignageTypography.body(fontSize: 15),
-                      ),
-                      const SizedBox(height: 12),
-                      PlacardButton(
-                        key: const Key('retry-path-insight-btn'),
-                        label: 'RETRY INSIGHT',
-                        variant: PlacardButtonVariant.secondary,
-                        onPress: () =>
-                            ref.read(pathInsightProvider.notifier).retry(),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
+            );
+          },
         );
-      },
-    );
   }
 }
 

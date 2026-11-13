@@ -1,144 +1,324 @@
 /// Domain models for the `PATH` tab: Dashboard, Insights, Target Band &
 /// Calibration, Learning Path, and Lesson Player.
+///
+/// Every key below is the backend's own (`NextActionDto`, `GoalStandingDto`,
+/// `SkillCardDto`, `RecentAttemptDto`, `RecentPracticeDto`, `AiInsightDto`).
+/// Absence is a null, never a placeholder band.
+library;
+
+/// The one action the backend decided on (`nextAction` on
+/// `GET /api/learner/dashboard`). `actionUrl` is an app path decided by the
+/// server; the app routes on it rather than rebuilding it from a type.
 class NextActionInfo {
   const NextActionInfo({
-    required this.type,
+    required this.eyebrow,
     required this.title,
     required this.description,
     required this.actionLabel,
-    this.lessonId,
-    this.stepId,
-    this.attemptId,
-    this.sessionId,
+    required this.actionUrl,
+    required this.severity,
+    required this.cascadeStep,
+    this.metaLabel,
   });
 
   factory NextActionInfo.fromJson(Map<String, dynamic> json) {
     return NextActionInfo(
-      type: json['type']?.toString() ?? 'info',
+      eyebrow: json['eyebrow']?.toString() ?? '',
       title: json['title']?.toString() ?? '',
       description: json['description']?.toString() ?? '',
       actionLabel: json['actionLabel']?.toString() ?? 'CONTINUE',
-      lessonId: _asInt(json['lessonId']),
-      stepId: _asInt(json['stepId']),
-      attemptId: _asInt(json['attemptId']),
-      sessionId: _asInt(json['sessionId']),
+      actionUrl: json['actionUrl']?.toString() ?? '',
+      severity: json['severity']?.toString() ?? 'info',
+      cascadeStep: json['cascadeStep']?.toString() ?? '',
+      metaLabel: _asString(json['metaLabel']),
     );
   }
 
-  final String type;
+  final String eyebrow;
   final String title;
   final String description;
   final String actionLabel;
-  final int? lessonId;
-  final int? stepId;
-  final int? attemptId;
-  final int? sessionId;
+  final String actionUrl;
+  final String severity;
+  final String cascadeStep;
+  final String? metaLabel;
+
+  /// The cascade step that produced this action, so a caller can recognise the
+  /// "pick up where you left off" case without guessing from the URL.
+  bool get isResume => cascadeStep.toLowerCase() == 'resume_in_progress';
 }
 
-class SkillMeasurementSummary {
-  const SkillMeasurementSummary({
-    required this.skill,
-    required this.status,
-    this.bandCode,
-    this.scaledScore,
+/// The measured goal standing (`goal` on the dashboard).
+///
+/// [hasNoMeasurement] is the switch: when true nothing has been measured, so
+/// every band and score is legitimately null and the page must not invent one.
+class GoalStanding {
+  const GoalStanding({
+    this.currentBandCode,
+    this.currentBandName,
+    this.currentScore,
+    this.currentSource,
+    this.targetBandCode,
+    this.targetBandName,
+    this.targetMinScore,
+    this.targetDate,
+    this.weeklyStudyHours,
+    this.status,
+    this.completedPathSteps = 0,
+    this.totalPathSteps = 0,
+    this.currentWeekNumber,
+    this.weekPlannedMinutes = 0,
+    this.weekCompletedMinutes = 0,
+    this.scoreDisplayFactor = 1,
+    this.requiredTotalHours,
+    this.overallLevelCode,
+    this.limitingSkillCode,
+    this.limitingSkillName,
+    this.hasNoMeasurement = false,
   });
 
-  factory SkillMeasurementSummary.fromJson(Map<String, dynamic> json) {
-    return SkillMeasurementSummary(
-      skill: json['skill']?.toString() ?? 'unknown',
-      status: json['status']?.toString() ?? 'unmeasured',
-      bandCode: json['bandCode']?.toString(),
-      scaledScore: _asInt(json['scaledScore']),
+  factory GoalStanding.fromJson(Map<String, dynamic> json) {
+    return GoalStanding(
+      currentBandCode: _asString(json['currentBandCode']),
+      currentBandName: _asString(json['currentBandName']),
+      currentScore: _asInt(json['currentScore']),
+      currentSource: _asString(json['currentSource']),
+      targetBandCode: _asString(json['targetBandCode']),
+      targetBandName: _asString(json['targetBandName']),
+      targetMinScore: _asInt(json['targetMinScore']),
+      targetDate: _asString(json['targetDate']),
+      weeklyStudyHours: _asNum(json['weeklyStudyHours']),
+      status: _asString(json['status']),
+      completedPathSteps: _asInt(json['completedPathSteps']) ?? 0,
+      totalPathSteps: _asInt(json['totalPathSteps']) ?? 0,
+      currentWeekNumber: _asInt(json['currentWeekNumber']),
+      weekPlannedMinutes: _asInt(json['weekPlannedMinutes']) ?? 0,
+      weekCompletedMinutes: _asInt(json['weekCompletedMinutes']) ?? 0,
+      scoreDisplayFactor: _asInt(json['scoreDisplayFactor']) ?? 1,
+      requiredTotalHours: _asInt(json['requiredTotalHours']),
+      overallLevelCode: _asString(json['overallLevelCode']),
+      limitingSkillCode: _asString(json['limitingSkillCode']),
+      limitingSkillName: _asString(json['limitingSkillName']),
+      hasNoMeasurement: json['hasNoMeasurement'] == true,
     );
   }
 
-  final String skill;
-  final String status;
-  final String? bandCode;
-  final int? scaledScore;
+  final String? currentBandCode;
+  final String? currentBandName;
+  final int? currentScore;
+  final String? currentSource;
+  final String? targetBandCode;
+  final String? targetBandName;
+  final int? targetMinScore;
+  final String? targetDate;
+  final num? weeklyStudyHours;
+  final String? status;
+  final int completedPathSteps;
+  final int totalPathSteps;
+  final int? currentWeekNumber;
+  final int weekPlannedMinutes;
+  final int weekCompletedMinutes;
+  final int scoreDisplayFactor;
+  final int? requiredTotalHours;
+  final String? overallLevelCode;
+  final String? limitingSkillCode;
+  final String? limitingSkillName;
+  final bool hasNoMeasurement;
+
+  String? get currentScoreText =>
+      _formatStoredScore(currentScore, scoreDisplayFactor);
+}
+
+/// One skill of the active certificate, with whatever has been measured.
+///
+/// `levelCode`, `positionInBand` and `measuredAt` are null together for a skill
+/// nothing measured; a null level is never rendered as a band.
+class SkillMeasurement {
+  const SkillMeasurement({
+    required this.skillId,
+    required this.code,
+    required this.name,
+    required this.modality,
+    this.latestScaledScore,
+    this.maxScaledScore,
+    this.weakestTopics = const [],
+    this.scoreDisplayFactor = 1,
+    this.levelCode,
+    this.positionInBand,
+    this.measuredAt,
+    this.isStale = false,
+  });
+
+  factory SkillMeasurement.fromJson(Map<String, dynamic> json) {
+    final topicsRaw = json['weakestTopics'] as List<dynamic>? ?? const [];
+    return SkillMeasurement(
+      skillId: _asInt(json['skillId']) ?? 0,
+      code: json['code']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      modality: json['modality']?.toString() ?? '',
+      latestScaledScore: _asInt(json['latestScaledScore']),
+      maxScaledScore: _asInt(json['maxScaledScore']),
+      weakestTopics: topicsRaw
+          .whereType<Map<String, dynamic>>()
+          .map(SkillCategory.fromJson)
+          .toList(growable: false),
+      scoreDisplayFactor: _asInt(json['scoreDisplayFactor']) ?? 1,
+      levelCode: _asString(json['levelCode']),
+      positionInBand: _asInt(json['positionInBand']),
+      measuredAt: _asString(json['measuredAt']),
+      isStale: json['isStale'] == true,
+    );
+  }
+
+  final int skillId;
+  final String code;
+  final String name;
+  final String modality;
+  final int? latestScaledScore;
+  final int? maxScaledScore;
+  final List<SkillCategory> weakestTopics;
+  final int scoreDisplayFactor;
+  final String? levelCode;
+  final int? positionInBand;
+  final String? measuredAt;
+  final bool isStale;
+
+  bool get isMeasured => levelCode != null && levelCode!.isNotEmpty;
+
+  String? get scoreText =>
+      _formatStoredScore(latestScaledScore, scoreDisplayFactor);
+
+  String? get maxScoreText =>
+      _formatStoredScore(maxScaledScore, scoreDisplayFactor);
+}
+
+class SkillCategory {
+  const SkillCategory({
+    required this.code,
+    required this.name,
+    required this.accuracyPercent,
+    required this.answered,
+    required this.levelCode,
+  });
+
+  factory SkillCategory.fromJson(Map<String, dynamic> json) {
+    return SkillCategory(
+      code: json['code']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      accuracyPercent: _asInt(json['accuracyPercent']) ?? 0,
+      answered: _asInt(json['answered']) ?? 0,
+      levelCode: json['levelCode']?.toString() ?? '',
+    );
+  }
+
+  final String code;
+  final String name;
+  final int accuracyPercent;
+  final int answered;
+  final String levelCode;
 }
 
 class UnfinishedAttemptSummary {
   const UnfinishedAttemptSummary({
     required this.attemptId,
-    required this.title,
+    required this.examName,
     required this.purpose,
-    this.remainingMinutes,
+    required this.status,
+    this.startedAt,
+    this.totalScore,
+    this.bandCode,
   });
 
   factory UnfinishedAttemptSummary.fromJson(Map<String, dynamic> json) {
     return UnfinishedAttemptSummary(
-      attemptId: _asInt(json['attemptId']) ?? _asInt(json['id']) ?? 0,
-      title: json['title']?.toString() ?? 'Unfinished Attempt',
-      purpose: json['purpose']?.toString() ?? 'mock',
-      remainingMinutes: _asInt(json['remainingMinutes']),
+      attemptId: _asInt(json['attemptId']) ?? 0,
+      examName: json['examName']?.toString() ?? '',
+      purpose: json['purpose']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      startedAt: _asString(json['startedAt']),
+      totalScore: _asInt(json['totalScore']),
+      bandCode: _asString(json['bandCode']),
     );
   }
 
   final int attemptId;
-  final String title;
+  final String examName;
   final String purpose;
-  final int? remainingMinutes;
+  final String status;
+  final String? startedAt;
+  final int? totalScore;
+  final String? bandCode;
+
+  bool get isPlacement => purpose.toLowerCase() == 'placement';
 }
 
 class UnfinishedPracticeSummary {
   const UnfinishedPracticeSummary({
     required this.sessionId,
-    required this.title,
-    this.answeredCount = 0,
-    this.totalCount = 0,
+    required this.sectionName,
+    required this.status,
+    this.correctCount = 0,
+    this.questionCount = 0,
+    this.startedAt,
   });
 
   factory UnfinishedPracticeSummary.fromJson(Map<String, dynamic> json) {
     return UnfinishedPracticeSummary(
-      sessionId: _asInt(json['sessionId']) ?? _asInt(json['id']) ?? 0,
-      title: json['title']?.toString() ?? 'Unfinished Practice Session',
-      answeredCount: _asInt(json['answeredCount']) ?? 0,
-      totalCount: _asInt(json['totalCount']) ?? 0,
+      sessionId: _asInt(json['sessionId']) ?? 0,
+      sectionName: json['sectionName']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      correctCount: _asInt(json['correctCount']) ?? 0,
+      questionCount: _asInt(json['questionCount']) ?? 0,
+      startedAt: _asString(json['startedAt']),
     );
   }
 
   final int sessionId;
-  final String title;
-  final int answeredCount;
-  final int totalCount;
+  final String sectionName;
+  final String status;
+  final int correctCount;
+  final int questionCount;
+  final String? startedAt;
 }
 
+/// `GET /api/learner/dashboard` as the envelope it is.
 class LearnerDashboard {
   const LearnerDashboard({
-    this.currentBandCode = '<A1',
-    this.targetBandCode,
-    this.scaledScore,
-    this.placementCompleted = false,
-    this.hasLearningPath = false,
+    required this.certificate,
+    required this.goal,
     this.nextAction,
-    this.skillMeasurements = const [],
+    this.skills = const [],
+    this.attemptCount = 0,
+    this.practiceCount = 0,
     this.unfinishedAttempt,
     this.unfinishedPractice,
   });
 
   factory LearnerDashboard.fromJson(Map<String, dynamic> json) {
     final nextActionRaw = json['nextAction'];
-    final skillsRaw = json['skillMeasurements'] as List<dynamic>? ?? const [];
+    final goalRaw = json['goal'];
+    final skillsRaw = json['skills'] as List<dynamic>? ?? const [];
     final attemptRaw = json['unfinishedAttempt'];
     final practiceRaw = json['unfinishedPractice'];
 
     return LearnerDashboard(
-      currentBandCode: json['currentBandCode']?.toString() ??
-          json['currentBand']?.toString() ??
-          '<A1',
-      targetBandCode: json['targetBandCode']?.toString() ??
-          json['targetBand']?.toString(),
-      scaledScore: _asInt(json['scaledScore']),
-      placementCompleted: json['placementCompleted'] == true,
-      hasLearningPath: json['hasLearningPath'] == true,
+      certificate: json['certificate'] is Map<String, dynamic>
+          ? DashboardCertificate.fromJson(
+              json['certificate'] as Map<String, dynamic>,
+            )
+          : const DashboardCertificate(),
+      goal: goalRaw is Map<String, dynamic>
+          ? GoalStanding.fromJson(goalRaw)
+          : const GoalStanding(),
       nextAction: nextActionRaw is Map<String, dynamic>
           ? NextActionInfo.fromJson(nextActionRaw)
           : null,
-      skillMeasurements: skillsRaw
+      skills: skillsRaw
           .whereType<Map<String, dynamic>>()
-          .map(SkillMeasurementSummary.fromJson)
+          .map(SkillMeasurement.fromJson)
           .toList(growable: false),
+      attemptCount: _asInt(json['attemptCount']) ?? 0,
+      practiceCount: _asInt(json['practiceCount']) ?? 0,
       unfinishedAttempt: attemptRaw is Map<String, dynamic>
           ? UnfinishedAttemptSummary.fromJson(attemptRaw)
           : null,
@@ -148,40 +328,69 @@ class LearnerDashboard {
     );
   }
 
-  final String currentBandCode;
-  final String? targetBandCode;
-  final int? scaledScore;
-  final bool placementCompleted;
-  final bool hasLearningPath;
+  final DashboardCertificate certificate;
+  final GoalStanding goal;
   final NextActionInfo? nextAction;
-  final List<SkillMeasurementSummary> skillMeasurements;
+  final List<SkillMeasurement> skills;
+  final int attemptCount;
+  final int practiceCount;
   final UnfinishedAttemptSummary? unfinishedAttempt;
   final UnfinishedPracticeSummary? unfinishedPractice;
 }
 
+class DashboardCertificate {
+  const DashboardCertificate({
+    this.code = '',
+    this.name = '',
+    this.sectionNoun = 'Section',
+  });
+
+  factory DashboardCertificate.fromJson(Map<String, dynamic> json) {
+    return DashboardCertificate(
+      code: json['code']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      sectionNoun: json['sectionNoun']?.toString() ?? 'Section',
+    );
+  }
+
+  final String code;
+  final String name;
+  final String sectionNoun;
+}
+
+/// `AiInsightDto`: generated asynchronously, so `pending` is a normal state and
+/// only `failed` may be retried (the backend rejects everything else).
 class AiInsight {
   const AiInsight({
     required this.status,
-    required this.narrative,
-    this.errorMessage,
+    this.narrative,
+    this.formattedNarrative,
+    this.failureReason,
   });
 
   factory AiInsight.fromJson(Map<String, dynamic> json) {
     return AiInsight(
-      status: json['status']?.toString() ?? 'ready',
-      narrative: json['narrative']?.toString() ??
-          json['content']?.toString() ??
-          json['summary']?.toString() ??
-          '',
-      errorMessage: json['errorMessage']?.toString(),
+      status: json['status']?.toString() ?? '',
+      narrative: _asString(json['narrative']),
+      formattedNarrative: _asString(json['formattedNarrative']),
+      failureReason: _asString(json['failureReason']),
     );
   }
 
   final String status;
-  final String narrative;
-  final String? errorMessage;
+  final String? narrative;
+  final String? formattedNarrative;
+  final String? failureReason;
+
+  /// What a reader can actually show: the formatted narrative when the insight
+  /// is done, null while pending or after a failure.
+  String? get body => formattedNarrative ?? narrative;
 
   bool get isFailed => status.toLowerCase() == 'failed';
+
+  bool get isPending => status.toLowerCase() == 'pending';
+
+  bool get isDone => status.toLowerCase() == 'done';
 }
 
 class TargetBandGoal {
@@ -284,7 +493,8 @@ class PathModule {
   });
 
   factory PathModule.fromJson(Map<String, dynamic> json) {
-    final itemsRaw = json['items'] as List<dynamic>? ??
+    final itemsRaw =
+        json['items'] as List<dynamic>? ??
         json['steps'] as List<dynamic>? ??
         const [];
     return PathModule(
@@ -420,10 +630,7 @@ class LessonProgress {
 }
 
 class MicroCheckResult {
-  const MicroCheckResult({
-    required this.correct,
-    this.explanation,
-  });
+  const MicroCheckResult({required this.correct, this.explanation});
 
   factory MicroCheckResult.fromJson(Map<String, dynamic> json) {
     return MicroCheckResult(
@@ -447,4 +654,20 @@ int? _asInt(dynamic value) {
   if (value is num) return value.toInt();
   if (value is String) return int.tryParse(value);
   return null;
+}
+
+String? _asString(dynamic value) {
+  final text = value?.toString();
+  return text == null || text.isEmpty ? null : text;
+}
+
+/// A stored score as the learner reads it: certificates that keep marks in
+/// tenths (IELTS 8.0 is stored as 80) send `scoreDisplayFactor: 10`.
+String? _formatStoredScore(int? stored, int factor) {
+  if (stored == null) return null;
+  final divisor = factor <= 0 ? 1 : factor;
+  final value = stored / divisor;
+  return value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(1);
 }
