@@ -33,6 +33,7 @@ import '../../features/practice/screens/practice_hub_screen.dart';
 import '../../features/practice/screens/practice_session_screen.dart';
 import '../../features/shell/main_shell.dart';
 import '../../features/wallet/screens/wallet_screen.dart';
+import 'unmatched_route_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -50,6 +51,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/path',
     refreshListenable: refreshListenable,
+    // go_router has no `errorBuilder` on `GoRoute`, only globally. The backend
+    // can name a destination this build has not registered (its NEXT ACTION
+    // URL is free text), and a blank page would look like a broken app.
+    errorBuilder: (context, state) =>
+        UnmatchedRouteScreen(location: state.uri.toString()),
     redirect: (context, state) {
       final auth = ref.read(authNotifierProvider);
       if (auth.status == AuthStatus.unknown) {

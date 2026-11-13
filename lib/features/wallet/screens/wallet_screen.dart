@@ -4,6 +4,7 @@ import 'package:forui/forui.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../wallet_models.dart';
 import '../wallet_providers.dart';
 import 'checkout_flow_view.dart';
@@ -160,7 +161,7 @@ class _CreditsAndOrdersViewState extends ConsumerState<_CreditsAndOrdersView> {
         child: StateBlock(
           stamp: 'ERROR',
           title: 'Could not load wallet',
-          description: err.toString(),
+          description: extractApiError(err, fallback: 'The wallet could not be loaded.'),
           action: PlacardButton(
             label: 'RETRY',
             onPress: () => ref.read(walletSummaryProvider.notifier).refresh(),

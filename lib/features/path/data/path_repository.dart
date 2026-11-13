@@ -151,7 +151,7 @@ class PathRepository {
 
   /// `GET /insights/path` answers `404 LEARNING_PATH_NOT_FOUND` whenever there
   /// is no active path. That is a designed empty state, so it maps to null and
-  /// is never surfaced as an error.
+  /// is never surfaced as an error. Any other 404 is a real failure.
   Future<AiInsight?> fetchPathInsight() async {
     try {
       final response = await _dio.get<Map<String, dynamic>>(
@@ -159,11 +159,17 @@ class PathRepository {
       );
       return AiInsight.fromJson(response.data ?? const <String, dynamic>{});
     } on DioException catch (e) {
-      if (e.response?.statusCode == 404) {
+      if (e.response?.statusCode == 404 &&
+          _errorCode(e.response?.data) == 'LEARNING_PATH_NOT_FOUND') {
         return null;
       }
       rethrow;
     }
+  }
+
+  static String? _errorCode(Object? data) {
+    if (data is Map<String, dynamic>) return data['code'] as String?;
+    return null;
   }
 
   /// Retry answers `204 No Content`, so the refreshed insight is fetched again.

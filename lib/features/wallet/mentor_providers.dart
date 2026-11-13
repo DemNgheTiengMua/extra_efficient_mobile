@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/dio_client.dart';
+import '../../core/network/provider_retry.dart';
 import '../auth/auth_provider.dart';
 import '../context/learner_context_provider.dart';
 import 'mentor_models.dart';
@@ -10,8 +11,7 @@ final mentorRepositoryProvider = Provider<MentorRepository>((ref) {
   return MentorRepository(ref.watch(dioProvider));
 });
 
-/// The directory. Auto-retry is disabled so a failing load reaches the screen's
-/// error branch immediately instead of spinning for ~38 s.
+/// The directory.
 final mentorsListProvider = FutureProvider<List<MentorProfile>>(
   (ref) async {
     final authState = ref.watch(authNotifierProvider);
@@ -22,7 +22,7 @@ final mentorsListProvider = FutureProvider<List<MentorProfile>>(
     final certCode = ref.watch(learnerContextProvider).value?.active.code;
     return ref.read(mentorRepositoryProvider).getMentors(certCode: certCode);
   },
-  retry: (_, _) => null,
+  retry: noProviderRetry,
 );
 
 class MentorBookingsNotifier extends AsyncNotifier<List<MentorBooking>> {
@@ -46,5 +46,5 @@ class MentorBookingsNotifier extends AsyncNotifier<List<MentorBooking>> {
 final mentorBookingsProvider =
     AsyncNotifierProvider<MentorBookingsNotifier, List<MentorBooking>>(
   MentorBookingsNotifier.new,
-  retry: (_, _) => null,
+  retry: noProviderRetry,
 );

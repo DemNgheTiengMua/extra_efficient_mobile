@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/media/audio_media_adapter.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../models/mock_exam_models.dart';
 import '../providers/mock_exam_providers.dart';
 
@@ -27,6 +28,7 @@ class MockReviewScreen extends ConsumerStatefulWidget {
 class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
   _ReviewFilter _filter = _ReviewFilter.all;
   final Set<int> _savedQuestionIds = {};
+  String? _saveError;
 
   Future<void> _playSlice(MockReviewQuestion q) async {
     final path = q.audioPath;
@@ -45,11 +47,22 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
   }
 
   Future<void> _saveQuestion(int questionId) async {
-    await ref.read(mockExamRepositoryProvider).saveQuestion(questionId);
-    if (!mounted) return;
-    setState(() {
-      _savedQuestionIds.add(questionId);
-    });
+    try {
+      await ref.read(mockExamRepositoryProvider).saveQuestion(questionId);
+      if (!mounted) return;
+      setState(() {
+        _savedQuestionIds.add(questionId);
+        _saveError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saveError = extractApiError(
+          e,
+          fallback: 'Could not save this question.',
+        );
+      });
+    }
   }
 
   @override
@@ -110,7 +123,7 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
           child: StateBlock(
             stamp: 'ERROR',
             title: 'UNABLE TO LOAD REVIEW',
-            description: err.toString(),
+            description: extractApiError(err, fallback: 'The answer review could not be loaded.'),
             action: PlacardButton(
               label: 'RETRY',
               onPress: () =>
@@ -153,6 +166,16 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
                   ],
                 ),
               ),
+              if (_saveError != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: PlacardAlert(
+                    key: const Key('review-save-error'),
+                    title: 'COULD NOT SAVE QUESTION',
+                    subtitle: _saveError!,
+                    variant: PlacardAlertVariant.danger,
+                  ),
+                ),
               Expanded(
                 child: filtered.isEmpty
                     ? const Padding(

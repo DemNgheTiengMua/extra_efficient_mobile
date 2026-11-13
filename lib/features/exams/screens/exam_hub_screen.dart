@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../../context/learner_context_provider.dart';
 import '../models/mock_exam_models.dart';
 import '../models/placement_models.dart';
@@ -131,7 +132,7 @@ class _MockExamsView extends ConsumerWidget {
             error: (err, _) => StateBlock(
               stamp: 'ERROR',
               title: 'UNABLE TO LOAD MOCK EXAMS',
-              description: err.toString(),
+              description: extractApiError(err, fallback: 'This exam list could not be loaded.'),
               action: PlacardButton(
                 label: 'RETRY',
                 onPress: () => ref.invalidate(mockExamsProvider),
@@ -363,7 +364,7 @@ class _HistoryReviewView extends ConsumerWidget {
         child: StateBlock(
           stamp: 'ERROR',
           title: 'UNABLE TO LOAD HISTORY',
-          description: err.toString(),
+          description: extractApiError(err, fallback: 'This exam list could not be loaded.'),
           action: PlacardButton(
             label: 'RETRY',
             onPress: () => ref.invalidate(examHistoryProvider),

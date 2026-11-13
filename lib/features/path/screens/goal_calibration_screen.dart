@@ -72,7 +72,7 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = extractApiError(e, fallback: e.toString()));
+        setState(() => _errorMessage = extractApiError(e, fallback: 'Could not save your goal.'));
       }
     } finally {
       if (mounted) {
@@ -103,7 +103,7 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = extractApiError(e, fallback: e.toString()));
+        setState(() => _errorMessage = extractApiError(e, fallback: 'Could not save your goal.'));
       }
     } finally {
       if (mounted) {
@@ -129,7 +129,7 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = extractApiError(e, fallback: e.toString()));
+        setState(() => _errorMessage = extractApiError(e, fallback: 'Could not save your goal.'));
       }
     } finally {
       if (mounted) {
@@ -168,7 +168,14 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
           error: (error, _) => StateBlock(
             stamp: 'UNAVAILABLE',
             title: 'Could not load target band',
-            description: error.toString(),
+            description: extractApiError(
+              error,
+              fallback: 'The target band could not be loaded.',
+            ),
+            action: PlacardButton(
+              label: 'RETRY',
+              onPress: () => ref.invalidate(targetBandGoalProvider),
+            ),
           ),
           data: (goal) {
             if (goal == null) return const SizedBox.shrink();
@@ -300,7 +307,10 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
           error: (error, _) => PlacardAlert(
             variant: PlacardAlertVariant.warning,
             title: 'Calibration unavailable',
-            subtitle: error.toString(),
+            subtitle: extractApiError(
+              error,
+              fallback: 'Calibration status could not be loaded.',
+            ),
           ),
           data: (calibration) {
             if (calibration == null) return const SizedBox.shrink();

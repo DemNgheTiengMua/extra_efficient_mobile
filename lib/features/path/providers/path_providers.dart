@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/provider_retry.dart';
 import '../../auth/auth_provider.dart';
 import '../../context/learner_context_provider.dart';
 import '../data/path_repository.dart';
@@ -15,7 +16,7 @@ final dashboardProvider = FutureProvider<LearnerDashboard?>((ref) async {
   ref.watch(certificateScopeVersionProvider);
   if (!auth.isAuthenticated) return null;
   return ref.watch(pathRepositoryProvider).fetchDashboard();
-});
+}, retry: noProviderRetry);
 
 class DashboardInsightNotifier extends AsyncNotifier<AiInsight?> {
   @override
@@ -37,6 +38,7 @@ class DashboardInsightNotifier extends AsyncNotifier<AiInsight?> {
 final dashboardInsightProvider =
     AsyncNotifierProvider<DashboardInsightNotifier, AiInsight?>(
       DashboardInsightNotifier.new,
+      retry: noProviderRetry,
     );
 
 class TargetBandGoalNotifier extends AsyncNotifier<TargetBandGoal?> {
@@ -80,6 +82,7 @@ class TargetBandGoalNotifier extends AsyncNotifier<TargetBandGoal?> {
 final targetBandGoalProvider =
     AsyncNotifierProvider<TargetBandGoalNotifier, TargetBandGoal?>(
       TargetBandGoalNotifier.new,
+      retry: noProviderRetry,
     );
 
 class CalibrationNotifier extends AsyncNotifier<CalibrationStatus?> {
@@ -104,6 +107,7 @@ class CalibrationNotifier extends AsyncNotifier<CalibrationStatus?> {
 final calibrationProvider =
     AsyncNotifierProvider<CalibrationNotifier, CalibrationStatus?>(
       CalibrationNotifier.new,
+      retry: noProviderRetry,
     );
 
 class LearningPathNotifier extends AsyncNotifier<LearningPathOverview?> {
@@ -139,9 +143,7 @@ class LearningPathNotifier extends AsyncNotifier<LearningPathOverview?> {
 final learningPathProvider =
     AsyncNotifierProvider<LearningPathNotifier, LearningPathOverview?>(
       LearningPathNotifier.new,
-      // A failed load must reach the screen's error branch rather than spin for
-      // 38 s of invisible retries.
-      retry: (_, _) => null,
+      retry: noProviderRetry,
     );
 
 class PathInsightNotifier extends AsyncNotifier<AiInsight?> {
@@ -166,6 +168,7 @@ class PathInsightNotifier extends AsyncNotifier<AiInsight?> {
 final pathInsightProvider =
     AsyncNotifierProvider<PathInsightNotifier, AiInsight?>(
       PathInsightNotifier.new,
+      retry: noProviderRetry,
     );
 
 final lessonDetailProvider = FutureProvider.family<LessonDetail?, int>((
@@ -176,7 +179,7 @@ final lessonDetailProvider = FutureProvider.family<LessonDetail?, int>((
   ref.watch(certificateScopeVersionProvider);
   if (!auth.isAuthenticated) return null;
   return ref.watch(pathRepositoryProvider).fetchLesson(lessonId);
-});
+}, retry: noProviderRetry);
 
 final lessonProgressProvider = FutureProvider.family<LessonProgress?, int>((
   ref,
@@ -186,4 +189,4 @@ final lessonProgressProvider = FutureProvider.family<LessonProgress?, int>((
   ref.watch(certificateScopeVersionProvider);
   if (!auth.isAuthenticated) return null;
   return ref.watch(pathRepositoryProvider).fetchLessonProgress(lessonId);
-});
+}, retry: noProviderRetry);
