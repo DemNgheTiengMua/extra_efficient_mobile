@@ -19,154 +19,399 @@ enum PracticeFeedbackMode {
   final String label;
 }
 
+/// `PracticeCatalogDto.UnfinishedSession` (`PracticeSessionDto`).
+///
+/// There is no answered count on this DTO: the room reads its own progress from
+/// the take payload. The banner can only honestly state the section and size.
 class UnfinishedPracticeSession {
   const UnfinishedPracticeSession({
     required this.sessionId,
-    required this.title,
-    required this.answeredCount,
-    required this.totalCount,
+    required this.sectionCode,
+    required this.sectionName,
+    required this.modality,
+    required this.questionCount,
+    required this.correctCount,
+    this.topicId,
+    this.cefrLevelCode,
   });
 
   factory UnfinishedPracticeSession.fromJson(Map<String, dynamic> json) {
     return UnfinishedPracticeSession(
       sessionId: (json['sessionId'] as num?)?.toInt() ?? 0,
-      title: json['title'] as String? ?? 'Practice Session',
-      answeredCount: (json['answeredCount'] as num?)?.toInt() ?? 0,
-      totalCount: (json['totalCount'] as num?)?.toInt() ?? 0,
+      sectionCode: json['sectionCode'] as String? ?? '',
+      sectionName: json['sectionName'] as String? ?? '',
+      modality: json['modality'] as String? ?? '',
+      questionCount: (json['questionCount'] as num?)?.toInt() ?? 0,
+      correctCount: (json['correctCount'] as num?)?.toInt() ?? 0,
+      topicId: (json['topicId'] as num?)?.toInt(),
+      cefrLevelCode: json['cefrLevelCode'] as String?,
     );
   }
 
   final int sessionId;
-  final String title;
-  final int answeredCount;
-  final int totalCount;
+  final String sectionCode;
+  final String sectionName;
+  final String modality;
+  final int questionCount;
+  final int correctCount;
+  final int? topicId;
+  final String? cefrLevelCode;
 }
 
-class PracticeSectionItem {
-  const PracticeSectionItem({
+/// `PracticeSectionDto`: one drillable section with its real availability.
+class PracticeSection {
+  const PracticeSection({
     required this.sectionId,
-    required this.title,
-    required this.skill,
-    this.accuracyPercent,
-    this.cooldownActive = false,
-    this.cooldownRemainingSeconds = 0,
-    this.isSpeaking = false,
+    required this.skillCode,
+    required this.skillName,
+    required this.modality,
+    required this.code,
+    required this.name,
+    this.optionCount,
+    required this.expectedQuestionCount,
+    required this.availableQuestionCount,
+    this.accuracyPercentage,
+    required this.answeredCount,
+    required this.displayOrder,
+    this.totalCategoryCount = 0,
+    this.categoriesInCooldown = 0,
+    this.nextReviewDueAt,
   });
 
-  factory PracticeSectionItem.fromJson(Map<String, dynamic> json) {
-    final skill = (json['skill'] as String? ?? '').toLowerCase();
-    return PracticeSectionItem(
+  factory PracticeSection.fromJson(Map<String, dynamic> json) {
+    return PracticeSection(
       sectionId: (json['sectionId'] as num?)?.toInt() ?? 0,
-      title: json['title'] as String? ?? '',
-      skill: skill,
-      accuracyPercent: (json['accuracyPercent'] as num?)?.toInt(),
-      cooldownActive: json['cooldownActive'] as bool? ?? false,
-      cooldownRemainingSeconds:
-          (json['cooldownRemainingSeconds'] as num?)?.toInt() ?? 0,
-      isSpeaking: json['isSpeaking'] as bool? ?? (skill == 'speaking'),
+      skillCode: json['skillCode'] as String? ?? '',
+      skillName: json['skillName'] as String? ?? '',
+      modality: json['modality'] as String? ?? '',
+      code: json['code'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      optionCount: (json['optionCount'] as num?)?.toInt(),
+      expectedQuestionCount:
+          (json['expectedQuestionCount'] as num?)?.toInt() ?? 0,
+      availableQuestionCount:
+          (json['availableQuestionCount'] as num?)?.toInt() ?? 0,
+      accuracyPercentage: (json['accuracyPercentage'] as num?)?.toInt(),
+      answeredCount: (json['answeredCount'] as num?)?.toInt() ?? 0,
+      displayOrder: (json['displayOrder'] as num?)?.toInt() ?? 0,
+      totalCategoryCount: (json['totalCategoryCount'] as num?)?.toInt() ?? 0,
+      categoriesInCooldown:
+          (json['categoriesInCooldown'] as num?)?.toInt() ?? 0,
+      nextReviewDueAt: json['nextReviewDueAt'] as String?,
     );
   }
 
   final int sectionId;
-  final String title;
-  final String skill;
-  final int? accuracyPercent;
-  final bool cooldownActive;
-  final int cooldownRemainingSeconds;
+  final String skillCode;
+  final String skillName;
+  final String modality;
+  final String code;
+  final String name;
+  final int? optionCount;
+  final int expectedQuestionCount;
+  final int availableQuestionCount;
+  final int? accuracyPercentage;
+  final int answeredCount;
+  final int displayOrder;
+  final int totalCategoryCount;
+  final int categoriesInCooldown;
+  final String? nextReviewDueAt;
+
+  bool get isAvailable => availableQuestionCount > 0;
+
+  /// Speaking is not a typed drill: it links to the recorded, AI-graded exam.
+  bool get isSpeaking => modality == 'speaking';
+}
+
+/// One skill's sections, in the order the catalogue listed them.
+class PracticeSkillGroup {
+  const PracticeSkillGroup({
+    required this.skillCode,
+    required this.skillName,
+    required this.sections,
+    required this.isSpeaking,
+  });
+
+  final String skillCode;
+  final String skillName;
+  final List<PracticeSection> sections;
   final bool isSpeaking;
 }
 
-class PracticeCatalog {
-  const PracticeCatalog({
+class PracticeCertificate {
+  const PracticeCertificate({
+    required this.code,
+    required this.name,
     required this.sectionNoun,
-    required this.sections,
-    this.unfinishedSession,
   });
 
-  factory PracticeCatalog.fromJson(Map<String, dynamic> json) {
-    final unfinished = json['unfinishedSession'];
-    final sectionsRaw = json['sections'] as List<dynamic>? ?? const [];
-    return PracticeCatalog(
+  factory PracticeCertificate.fromJson(Map<String, dynamic> json) {
+    return PracticeCertificate(
+      code: json['code'] as String? ?? '',
+      name: json['name'] as String? ?? '',
       sectionNoun: json['sectionNoun'] as String? ?? 'Section',
-      unfinishedSession: unfinished is Map<String, dynamic>
-          ? UnfinishedPracticeSession.fromJson(unfinished)
-          : null,
-      sections: sectionsRaw
-          .whereType<Map<String, dynamic>>()
-          .map(PracticeSectionItem.fromJson)
-          .toList(),
     );
   }
 
+  final String code;
+  final String name;
+
+  /// The certificate's own word for a section ("Part", "Section", ...).
   final String sectionNoun;
-  final UnfinishedPracticeSession? unfinishedSession;
-  final List<PracticeSectionItem> sections;
 }
 
+/// `PracticeCatalogDto`: the catalogue arrives grouped by modality; this keeps
+/// the groups and derives one ordered by-skill list for display.
+class PracticeCatalog {
+  const PracticeCatalog({
+    this.certificate,
+    this.listeningSections = const [],
+    this.readingSections = const [],
+    this.otherSections = const [],
+    this.speakingSections = const [],
+    this.weakestSection,
+    this.unfinishedSession,
+    this.speakingPracticeExamId,
+  });
+
+  factory PracticeCatalog.fromJson(Map<String, dynamic> json) {
+    final cert = json['certificate'];
+    final weakest = json['weakestSection'];
+    final unfinished = json['unfinishedSession'];
+    List<PracticeSection> parse(Object? raw) =>
+        (raw as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(PracticeSection.fromJson)
+            .toList();
+
+    return PracticeCatalog(
+      certificate: cert is Map<String, dynamic>
+          ? PracticeCertificate.fromJson(cert)
+          : null,
+      listeningSections: parse(json['listeningSections']),
+      readingSections: parse(json['readingSections']),
+      otherSections: parse(json['otherSections']),
+      speakingSections: parse(json['speakingSections']),
+      weakestSection:
+          weakest is Map<String, dynamic> ? PracticeSection.fromJson(weakest) : null,
+      unfinishedSession: unfinished is Map<String, dynamic>
+          ? UnfinishedPracticeSession.fromJson(unfinished)
+          : null,
+      speakingPracticeExamId: (json['speakingPracticeExamId'] as num?)?.toInt(),
+    );
+  }
+
+  final PracticeCertificate? certificate;
+  final List<PracticeSection> listeningSections;
+  final List<PracticeSection> readingSections;
+  final List<PracticeSection> otherSections;
+  final List<PracticeSection> speakingSections;
+  final PracticeSection? weakestSection;
+  final UnfinishedPracticeSession? unfinishedSession;
+  final int? speakingPracticeExamId;
+
+  /// The certificate's own section noun, never the app's invention.
+  String get sectionNoun => certificate?.sectionNoun ?? 'Section';
+
+  /// Sections grouped by skill, in catalogue order (listening, reading,
+  /// other, speaking).
+  List<PracticeSkillGroup> get skillGroups {
+    final groups = <PracticeSkillGroup>[];
+    for (final list in [
+      listeningSections,
+      readingSections,
+      otherSections,
+      speakingSections,
+    ]) {
+      for (final section in list) {
+        final existing = groups.indexWhere(
+          (g) => g.skillCode == section.skillCode,
+        );
+        if (existing >= 0) {
+          groups[existing].sections.add(section);
+        } else {
+          groups.add(
+            PracticeSkillGroup(
+              skillCode: section.skillCode,
+              skillName: section.skillName,
+              sections: [section],
+              isSpeaking: section.isSpeaking,
+            ),
+          );
+        }
+      }
+    }
+    return groups;
+  }
+}
+
+/// `PracticeCellMasteryDto`: the wire carries the enum's integer (no string
+/// converter), so `0..3` maps to untested/learning/reviewing/mastered.
+enum PracticeMastery {
+  untested('NEW'),
+  learning('LEARN'),
+  reviewing('REVIEW'),
+  mastered('MSTR');
+
+  const PracticeMastery(this.label);
+
+  final String label;
+
+  static PracticeMastery fromWire(Object? value) {
+    final index = (value as num?)?.toInt() ?? 0;
+    return index >= 0 && index < values.length ? values[index] : untested;
+  }
+}
+
+/// One `(topic, level)` cell of `PracticeCellDto`.
 class PracticeMatrixCell {
   const PracticeMatrixCell({
-    required this.cefrLevelCode,
-    required this.questionCount,
-    this.accuracyPercent,
+    required this.topicId,
+    required this.topicCode,
+    required this.topicName,
+    required this.modality,
+    required this.levelCode,
+    required this.mastery,
+    this.isPrioritised = false,
+    this.reopensAt,
+    this.isResting = false,
+    this.isRestingNow = false,
   });
 
   factory PracticeMatrixCell.fromJson(Map<String, dynamic> json) {
     return PracticeMatrixCell(
-      cefrLevelCode: json['cefrLevelCode'] as String? ?? '',
-      questionCount: (json['questionCount'] as num?)?.toInt() ?? 0,
-      accuracyPercent: (json['accuracyPercent'] as num?)?.toInt(),
+      topicId: (json['topicId'] as num?)?.toInt() ?? 0,
+      topicCode: json['topicCode'] as String? ?? '',
+      topicName: json['topicName'] as String? ?? '',
+      modality: json['modality'] as String? ?? '',
+      levelCode: json['levelCode'] as String? ?? '',
+      mastery: PracticeMastery.fromWire(json['mastery']),
+      isPrioritised: json['isPrioritised'] as bool? ?? false,
+      reopensAt: json['reopensAt'] as String?,
+      isResting: json['isResting'] as bool? ?? false,
+      // `isRestingNow` is a computed getter that does appear on the wire; fall
+      // back to the stored pair when a consumer omits it.
+      isRestingNow: json['isRestingNow'] as bool? ??
+          ((json['isResting'] as bool? ?? false) &&
+              json['reopensAt'] != null),
     );
   }
 
-  final String cefrLevelCode;
-  final int questionCount;
-  final int? accuracyPercent;
+  final int topicId;
+  final String topicCode;
+  final String topicName;
+  final String modality;
+  final String levelCode;
+  final PracticeMastery mastery;
+  final bool isPrioritised;
+  final String? reopensAt;
+  final bool isResting;
+  final bool isRestingNow;
 }
 
 class PracticeMatrixTopic {
   const PracticeMatrixTopic({
     required this.topicId,
+    required this.code,
     required this.name,
+    required this.modality,
     required this.cells,
   });
 
-  factory PracticeMatrixTopic.fromJson(Map<String, dynamic> json) {
-    final cellsRaw = json['cells'] as List<dynamic>? ?? const [];
-    return PracticeMatrixTopic(
-      topicId: (json['topicId'] as num?)?.toInt() ?? 0,
-      name: json['name'] as String? ?? '',
-      cells: cellsRaw
-          .whereType<Map<String, dynamic>>()
-          .map(PracticeMatrixCell.fromJson)
-          .toList(),
-    );
-  }
-
   final int topicId;
+  final String code;
   final String name;
+  final String modality;
   final List<PracticeMatrixCell> cells;
+
+  PracticeMatrixCell? cellAt(String levelCode) {
+    for (final cell in cells) {
+      if (cell.levelCode == levelCode) return cell;
+    }
+    return null;
+  }
 }
 
+/// `GET /practice/matrix` is a **bare array** of cells; the grid is the pivot
+/// into topics carrying cells, with level columns derived from the data.
 class PracticeMatrix {
-  const PracticeMatrix({
-    required this.levels,
-    required this.topics,
-  });
+  const PracticeMatrix({required this.levels, required this.topics});
 
-  factory PracticeMatrix.fromJson(Map<String, dynamic> json) {
-    final levelsRaw = json['levels'] as List<dynamic>? ?? const [];
-    final topicsRaw = json['topics'] as List<dynamic>? ?? const [];
-    return PracticeMatrix(
-      levels: levelsRaw.whereType<String>().toList(),
-      topics: topicsRaw
-          .whereType<Map<String, dynamic>>()
-          .map(PracticeMatrixTopic.fromJson)
-          .toList(),
-    );
+  static const _cefrOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+
+  factory PracticeMatrix.parse(List<dynamic> raw) {
+    final cells = raw
+        .whereType<Map<String, dynamic>>()
+        .map(PracticeMatrixCell.fromJson)
+        .toList();
+
+    final topics = <PracticeMatrixTopic>[];
+    for (final cell in cells) {
+      final existing = topics.indexWhere((t) => t.topicId == cell.topicId);
+      if (existing >= 0) {
+        topics[existing].cells.add(cell);
+      } else {
+        topics.add(
+          PracticeMatrixTopic(
+            topicId: cell.topicId,
+            code: cell.topicCode,
+            name: cell.topicName,
+            modality: cell.modality,
+            cells: [cell],
+          ),
+        );
+      }
+    }
+
+    final levels = {for (final c in cells) c.levelCode}.toList()..sort((a, b) {
+        final ai = _cefrOrder.indexOf(a);
+        final bi = _cefrOrder.indexOf(b);
+        if (ai >= 0 && bi >= 0) return ai.compareTo(bi);
+        if (ai >= 0) return -1;
+        if (bi >= 0) return 1;
+        return a.compareTo(b);
+      });
+
+    return PracticeMatrix(levels: levels, topics: topics);
   }
 
   final List<String> levels;
   final List<PracticeMatrixTopic> topics;
+
+  bool get isEmpty => topics.isEmpty || levels.isEmpty;
+}
+
+/// `FreeDrillStateDto`: whether the backend will let this cell start at all.
+class PracticeFreeDrillState {
+  const PracticeFreeDrillState({
+    required this.isUnlocked,
+    this.lockNotice,
+    this.cellUsedToday = false,
+    this.dailyCeilingReached = false,
+    this.answeredToday = 0,
+    this.dailyItemCeiling = 0,
+  });
+
+  factory PracticeFreeDrillState.fromJson(Map<String, dynamic> json) {
+    return PracticeFreeDrillState(
+      isUnlocked: json['isUnlocked'] as bool? ?? false,
+      lockNotice: json['lockNotice'] as String?,
+      cellUsedToday: json['cellUsedToday'] as bool? ?? false,
+      dailyCeilingReached: json['dailyCeilingReached'] as bool? ?? false,
+      answeredToday: (json['answeredToday'] as num?)?.toInt() ?? 0,
+      dailyItemCeiling: (json['dailyItemCeiling'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final bool isUnlocked;
+  final String? lockNotice;
+  final bool cellUsedToday;
+  final bool dailyCeilingReached;
+  final int answeredToday;
+  final int dailyItemCeiling;
+
+  /// The sentence to show for a refusal; never an invented one.
+  String get reason => lockNotice ?? 'This drill is not open right now.';
 }
 
 class PracticeOption {
