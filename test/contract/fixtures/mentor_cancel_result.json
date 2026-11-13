@@ -1,0 +1,6 @@
+{
+  "bookingId": 3,
+  "status": "cancelled",
+  "cancelledAt": "2026-11-13T17:48:05.7227667+00:00",
+  "refundedCredits": 1
+}

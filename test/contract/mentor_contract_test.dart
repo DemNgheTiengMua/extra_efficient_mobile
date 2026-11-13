@@ -142,10 +142,16 @@ void main() {
       expect(done.status, 'done');
       expect(done.rating, 5);
       expect(done.reviewText, contains('listening strategies'));
+      // The review is the nested object, not flat rating/reviewText keys.
+      expect(done.review, isNotNull);
+      expect(done.review!.id, 1);
+      expect(done.review!.userDisplayName, 'Demo Learner');
       // A finished session carries no meeting link.
       expect(done.meetLink, isNull);
       // Already rated, so RATE SESSION must not be offered again.
       expect(done.canRate, isFalse);
+      // Nor is a link offered to a room that has ended.
+      expect(done.canJoinMeet, isFalse);
     });
 
     test('the confirmed booking carries its meet link and slot time', () {
@@ -155,8 +161,54 @@ void main() {
       expect(confirmed.canCancel, isTrue);
       expect(confirmed.canRate, isFalse);
       expect(confirmed.meetLink, startsWith('https://meet.google.com/'));
+      expect(confirmed.canJoinMeet, isTrue);
       expect(confirmed.slotStartsAt, isNotNull);
       expect(confirmed.priceCredits, 1);
+    });
+
+    test('a finished but unrated booking is ratable', () {
+      // `done` is the finished status, and the backend never emits
+      // `completed` - reading the wrong string made rating unreachable.
+      final unratedJson =
+          Map<String, dynamic>.from(
+            (loadFixture('mentor_bookings') as List<dynamic>)[0]
+                as Map<String, dynamic>,
+          )
+            ..['status'] = 'done'
+            ..['review'] = null
+            ..['meetLink'] = null;
+      final unrated = MentorBooking.fromJson(unratedJson);
+
+      expect(unrated.canRate, isTrue);
+      expect(unrated.rating, isNull);
+      expect(unrated.review, isNull);
+      expect(unrated.canJoinMeet, isFalse);
+    });
+  });
+
+  group('POST /api/mentors/bookings/{id}/cancel', () {
+    test('the refund the backend decided is read, not assumed', () {
+      final result = CancelBookingResult.fromJson(
+        loadFixture('mentor_cancel_result') as Map<String, dynamic>,
+      );
+
+      expect(result.bookingId, 3);
+      expect(result.status, 'cancelled');
+      expect(result.refundedCredits, 1);
+      expect(result.cancelledAt, isNotNull);
+    });
+  });
+
+  group('POST /api/mentors/bookings/{id}/rate', () {
+    test('the response is a review, not a booking', () {
+      final review = MentorReview.fromJson(
+        (loadFixture('mentor_bookings') as List<dynamic>)[1]['review']
+            as Map<String, dynamic>,
+      );
+
+      expect(review.id, 1);
+      expect(review.rating, 5);
+      expect(review.text, contains('listening strategies'));
     });
   });
 }
