@@ -1,0 +1,9 @@
+{
+  "stepId": 1,
+  "stepType": "focus_practice",
+  "route": "item_selector",
+  "redirectUrl": "/practice/21",
+  "sessionId": 21,
+  "attemptId": null,
+  "substitutedFromTopicId": null
+}

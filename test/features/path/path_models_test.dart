@@ -137,6 +137,152 @@ void main() {
     expect(body['skillLevels'], isA<Map<String, dynamic>>());
   });
 
+  group('GET /api/learner/learning-path with an active path', () {
+    late LearningPathOverview path;
+
+    setUpAll(() {
+      path = LearningPathOverview.fromJson(learningPathActivePayload());
+    });
+
+    test('hasActivePath is the switch and the bands are real', () {
+      expect(path.hasActivePath, isTrue);
+      expect(path.learnerPathId, isNotNull);
+      expect(path.fromBandCode, 'below_A1');
+      expect(path.toBandCode, 'B2');
+      expect(path.fromBandName, 'Below A1');
+      expect(path.toBandName, 'Upper intermediate');
+      expect(path.targetScore, 785);
+      expect(path.activeCert.code, 'TOEIC');
+    });
+
+    test('remaining time and progress come from the payload, not a zero', () {
+      expect(path.totalSteps, 16);
+      expect(path.remainingMinutes, 720);
+      expect(path.totalEstimatedMinutes, 720);
+      expect(path.completedSteps, 0);
+      expect(path.progressRatio, 0);
+    });
+
+    test('weeks are the plan\'s own, each with its steps and minutes', () {
+      expect(path.weeks, hasLength(4));
+      expect(path.weeks.map((w) => w.weekNumber), [1, 2, 3, 4]);
+
+      final week1 = path.weeks.first;
+      expect(week1.plannedSteps, 4);
+      expect(week1.plannedMinutes, 180);
+      expect(week1.isOnTrack, isFalse);
+      expect(week1.steps, hasLength(4));
+      expect(week1.steps.map((s) => s.stepId), [1, 2, 3, 4]);
+    });
+
+    test('a step carries its sequence, skill, level and exact item count', () {
+      final step = path.openSteps.first;
+
+      expect(step.stepId, 1);
+      expect(step.weekNumber, 1);
+      expect(step.weekSequence, 1);
+      expect(step.stepType, 'focus_practice');
+      expect(step.route, 'item_selector');
+      expect(step.status, 'available');
+      expect(step.skillCode, 'LIST');
+      expect(step.skillName, 'Listening');
+      expect(step.targetCefr, 'A2');
+      expect(step.sizingTier, 'developing');
+      expect(step.plannedItemCount, 10);
+      expect(step.estimatedMinutes, 45);
+      expect(step.targetAccuracyPct, 70);
+      expect(step.canStart, isTrue);
+      expect(step.isLocked, isFalse);
+    });
+
+    test('a not-yet-run step keeps its nulls null', () {
+      final step = path.openSteps.first;
+
+      expect(step.score, isNull);
+      expect(step.actualAccuracyPct, isNull);
+      expect(step.startedAt, isNull);
+      expect(step.completedAt, isNull);
+      expect(step.refLessonId, isNull);
+      expect(step.refExamId, isNull);
+    });
+
+    test('a locked step is unavailable rather than absent', () {
+      final locked = path.openSteps.firstWhere((s) => s.isLocked);
+
+      expect(locked.stepId, 2);
+      expect(locked.canStart, isFalse);
+    });
+
+    test('skillLevels reads each skill\'s own level', () {
+      expect(path.skillLevels, {'LIST': 'A2', 'READ': 'A2'});
+    });
+
+    test('cefrBands mark the current and target rungs', () {
+      final current = path.cefrBands.where((b) => b.isCurrent).single;
+      final target = path.cefrBands.where((b) => b.isTarget).single;
+
+      expect(current.code, 'below_A1');
+      expect(target.code, 'B2');
+      expect(path.cefrBands, hasLength(6));
+    });
+  });
+
+  group('POST /api/learner/learning-path/steps/{id}/start', () {
+    test('carries the server\'s redirect URL and session id', () {
+      final started = StartStepResult.fromJson(startStepResultPayload());
+
+      expect(started.stepId, 1);
+      expect(started.stepType, 'focus_practice');
+      expect(started.route, 'item_selector');
+      expect(started.redirectUrl, '/practice/21');
+      expect(started.sessionId, 21);
+      expect(started.attemptId, isNull);
+      expect(started.isSubstituted, isFalse);
+    });
+  });
+
+  group('GET /api/learner/target-band', () {
+    test('with no goal: the outer target is null and "" is absent', () {
+      final view = TargetBandView.fromJson(targetBandNoGoalPayload());
+
+      expect(view.hasTargetBand, isFalse);
+      expect(view.targetBandCode, isNull);
+      // The live oddity: `goal.targetBandCode` is "" while the outer is null.
+      expect(view.goal!.targetBandCode, isNull);
+      expect(view.currentBandCode, isNull);
+      expect(view.currentTotalScore, isNull);
+    });
+
+    test('offers the certificate\'s own bands with their score ranges', () {
+      final view = TargetBandView.fromJson(targetBandNoGoalPayload());
+
+      expect(view.availableBands, hasLength(6));
+      expect(
+        view.availableBands.map((b) => b.code),
+        ['below_A1', 'A1', 'A2', 'B1', 'B2', 'C1'],
+      );
+
+      final beginner = view.availableBands[1];
+      expect(beginner.name, 'Beginner');
+      expect(beginner.minTotal, 120);
+      expect(beginner.maxTotal, 220);
+      expect(beginner.description, '120 to 220 points');
+      expect(beginner.rangeText, '120 to 220 points');
+    });
+
+    test('with a saved goal: the band, the assessed band and the flags', () {
+      final view = TargetBandView.fromJson(targetBandWithGoalPayload());
+
+      expect(view.hasTargetBand, isTrue);
+      expect(view.targetBandCode, 'B2');
+      expect(view.goal!.currentBandCode, 'below_A1');
+      expect(view.goal!.targetBandCode, 'B2');
+      // A goal with no deadline has no verdict; null is "cannot judge".
+      expect(view.goal!.status, isNull);
+      expect(view.availableBands.where((b) => b.isTarget).single.code, 'B2');
+    });
+  });
+
   test('a tenths-scored certificate divides by scoreDisplayFactor', () {
     final goal = GoalStanding.fromJson({
       'currentBandCode': 'B2',

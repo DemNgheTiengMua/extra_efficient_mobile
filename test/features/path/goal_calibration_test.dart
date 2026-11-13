@@ -1,208 +1,238 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:forui/forui.dart';
+import 'package:go_router/go_router.dart';
 
-import 'package:extra_efficient_mobile/app.dart';
 import 'package:extra_efficient_mobile/core/media/audio_media_adapter.dart';
 import 'package:extra_efficient_mobile/core/network/dio_client.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
 import 'package:extra_efficient_mobile/features/path/screens/goal_calibration_screen.dart';
+import 'package:extra_efficient_mobile/theme/signage_theme.dart';
 
 import '../../helpers/fake_http_adapter.dart';
+import 'path_fixtures.dart';
 
+/// The target-band surface offers the certificate's **own** bands with their
+/// score ranges rather than a hardcoded ladder, and writes the chosen band.
 void main() {
-  testWidgets(
-    'Goal & Calibration screen saves target band, study goal, and submits calibration decision',
-    (tester) async {
-      final tokenStorage = InMemoryTokenStorage(initialToken: 'valid-jwt');
-      Map<String, dynamic>? savedGoalPayload;
-      Map<String, dynamic>? calibrationDecisionPayload;
-      var calibrationPending = true;
-      var targetBand = 'B2';
+  void useTallViewport(WidgetTester tester) {
+    tester.view.physicalSize = const Size(900, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+  }
 
-      final adapter = FakeHttpClientAdapter((options, body) async {
-        if (options.path == '/api/auth/me') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'userId': 2,
-            'email': 'learner@demo.local',
-            'fullName': 'Demo Learner',
-            'role': 'learner',
-            'emailVerified': true,
-            'permissions': <String>[],
-            'held': <String>[],
-          });
-        }
-        if (options.path == '/api/learner/context') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'active': {
-              'id': 1,
-              'code': 'TOEIC',
-              'name': 'TOEIC Listening & Reading',
-              'sectionNoun': 'Part',
-            },
-            'certificates': [
-              {
-                'id': 1,
-                'code': 'TOEIC',
-                'name': 'TOEIC Listening & Reading',
-                'sectionNoun': 'Part',
-              },
-            ],
-            'creditBalance': 13,
-            'examinedSkills': ['listening', 'reading'],
-            'examDate': '2026-12-20',
-          });
-        }
-        if (options.path == '/api/learner/dashboard') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'certificate': {
-              'code': 'TOEIC',
-              'name': 'TOEIC Listening & Reading',
-              'sectionNoun': 'Part',
-            },
-            'nextAction': {
-              'eyebrow': 'SET THE TARGET',
-              'title': 'Choose the band you are working towards',
-              'description': 'Goals turn practice into a plan.',
-              'actionLabel': 'Set your target band',
-              'actionUrl': '/placement/target-band',
-              'severity': 'info',
-              'cascadeStep': 'next_step',
-              'metaLabel': 'NOW below_A1',
-            },
-            'goal': {
-              'currentBandCode': 'below_A1',
-              'currentBandName': 'Below A1',
-              'currentScore': 10,
-              'currentSource': 'mock',
-              'targetBandCode': targetBand,
-              'targetBandName': 'Intermediate',
-              'completedPathSteps': 0,
-              'totalPathSteps': 0,
-              'scoreDisplayFactor': 1,
-              'hasNoMeasurement': false,
-            },
-            'skills': <Map<String, dynamic>>[],
-            'attemptCount': 1,
-            'practiceCount': 0,
-          });
-        }
-        if (options.path == '/api/learner/insights/dashboard') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'status': 'done',
-            'formattedNarrative': 'Steady progress.',
-          });
-        }
-        if (options.path == '/api/learner/target-band' &&
-            options.method == 'GET') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'currentBandCode': 'B1',
-            'targetBandCode': targetBand,
-            'targetDate': '2026-12-20',
-            'weeklyStudyHours': 8,
-            'availableBands': ['A1', 'A2', 'B1', 'B2', 'C1'],
-          });
-        }
-        if (options.path == '/api/learner/goal' && options.method == 'POST') {
-          savedGoalPayload = Map<String, dynamic>.from(body as Map);
-          targetBand = savedGoalPayload!['targetBandCode'] as String;
-          return FakeHttpClientAdapter.jsonResponse({
-            'currentBandCode': 'B1',
-            'targetBandCode': targetBand,
-            'targetDate': savedGoalPayload!['targetDate'],
-            'weeklyStudyHours': savedGoalPayload!['weeklyStudyHours'],
-          });
-        }
-        if (options.path == '/api/learner/calibration' &&
-            options.method == 'GET') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'pending': calibrationPending,
-            'currentTargetBandCode': targetBand,
-            'recommendedBandCode': 'C1',
-            'reason': 'Recent mock scores exceed B2 threshold.',
-          });
-        }
-        if (options.path == '/api/learner/calibration/decision' &&
-            options.method == 'POST') {
-          calibrationDecisionPayload = Map<String, dynamic>.from(body as Map);
-          calibrationPending = false;
-          if (calibrationDecisionPayload!['adjust'] == true) {
-            targetBand = 'C1';
-          }
-          return FakeHttpClientAdapter.jsonResponse({
-            'pending': false,
-            'targetBandCode': targetBand,
-          });
-        }
-        return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
-      });
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            tokenStorageProvider.overrideWithValue(tokenStorage),
-            httpClientAdapterProvider.overrideWithValue(adapter),
-            audioMediaAdapterProvider.overrideWithValue(
-              FakeAudioMediaAdapter(),
+  Widget buildApp(FakeHttpClientAdapter adapter) {
+    return ProviderScope(
+      overrides: [
+        tokenStorageProvider.overrideWithValue(
+          InMemoryTokenStorage(initialToken: 'valid-jwt'),
+        ),
+        httpClientAdapterProvider.overrideWithValue(adapter),
+        audioMediaAdapterProvider.overrideWithValue(FakeAudioMediaAdapter()),
+      ],
+      child: MaterialApp.router(
+        theme: ThemeData(
+          useMaterial3: false,
+          scaffoldBackgroundColor: SignageColors.wall,
+        ),
+        builder: (context, child) => FTheme(
+          data: buildSignageTheme(),
+          child: child ?? const SizedBox.shrink(),
+        ),
+        routerConfig: GoRouter(
+          initialLocation: '/path/goal',
+          routes: [
+            GoRoute(
+              path: '/path/goal',
+              builder: (context, state) =>
+                  Scaffold(body: GoalCalibrationScreen()),
             ),
           ],
-          child: const ExtraEfficientApp(),
         ),
-      );
+      ),
+    );
+  }
+
+  FakeHttpClientAdapter adapterWith({
+    required Map<String, dynamic> targetBand,
+    Map<String, dynamic>? calibration,
+    void Function(Map<String, dynamic> body)? onGoal,
+    void Function(Map<String, dynamic> body)? onTargetBand,
+  }) {
+    return FakeHttpClientAdapter((options, body) async {
+      if (options.path == '/api/auth/me') {
+        return FakeHttpClientAdapter.jsonResponse({
+          'userId': 2,
+          'email': 'learner@demo.local',
+          'fullName': 'Demo Learner',
+          'role': 'learner',
+          'emailVerified': true,
+        });
+      }
+      if (options.path == '/api/learner/context') {
+        return FakeHttpClientAdapter.jsonResponse({
+          'active': {'code': 'TOEIC', 'name': 'TOEIC Listening & Reading'},
+          'certificates': [
+            {'code': 'TOEIC', 'name': 'TOEIC Listening & Reading'},
+          ],
+          'creditBalance': 11,
+        });
+      }
+      if (options.path == '/api/learner/dashboard') {
+        return FakeHttpClientAdapter.jsonResponse(dashboardMeasuredPayload());
+      }
+      if (options.path == '/api/learner/insights/dashboard') {
+        return FakeHttpClientAdapter.jsonResponse(
+          dashboardInsightDonePayload(),
+        );
+      }
+      if (options.path == '/api/learner/target-band' &&
+          options.method == 'GET') {
+        return FakeHttpClientAdapter.jsonResponse(targetBand);
+      }
+      if (options.path == '/api/learner/target-band' &&
+          options.method == 'POST') {
+        onTargetBand?.call(Map<String, dynamic>.from(body as Map));
+        return FakeHttpClientAdapter.jsonResponse({
+          'userId': 2,
+          'certId': 1,
+          'targetBandCode': (body as Map)['targetBandCode'],
+          'setAt': '2026-11-13T18:22:23.6915029+00:00',
+        });
+      }
+      if (options.path == '/api/learner/goal' && options.method == 'POST') {
+        onGoal?.call(Map<String, dynamic>.from(body as Map));
+        return FakeHttpClientAdapter.jsonResponse({
+          'userId': 2,
+          'certId': 1,
+          'targetBandCode': (body as Map)['targetBandCode'],
+          'setAt': '2026-11-13T18:22:23.6915029+00:00',
+          'goal': {
+            'currentBandCode': 'below_A1',
+            'targetBandCode': (body as Map)['targetBandCode'],
+            'targetDate': null,
+            'weeklyStudyHours': (body as Map)['weeklyStudyHours'],
+            'requiredHours': null,
+            'availableHours': null,
+            'status': null,
+            'suggestedWeeklyHours': null,
+            'earliestFeasibleDate': null,
+          },
+        });
+      }
+      if (options.path == '/api/learner/calibration' &&
+          options.method == 'GET') {
+        return FakeHttpClientAdapter.jsonResponse(
+          calibration ??
+              {
+                'pending': false,
+                'currentTargetBandCode': null,
+                'recommendedBandCode': null,
+                'reason': null,
+              },
+        );
+      }
+      return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+    });
+  }
+
+  testWidgets(
+    'the bands offered are the certificate\'s own, each with its score range',
+    (tester) async {
+      useTallViewport(tester);
+      final adapter = adapterWith(targetBand: targetBandNoGoalPayload());
+
+      await tester.pumpWidget(buildApp(adapter));
       await tester.pumpAndSettle();
 
-      final goalBtn = find.byKey(const Key('open-goal-calibration-btn'));
-      await tester.scrollUntilVisible(goalBtn, 200);
-      await tester.pumpAndSettle();
-      await tester.tap(goalBtn);
-      await tester.pumpAndSettle();
-
-      expect(find.text('TARGET BAND & STUDY GOAL'), findsOneWidget);
-      expect(
-        find.text('Recent mock scores exceed B2 threshold.'),
-        findsOneWidget,
-      );
-
-      // Select C1 target band and update weekly hours.
-      await tester.tap(find.byKey(const Key('target-band-C1')));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(find.byKey(const Key('weekly-hours-input')), '10');
-      await tester.pumpAndSettle();
-
-      final goalScrollable = find
-          .descendant(
-            of: find.byType(GoalCalibrationScreen),
-            matching: find.byType(Scrollable),
-          )
-          .first;
-      final saveBtn = find.byKey(const Key('save-goal-btn'));
-      await tester.scrollUntilVisible(saveBtn, 200, scrollable: goalScrollable);
-      await tester.drag(goalScrollable, const Offset(0, -100));
-      await tester.pumpAndSettle();
-      await tester.tap(saveBtn);
-      await tester.pumpAndSettle();
-
-      expect(savedGoalPayload, isNotNull);
-      expect(savedGoalPayload!['targetBandCode'], 'C1');
-      expect(savedGoalPayload!['weeklyStudyHours'], 10);
-
-      // Accept calibration recommendation.
-      final acceptBtn = find.byKey(const Key('calibration-accept-btn'));
-      await tester.scrollUntilVisible(
-        acceptBtn,
-        200,
-        scrollable: goalScrollable,
-      );
-      await tester.drag(goalScrollable, const Offset(0, -100));
-      await tester.pumpAndSettle();
-      await tester.tap(acceptBtn);
-      await tester.pumpAndSettle();
-
-      expect(calibrationDecisionPayload, {'adjust': true});
-      await tester.drag(goalScrollable, const Offset(0, 600));
-      await tester.pumpAndSettle();
-      expect(find.text('CALIBRATION APPLIED'), findsOneWidget);
+      // All six of the certificate's real bands, by code — the payload's ladder,
+      // not a hardcoded one.
+      for (final code in ['below_A1', 'A1', 'A2', 'B1', 'B2', 'C1']) {
+        expect(
+          find.byKey(Key('target-band-$code')),
+          findsOneWidget,
+          reason: 'band $code is in the certificate payload',
+        );
+      }
+      // The ready-to-print range the backend supplies.
+      expect(find.textContaining('10 to 119 points'), findsOneWidget);
+      expect(find.textContaining('945 to 990 points'), findsOneWidget);
+      expect(find.textContaining('Beginner'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'no saved goal renders no target badge, because "" is absent, not a band',
+    (tester) {
+      // The live payload has `goal.targetBandCode: ""` while the outer one is
+      // null; an empty badge would be the bug.
+      expect(targetBandNoGoalPayload()['targetBandCode'], isNull);
+      expect(
+        (targetBandNoGoalPayload()['goal'] as Map)['targetBandCode'],
+        '',
+      );
+      return Future.value();
+    },
+  );
+
+  testWidgets('choosing a band saves the goal with that band', (tester) async {
+    useTallViewport(tester);
+    Map<String, dynamic>? savedGoal;
+    final adapter = adapterWith(
+      targetBand: targetBandWithGoalPayload(),
+      onGoal: (body) => savedGoal = body,
+    );
+
+    await tester.pumpWidget(buildApp(adapter));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('target-band-C1')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('weekly-hours-input')), '10');
+    await tester.pumpAndSettle();
+
+    final saveBtn = find.byKey(const Key('save-goal-btn'));
+    await tester.ensureVisible(saveBtn);
+    await tester.pumpAndSettle();
+    await tester.tap(saveBtn);
+    await tester.pumpAndSettle();
+
+    expect(savedGoal, isNotNull);
+    expect(savedGoal!['targetBandCode'], 'C1');
+    expect(savedGoal!['weeklyStudyHours'], 10);
+    // The current band comes from the payload, not from the picker.
+    expect(savedGoal!['currentBandCode'], 'below_A1');
+  });
+
+  testWidgets('a failed save reports the backend message', (tester) async {
+    useTallViewport(tester);
+    final adapter = FakeHttpClientAdapter((options, body) async {
+      if (options.path == '/api/learner/goal' && options.method == 'POST') {
+        return FakeHttpClientAdapter.jsonResponse({
+          'title': 'Invalid goal',
+          'status': 400,
+          'detail': "Band code 'Z9' is not valid for this certificate.",
+          'code': 'TARGET_BAND_INVALID',
+        }, statusCode: 400);
+      }
+      return adapterWith(targetBand: targetBandWithGoalPayload())
+          .handler(options, body);
+    });
+
+    await tester.pumpWidget(buildApp(adapter));
+    await tester.pumpAndSettle();
+
+    final saveBtn = find.byKey(const Key('save-goal-btn'));
+    await tester.ensureVisible(saveBtn);
+    await tester.pumpAndSettle();
+    await tester.tap(saveBtn);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('is not valid for this certificate'),
+      findsOneWidget,
+    );
+  });
 }

@@ -1,0 +1,134 @@
+{
+  "activeCert": {
+    "code": "TOEIC",
+    "name": "TOEIC Listening & Reading",
+    "sectionNoun": "Part"
+  },
+  "currentBandCode": null,
+  "currentTotalScore": null,
+  "currentBandName": null,
+  "targetBandCode": "B2",
+  "cefrBands": [
+    {
+      "code": "below_A1",
+      "name": "Below A1",
+      "minTotal": 10,
+      "maxTotal": 119,
+      "isReached": false,
+      "isCurrent": false,
+      "isTarget": false
+    },
+    {
+      "code": "A1",
+      "name": "Beginner",
+      "minTotal": 120,
+      "maxTotal": 220,
+      "isReached": false,
+      "isCurrent": false,
+      "isTarget": false
+    },
+    {
+      "code": "A2",
+      "name": "Elementary",
+      "minTotal": 225,
+      "maxTotal": 545,
+      "isReached": false,
+      "isCurrent": false,
+      "isTarget": false
+    },
+    {
+      "code": "B1",
+      "name": "Intermediate",
+      "minTotal": 550,
+      "maxTotal": 780,
+      "isReached": false,
+      "isCurrent": false,
+      "isTarget": false
+    },
+    {
+      "code": "B2",
+      "name": "Upper intermediate",
+      "minTotal": 785,
+      "maxTotal": 940,
+      "isReached": false,
+      "isCurrent": false,
+      "isTarget": true
+    },
+    {
+      "code": "C1",
+      "name": "Advanced",
+      "minTotal": 945,
+      "maxTotal": 990,
+      "isReached": false,
+      "isCurrent": false,
+      "isTarget": false
+    }
+  ],
+  "availableBands": [
+    {
+      "code": "below_A1",
+      "name": "Below A1",
+      "minTotal": 10,
+      "maxTotal": 119,
+      "description": "10 to 119 points",
+      "isCurrent": false,
+      "isTarget": false
+    },
+    {
+      "code": "A1",
+      "name": "Beginner",
+      "minTotal": 120,
+      "maxTotal": 220,
+      "description": "120 to 220 points",
+      "isCurrent": false,
+      "isTarget": false
+    },
+    {
+      "code": "A2",
+      "name": "Elementary",
+      "minTotal": 225,
+      "maxTotal": 545,
+      "description": "225 to 545 points",
+      "isCurrent": false,
+      "isTarget": false
+    },
+    {
+      "code": "B1",
+      "name": "Intermediate",
+      "minTotal": 550,
+      "maxTotal": 780,
+      "description": "550 to 780 points",
+      "isCurrent": false,
+      "isTarget": false
+    },
+    {
+      "code": "B2",
+      "name": "Upper intermediate",
+      "minTotal": 785,
+      "maxTotal": 940,
+      "description": "785 to 940 points",
+      "isCurrent": false,
+      "isTarget": true
+    },
+    {
+      "code": "C1",
+      "name": "Advanced",
+      "minTotal": 945,
+      "maxTotal": 990,
+      "description": "945 to 990 points",
+      "isCurrent": false,
+      "isTarget": false
+    }
+  ],
+  "goal": {
+    "currentBandCode": "below_A1",
+    "targetBandCode": "B2",
+    "targetDate": null,
+    "weeklyStudyHours": null,
+    "requiredHours": null,
+    "availableHours": null,
+    "status": null,
+    "suggestedWeeklyHours": null,
+    "earliestFeasibleDate": null
+  }
+}

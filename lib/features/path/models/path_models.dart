@@ -393,27 +393,106 @@ class AiInsight {
   bool get isDone => status.toLowerCase() == 'done';
 }
 
-class TargetBandGoal {
-  const TargetBandGoal({
+/// One band of the certificate's own ladder (`CefrBandInfoDto`). The ladder is
+/// the certificate's, not a shared six-rung one, so it is fed by the payload.
+class CefrBandInfo {
+  const CefrBandInfo({
+    required this.code,
+    required this.name,
+    required this.minTotal,
+    required this.maxTotal,
+    this.isReached = false,
+    this.isCurrent = false,
+    this.isTarget = false,
+  });
+
+  factory CefrBandInfo.fromJson(Map<String, dynamic> json) {
+    return CefrBandInfo(
+      code: json['code']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      minTotal: _asInt(json['minTotal']) ?? 0,
+      maxTotal: _asInt(json['maxTotal']) ?? 0,
+      isReached: json['isReached'] == true,
+      isCurrent: json['isCurrent'] == true,
+      isTarget: json['isTarget'] == true,
+    );
+  }
+
+  final String code;
+  final String name;
+  final int minTotal;
+  final int maxTotal;
+  final bool isReached;
+  final bool isCurrent;
+  final bool isTarget;
+
+  String get rangeText => '$minTotal to $maxTotal points';
+}
+
+/// One band a goal may aim at (`TargetBandOptionDto`), with the backend's
+/// ready-to-print range and its own current/target flags.
+class TargetBandOption {
+  const TargetBandOption({
+    required this.code,
+    required this.name,
+    required this.minTotal,
+    required this.maxTotal,
+    this.description,
+    this.isCurrent = false,
+    this.isTarget = false,
+  });
+
+  factory TargetBandOption.fromJson(Map<String, dynamic> json) {
+    return TargetBandOption(
+      code: json['code']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      minTotal: _asInt(json['minTotal']) ?? 0,
+      maxTotal: _asInt(json['maxTotal']) ?? 0,
+      description: _asString(json['description']),
+      isCurrent: json['isCurrent'] == true,
+      isTarget: json['isTarget'] == true,
+    );
+  }
+
+  final String code;
+  final String name;
+  final int minTotal;
+  final int maxTotal;
+  final String? description;
+  final bool isCurrent;
+  final bool isTarget;
+
+  String get rangeText =>
+      description ?? '$minTotal to $maxTotal points';
+}
+
+/// The saved goal's verdict (`GoalStatusDto`). `status` is null whenever there
+/// is nothing to answer — no deadline — which is not a refusal.
+class GoalStatus {
+  const GoalStatus({
     this.currentBandCode,
     this.targetBandCode,
     this.targetDate,
     this.weeklyStudyHours,
-    this.availableBands = const ['<A1', 'A1', 'A2', 'B1', 'B2', 'C1'],
+    this.requiredHours,
+    this.availableHours,
+    this.status,
+    this.suggestedWeeklyHours,
+    this.earliestFeasibleDate,
   });
 
-  factory TargetBandGoal.fromJson(Map<String, dynamic> json) {
-    final bandsRaw = json['availableBands'] as List<dynamic>?;
-    final bands = bandsRaw != null && bandsRaw.isNotEmpty
-        ? bandsRaw.map((e) => e.toString()).toList(growable: false)
-        : const ['<A1', 'A1', 'A2', 'B1', 'B2', 'C1'];
-
-    return TargetBandGoal(
-      currentBandCode: json['currentBandCode']?.toString(),
-      targetBandCode: json['targetBandCode']?.toString(),
-      targetDate: json['targetDate']?.toString(),
+  factory GoalStatus.fromJson(Map<String, dynamic> json) {
+    return GoalStatus(
+      currentBandCode: _asString(json['currentBandCode']),
+      // Live, `targetBandCode` is "" while the outer one is null. "" is absent.
+      targetBandCode: _asString(json['targetBandCode']),
+      targetDate: _asString(json['targetDate']),
       weeklyStudyHours: _asNum(json['weeklyStudyHours']),
-      availableBands: bands,
+      requiredHours: _asInt(json['requiredHours']),
+      availableHours: _asNum(json['availableHours']),
+      status: _asString(json['status']),
+      suggestedWeeklyHours: _asInt(json['suggestedWeeklyHours']),
+      earliestFeasibleDate: _asString(json['earliestFeasibleDate']),
     );
   }
 
@@ -421,7 +500,66 @@ class TargetBandGoal {
   final String? targetBandCode;
   final String? targetDate;
   final num? weeklyStudyHours;
-  final List<String> availableBands;
+  final int? requiredHours;
+  final num? availableHours;
+  final String? status;
+  final int? suggestedWeeklyHours;
+  final String? earliestFeasibleDate;
+}
+
+/// `GET /api/learner/target-band` as the envelope it is: the certificate's real
+/// bands (each with its score range) plus whatever goal is already saved.
+class TargetBandView {
+  const TargetBandView({
+    this.activeCert = const DashboardCertificate(),
+    this.currentBandCode,
+    this.currentTotalScore,
+    this.currentBandName,
+    this.targetBandCode,
+    this.cefrBands = const [],
+    this.availableBands = const [],
+    this.goal,
+  });
+
+  factory TargetBandView.fromJson(Map<String, dynamic> json) {
+    final bandsRaw = json['availableBands'] as List<dynamic>? ?? const [];
+    final cefrRaw = json['cefrBands'] as List<dynamic>? ?? const [];
+    final goalRaw = json['goal'];
+    return TargetBandView(
+      activeCert: json['activeCert'] is Map<String, dynamic>
+          ? DashboardCertificate.fromJson(
+              json['activeCert'] as Map<String, dynamic>,
+            )
+          : const DashboardCertificate(),
+      currentBandCode: _asString(json['currentBandCode']),
+      currentTotalScore: _asInt(json['currentTotalScore']),
+      currentBandName: _asString(json['currentBandName']),
+      targetBandCode: _asString(json['targetBandCode']),
+      cefrBands: cefrRaw
+          .whereType<Map<String, dynamic>>()
+          .map(CefrBandInfo.fromJson)
+          .toList(growable: false),
+      availableBands: bandsRaw
+          .whereType<Map<String, dynamic>>()
+          .map(TargetBandOption.fromJson)
+          .toList(growable: false),
+      goal: goalRaw is Map<String, dynamic>
+          ? GoalStatus.fromJson(goalRaw)
+          : null,
+    );
+  }
+
+  final DashboardCertificate activeCert;
+  final String? currentBandCode;
+  final int? currentTotalScore;
+  final String? currentBandName;
+  final String? targetBandCode;
+  final List<CefrBandInfo> cefrBands;
+  final List<TargetBandOption> availableBands;
+  final GoalStatus? goal;
+
+  /// A path can only be generated towards a band that has been chosen.
+  bool get hasTargetBand => targetBandCode != null;
 }
 
 class CalibrationStatus {
@@ -447,104 +585,312 @@ class CalibrationStatus {
   final String? reason;
 }
 
-class PathModuleItem {
-  const PathModuleItem({
+/// `PathStepDto`: one step's coordinate and state, before it starts.
+///
+/// A step belongs to a week, not to a module — the backend retired modules, so
+/// [weekNumber] is what the screen groups by.
+class PathStep {
+  const PathStep({
     required this.stepId,
+    required this.weekNumber,
+    required this.weekSequence,
+    required this.stepType,
+    required this.route,
     required this.title,
-    required this.type,
     required this.status,
+    this.skillCode = '',
+    this.skillName = '',
+    this.modality = '',
+    this.topicCode = '',
+    this.topicName = '',
+    this.targetCefr = '',
+    this.sizingTier = '',
+    this.plannedItemCount,
     this.estimatedMinutes,
-    this.lessonId,
-    this.description,
+    this.score,
+    this.actualAccuracyPct,
+    this.targetAccuracyPct = 0,
+    this.canStart = false,
+    this.startedAt,
+    this.completedAt,
+    this.refLessonId,
+    this.refExamId,
   });
 
-  factory PathModuleItem.fromJson(Map<String, dynamic> json) {
-    return PathModuleItem(
-      stepId: _asInt(json['stepId']) ?? _asInt(json['id']) ?? 0,
-      title: json['title']?.toString() ?? 'Step',
-      type: json['type']?.toString() ?? 'practice',
-      status: json['status']?.toString() ?? 'locked',
+  factory PathStep.fromJson(Map<String, dynamic> json) {
+    return PathStep(
+      stepId: _asInt(json['stepId']) ?? 0,
+      weekNumber: _asInt(json['weekNumber']) ?? 0,
+      weekSequence: _asInt(json['weekSequence']) ?? 0,
+      stepType: json['stepType']?.toString() ?? '',
+      route: json['route']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      skillCode: json['skillCode']?.toString() ?? '',
+      skillName: json['skillName']?.toString() ?? '',
+      modality: json['modality']?.toString() ?? '',
+      topicCode: json['topicCode']?.toString() ?? '',
+      topicName: json['topicName']?.toString() ?? '',
+      targetCefr: json['targetCefr']?.toString() ?? '',
+      sizingTier: json['sizingTier']?.toString() ?? '',
+      plannedItemCount: _asInt(json['plannedItemCount']),
       estimatedMinutes: _asInt(json['estimatedMinutes']),
-      lessonId: _asInt(json['lessonId']),
-      description: json['description']?.toString(),
+      score: _asNum(json['score']),
+      actualAccuracyPct: _asNum(json['actualAccuracyPct']),
+      targetAccuracyPct: _asInt(json['targetAccuracyPct']) ?? 0,
+      canStart: json['canStart'] == true,
+      startedAt: _asString(json['startedAt']),
+      completedAt: _asString(json['completedAt']),
+      refLessonId: _asInt(json['refLessonId']),
+      refExamId: _asInt(json['refExamId']),
     );
   }
 
   final int stepId;
+  final int weekNumber;
+  final int weekSequence;
+  final String stepType;
+  final String route;
   final String title;
-  final String type;
+
+  /// `locked | available | in_progress | done`.
   final String status;
+  final String skillCode;
+  final String skillName;
+  final String modality;
+  final String topicCode;
+  final String topicName;
+  final String targetCefr;
+  final String sizingTier;
+  final int? plannedItemCount;
   final int? estimatedMinutes;
-  final int? lessonId;
-  final String? description;
+  final num? score;
+  final num? actualAccuracyPct;
+  final int targetAccuracyPct;
+  final bool canStart;
+  final String? startedAt;
+  final String? completedAt;
+  final int? refLessonId;
+  final int? refExamId;
 
   bool get isLocked => status.toLowerCase() == 'locked';
+
+  bool get isDone => status.toLowerCase() == 'done';
+
+  String get typeLabel => switch (stepType.toLowerCase()) {
+    'diagnostic_drill' => 'DIAGNOSTIC',
+    'focus_practice' => 'PRACTICE',
+    'review_spaced' => 'REVIEW',
+    'concept_lesson' => 'LESSON',
+    'expanded_remedial' => 'REMEDIAL',
+    'mock_section' => 'MOCK',
+    _ => stepType.toUpperCase(),
+  };
 }
 
-class PathModule {
-  const PathModule({
-    required this.id,
-    required this.title,
-    this.weekNumber,
-    this.estimatedMinutes,
-    this.description,
-    this.isPremiumOnly = false,
-    this.items = const [],
+/// `LearningPathWeekSummaryDto`: a planning week and the backend's On Track
+/// verdict on it.
+class LearningPathWeek {
+  const LearningPathWeek({
+    required this.weekNumber,
+    required this.plannedSteps,
+    required this.completedSteps,
+    required this.plannedMinutes,
+    required this.completedMinutes,
+    this.isOnTrack = false,
+    this.targetAccuracyPct = 0,
+    this.actualAccuracyPct,
+    this.steps = const [],
   });
 
-  factory PathModule.fromJson(Map<String, dynamic> json) {
-    final itemsRaw =
-        json['items'] as List<dynamic>? ??
-        json['steps'] as List<dynamic>? ??
-        const [];
-    return PathModule(
-      id: _asInt(json['id']) ?? 0,
-      title: json['title']?.toString() ?? 'Module',
-      weekNumber: _asInt(json['weekNumber']),
-      estimatedMinutes: _asInt(json['estimatedMinutes']),
-      description: json['description']?.toString(),
-      isPremiumOnly: json['isPremiumOnly'] == true,
-      items: itemsRaw
+  factory LearningPathWeek.fromJson(Map<String, dynamic> json) {
+    final stepsRaw = json['steps'] as List<dynamic>? ?? const [];
+    return LearningPathWeek(
+      weekNumber: _asInt(json['weekNumber']) ?? 0,
+      plannedSteps: _asInt(json['plannedSteps']) ?? 0,
+      completedSteps: _asInt(json['completedSteps']) ?? 0,
+      plannedMinutes: _asInt(json['plannedMinutes']) ?? 0,
+      completedMinutes: _asInt(json['completedMinutes']) ?? 0,
+      isOnTrack: json['isOnTrack'] == true,
+      targetAccuracyPct: _asInt(json['targetAccuracyPct']) ?? 0,
+      actualAccuracyPct: _asNum(json['actualAccuracyPct']),
+      steps: stepsRaw
           .whereType<Map<String, dynamic>>()
-          .map(PathModuleItem.fromJson)
+          .map(PathStep.fromJson)
           .toList(growable: false),
     );
   }
 
-  final int id;
-  final String title;
-  final int? weekNumber;
-  final int? estimatedMinutes;
-  final String? description;
-  final bool isPremiumOnly;
-  final List<PathModuleItem> items;
+  final int weekNumber;
+  final int plannedSteps;
+  final int completedSteps;
+  final int plannedMinutes;
+  final int completedMinutes;
+  final bool isOnTrack;
+  final int targetAccuracyPct;
+  final num? actualAccuracyPct;
+  final List<PathStep> steps;
 }
 
+/// `GET /api/learner/learning-path` as the envelope it is.
+///
+/// [hasActivePath] is the existence switch: when it is false every figure is
+/// zero and every list is empty, so the screen must offer generation rather
+/// than an empty shell of weeks.
 class LearningPathOverview {
   const LearningPathOverview({
-    this.currentBandCode = '<A1',
+    this.hasActivePath = false,
+    this.activeCert = const DashboardCertificate(),
+    this.learnerPathId,
+    this.fromBandCode,
+    this.toBandCode,
+    this.fromBandName,
+    this.toBandName,
+    this.currentBandCode,
+    this.currentScore,
     this.targetBandCode,
+    this.targetScore,
+    this.status,
+    this.startedAt,
+    this.totalSteps = 0,
+    this.completedSteps = 0,
+    this.totalEstimatedMinutes = 0,
     this.remainingMinutes = 0,
-    this.modules = const [],
+    this.cefrBands = const [],
+    this.openSteps = const [],
+    this.nextStepId,
+    this.weeks = const [],
+    this.skillLevels = const {},
   });
 
   factory LearningPathOverview.fromJson(Map<String, dynamic> json) {
-    final modulesRaw = json['modules'] as List<dynamic>? ?? const [];
+    List<PathStep> stepsOf(dynamic raw) => (raw as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(PathStep.fromJson)
+        .toList(growable: false);
+
+    final weeksRaw = json['weeks'] as List<dynamic>? ?? const [];
+    final skillLevelsRaw = json['skillLevels'];
+    final cefrRaw = json['cefrBands'] as List<dynamic>? ?? const [];
+
     return LearningPathOverview(
-      currentBandCode: json['currentBandCode']?.toString() ?? '<A1',
-      targetBandCode: json['targetBandCode']?.toString(),
+      hasActivePath: json['hasActivePath'] == true,
+      activeCert: json['activeCert'] is Map<String, dynamic>
+          ? DashboardCertificate.fromJson(
+              json['activeCert'] as Map<String, dynamic>,
+            )
+          : const DashboardCertificate(),
+      learnerPathId: _asInt(json['learnerPathId']),
+      fromBandCode: _asString(json['fromBandCode']),
+      toBandCode: _asString(json['toBandCode']),
+      fromBandName: _asString(json['fromBandName']),
+      toBandName: _asString(json['toBandName']),
+      currentBandCode: _asString(json['currentBandCode']),
+      currentScore: _asInt(json['currentScore']),
+      targetBandCode: _asString(json['targetBandCode']),
+      targetScore: _asInt(json['targetScore']),
+      status: _asString(json['status']),
+      startedAt: _asString(json['startedAt']),
+      totalSteps: _asInt(json['totalSteps']) ?? 0,
+      completedSteps: _asInt(json['completedSteps']) ?? 0,
+      totalEstimatedMinutes: _asInt(json['totalEstimatedMinutes']) ?? 0,
       remainingMinutes: _asInt(json['remainingMinutes']) ?? 0,
-      modules: modulesRaw
+      cefrBands: cefrRaw
           .whereType<Map<String, dynamic>>()
-          .map(PathModule.fromJson)
+          .map(CefrBandInfo.fromJson)
           .toList(growable: false),
+      openSteps: stepsOf(json['openSteps']),
+      nextStepId: _asInt(json['nextStepId']),
+      weeks: weeksRaw
+          .whereType<Map<String, dynamic>>()
+          .map(LearningPathWeek.fromJson)
+          .toList(growable: false),
+      skillLevels: skillLevelsRaw is Map
+          ? {
+              for (final entry in skillLevelsRaw.entries)
+                entry.key.toString(): entry.value.toString(),
+            }
+          : const {},
     );
   }
 
-  final String currentBandCode;
+  final bool hasActivePath;
+  final DashboardCertificate activeCert;
+  final int? learnerPathId;
+  final String? fromBandCode;
+  final String? toBandCode;
+  final String? fromBandName;
+  final String? toBandName;
+  final String? currentBandCode;
+  final int? currentScore;
   final String? targetBandCode;
+  final int? targetScore;
+  final String? status;
+  final String? startedAt;
+  final int totalSteps;
+  final int completedSteps;
+  final int totalEstimatedMinutes;
   final int remainingMinutes;
-  final List<PathModule> modules;
+  final List<CefrBandInfo> cefrBands;
+  final List<PathStep> openSteps;
+  final int? nextStepId;
+  final List<LearningPathWeek> weeks;
+
+  /// Each skill's own level, as the plan reads it (`LIST: A2`).
+  final Map<String, String> skillLevels;
+
+  double get progressRatio =>
+      totalSteps <= 0 ? 0 : (completedSteps / totalSteps).clamp(0.0, 1.0);
+}
+
+/// `StartStepResultDto`: the surface this step opened. [redirectUrl] is the
+/// server's own app path, so it is followed rather than rebuilt.
+class StartStepResult {
+  const StartStepResult({
+    required this.stepId,
+    required this.stepType,
+    required this.route,
+    required this.redirectUrl,
+    this.sessionId,
+    this.attemptId,
+    this.substitutedFromTopicId,
+  });
+
+  factory StartStepResult.fromJson(Map<String, dynamic> json) {
+    return StartStepResult(
+      stepId: _asInt(json['stepId']) ?? 0,
+      stepType: json['stepType']?.toString() ?? '',
+      route: json['route']?.toString() ?? '',
+      redirectUrl: json['redirectUrl']?.toString() ?? '',
+      sessionId: _asInt(json['sessionId']),
+      attemptId: _asInt(json['attemptId']),
+      substitutedFromTopicId: _asInt(json['substitutedFromTopicId']),
+    );
+  }
+
+  final int stepId;
+  final String stepType;
+  final String route;
+  final String redirectUrl;
+  final int? sessionId;
+  final int? attemptId;
+  final int? substitutedFromTopicId;
+
+  /// A sibling topic supplied the draw, so the screen says so rather than
+  /// silently serving a different topic.
+  bool get isSubstituted => substitutedFromTopicId != null;
+}
+
+/// A step that is not on this learner's active path (`404
+/// LEARNING_PATH_STEP_NOT_FOUND`). Terminal: it is not retryable, because the
+/// step will never be on the path however many times it is asked.
+class PathStepUnavailable implements Exception {
+  const PathStepUnavailable(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 class LessonCard {
