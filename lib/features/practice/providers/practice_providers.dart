@@ -113,43 +113,50 @@ class PracticeRepository {
     return PracticeInsight.fromJson(res.data ?? const <String, dynamic>{});
   }
 
-  Future<int> saveQuestion(int questionId, {String source = 'manual'}) async {
+  /// Saves by whichever address the question actually holds. A question row and
+  /// an item version are two separate id counters on the backend, so sending
+  /// one to the other's route files the wrong thing (or nothing).
+  Future<SavedQuestionResult> saveQuestionAddress({
+    int? questionId,
+    int? itemVersionId,
+    String source = 'manual',
+  }) async {
+    final path = questionId != null
+        ? '/api/learner/saved-questions/questions/$questionId'
+        : itemVersionId != null
+            ? '/api/learner/saved-questions/item-versions/$itemVersionId'
+            : throw StateError('Question carries no address');
     final res = await _dio.post<Map<String, dynamic>>(
-      '/api/learner/saved-questions/questions/$questionId',
+      path,
       data: {'source': source},
     );
-    return (res.data?['savedQuestionId'] as num?)?.toInt() ?? 0;
+    return SavedQuestionResult.fromJson(res.data ?? const <String, dynamic>{});
   }
 
-  Future<void> deleteSavedQuestion(int savedQuestionId) async {
-    await _dio.delete<void>('/api/learner/saved-questions/$savedQuestionId');
+  /// DELETE answers 200 with the same result shape and `isSaved: false`.
+  Future<SavedQuestionResult> deleteSavedQuestion(int savedQuestionId) async {
+    final res = await _dio.delete<Map<String, dynamic>>(
+      '/api/learner/saved-questions/$savedQuestionId',
+    );
+    return SavedQuestionResult.fromJson(res.data ?? const <String, dynamic>{});
   }
 
-  Future<SavedQuestionsResponse> fetchSavedQuestions({
-    int? sectionId,
-    int? categoryId,
-    String? source,
-  }) async {
+  Future<SavedQuestionsResponse> fetchSavedQuestions() async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/learner/saved-questions',
-      queryParameters: {
-        'sectionId': ?sectionId,
-        'categoryId': ?categoryId,
-        'source': ?source,
-      },
     );
     return SavedQuestionsResponse.fromJson(
       res.data ?? const <String, dynamic>{},
     );
   }
 
-  Future<SavedQuestionDetail> fetchSavedQuestionDetail(
+  Future<SavedQuestionItem> fetchSavedQuestionDetail(
     int savedQuestionId,
   ) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/learner/saved-questions/$savedQuestionId',
     );
-    return SavedQuestionDetail.fromJson(
+    return SavedQuestionItem.fromJson(
       res.data ?? const <String, dynamic>{},
     );
   }
@@ -280,20 +287,19 @@ final savedCategoryFilterProvider =
   SavedCategoryFilterNotifier.new,
 );
 
+/// SAVED. The backend builds the two facet lists but applies neither to the
+/// list (`?sectionId=` / `?categoryId=` are ignored by the endpoint), so the
+/// chips narrow the fetched rows here rather than pretending a query did it.
+/// Live both lists are empty, because a pool item is section- and category-free.
 final savedQuestionsProvider =
     FutureProvider.autoDispose<SavedQuestionsResponse>((ref) async {
   ref.watch(certificateScopeVersionProvider);
   final auth = ref.watch(authNotifierProvider);
   if (!auth.isAuthenticated) {
-    return const SavedQuestionsResponse(items: []);
+    return const SavedQuestionsResponse();
   }
-  final sectionId = ref.watch(savedSectionFilterProvider);
-  final categoryId = ref.watch(savedCategoryFilterProvider);
-  return ref.read(practiceRepositoryProvider).fetchSavedQuestions(
-        sectionId: sectionId,
-        categoryId: categoryId,
-      );
-});
+  return ref.read(practiceRepositoryProvider).fetchSavedQuestions();
+}, retry: (count, error) => null);
 
 final weaknessAnalysisProvider =
     FutureProvider.autoDispose<WeaknessAnalysisData>((ref) async {

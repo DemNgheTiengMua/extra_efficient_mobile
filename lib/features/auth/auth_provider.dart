@@ -7,11 +7,14 @@ import '../../core/storage/token_storage.dart';
 import 'auth_models.dart';
 
 /// Extracts a human-readable error message from a [DioException] or fallback.
+///
+/// `detail` is preferred over `title` because the backend puts the actionable
+/// sentence there and a generic surface name in the title.
 String extractApiError(Object error, {String fallback = 'Request failed'}) {
   if (error is DioException) {
     final data = error.response?.data;
     if (data is Map<String, dynamic>) {
-      final msg = data['message'] ?? data['error'] ?? data['title'];
+      final msg = data['message'] ?? data['error'] ?? data['detail'] ?? data['title'];
       if (msg is String && msg.isNotEmpty) {
         return msg;
       }

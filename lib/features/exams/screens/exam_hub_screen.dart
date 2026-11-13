@@ -7,7 +7,9 @@ import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
 import '../../context/learner_context_provider.dart';
 import '../models/mock_exam_models.dart';
+import '../models/placement_models.dart';
 import '../providers/mock_exam_providers.dart';
+import '../providers/placement_providers.dart';
 
 enum _ExamSubTab { mockExams, history }
 
@@ -69,11 +71,11 @@ class _ExamHubScreenState extends ConsumerState<ExamHubScreen> {
         Expanded(
           child: switch (_subTab) {
             _ExamSubTab.mockExams => _MockExamsView(
-                authCodeController: _authCodeController,
-                resumingCode: _resumingCode,
-                resumeError: _resumeError,
-                onResumeWithCode: _resumeWithCode,
-              ),
+              authCodeController: _authCodeController,
+              resumingCode: _resumingCode,
+              resumeError: _resumeError,
+              onResumeWithCode: _resumeWithCode,
+            ),
             _ExamSubTab.history => const _HistoryReviewView(),
           },
         ),
@@ -93,9 +95,7 @@ class _ExamSubTabBar extends StatelessWidget {
     return DecoratedBox(
       decoration: const BoxDecoration(
         color: SignageColors.paper,
-        border: Border(
-          bottom: BorderSide(color: SignageColors.ink, width: 2),
-        ),
+        border: Border(bottom: BorderSide(color: SignageColors.ink, width: 2)),
       ),
       child: Row(
         children: [
@@ -154,40 +154,24 @@ class _MockExamsView extends ConsumerWidget {
     final contextAsync = ref.watch(learnerContextProvider);
     final activeCode = contextAsync.value?.active.code ?? '---';
     final examsAsync = ref.watch(mockExamsProvider);
+    final catalogAsync = ref.watch(placementCatalogProvider);
+    final catalog = catalogAsync.value;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        PlacardPanel(
-          title: 'PLACEMENT ASSESSMENT',
-          trailing: PlacardBadge.info(activeCode),
-          footer: PlacardButton(
-            key: const Key('open-placement-btn'),
-            label: 'OPEN PLACEMENT & PREFLIGHT',
-            onPress: () => context.push('/placement'),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Diagnose your starting Band for $activeCode',
-                style: SignageTypography.condensedSentence(fontSize: 18),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'First placement attempt per certificate is free. Run audio & microphone preflight checks before entering the timed exam room.',
-                style: SignageTypography.body(
-                  fontSize: 14,
-                  color: SignageColors.inkMuted,
-                ),
-              ),
-            ],
-          ),
+        _PlacementPlacard(
+          activeCode: activeCode,
+          catalog: catalog,
+          error: catalogAsync.error,
+          onRetry: () => ref.invalidate(placementCatalogProvider),
         ),
         const SizedBox(height: 16),
         PlacardPanel(
           title: 'MOCK EXAM CATALOG',
-          trailing: PlacardBadge.info(activeCode),
+          trailing: examsAsync.value != null
+              ? PlacardBadge.info('${examsAsync.value!.creditBalance} CREDITS')
+              : PlacardBadge.info(activeCode),
           child: examsAsync.when(
             loading: () => const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
@@ -202,21 +186,20 @@ class _MockExamsView extends ConsumerWidget {
                 onPress: () => ref.invalidate(mockExamsProvider),
               ),
             ),
-            data: (exams) {
-              if (exams.isEmpty) {
+            data: (catalogue) {
+              if (catalogue.exams.isEmpty) {
                 return const StateBlock(
                   stamp: 'EMPTY',
                   title: 'NO MOCK EXAMS AVAILABLE',
-                  description:
-                      'No mock exams are currently published for this certificate.',
+                  description: 'No mock exams are currently published for this certificate.',
                 );
               }
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (var i = 0; i < exams.length; i++) ...[
+                  for (var i = 0; i < catalogue.exams.length; i++) ...[
                     if (i > 0) const SizedBox(height: 12),
-                    _MockExamRow(exam: exams[i]),
+                    _MockExamRow(exam: catalogue.exams[i]),
                   ],
                 ],
               );
@@ -247,8 +230,9 @@ class _MockExamsView extends ConsumerWidget {
               ],
               FTextField(
                 key: const Key('resume-auth-code-input'),
-                control:
-                    FTextFieldControl.managed(controller: authCodeController),
+                control: FTextFieldControl.managed(
+                  controller: authCodeController,
+                ),
                 hint: 'Authorization code (e.g. AUTH-901)',
               ),
               const SizedBox(height: 10),
@@ -265,6 +249,105 @@ class _MockExamsView extends ConsumerWidget {
   }
 }
 
+/// The placement placard: offers the way back into an unfinished sitting and
+/// the way into a new one, both read from the catalogue envelope.
+class _PlacementPlacard extends StatelessWidget {
+  const _PlacementPlacard({
+    required this.activeCode,
+    required this.catalog,
+    required this.error,
+    required this.onRetry,
+  });
+
+  final String activeCode;
+  final PlacementCatalog? catalog;
+  final Object? error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final catalog = this.catalog;
+    if (catalog == null) {
+      return PlacardPanel(
+        title: 'PLACEMENT ASSESSMENT',
+        trailing: PlacardBadge.info(activeCode),
+        child: error != null
+            ? StateBlock(
+                stamp: 'ERROR',
+                title: 'UNABLE TO LOAD PLACEMENT',
+                description: error.toString(),
+                action: PlacardButton(label: 'RETRY', onPress: onRetry),
+              )
+            : const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: FCircularProgress()),
+              ),
+      );
+    }
+
+    final exam = catalog.exams.isEmpty ? null : catalog.exams.first;
+    final activePlacementId = catalog.activePlacementId;
+
+    return PlacardPanel(
+      title: 'PLACEMENT ASSESSMENT',
+      trailing: catalog.isRetake
+          ? const PlacardBadge.warning('PAID RETAKE')
+          : const PlacardBadge.success('FREE FIRST PLACEMENT'),
+      footer: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (activePlacementId != null) ...[
+            PlacardButton(
+              key: const Key('resume-placement-btn'),
+              label: 'RESUME PLACEMENT',
+              onPress: () =>
+                  context.push('/placement/take/$activePlacementId?resume=1'),
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (exam != null)
+            PlacardButton(
+              key: const Key('start-placement-hub-btn'),
+              label: catalog.isRetake
+                  ? 'PLACEMENT RETAKE'
+                  : 'START FREE PLACEMENT',
+              variant: activePlacementId != null
+                  ? PlacardButtonVariant.secondary
+                  : PlacardButtonVariant.primary,
+              onPress: () => context.push('/placement'),
+            ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (activePlacementId != null) ...[
+            Text(
+              'ATTEMPT $activePlacementId IS UNFINISHED',
+              style: SignageTypography.label(fontSize: 12),
+            ),
+            const SizedBox(height: 6),
+          ],
+          Text(
+            exam?.name ?? 'NO PLACEMENT EXAM AVAILABLE',
+            style: SignageTypography.condensedSentence(fontSize: 18),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            exam == null
+                ? 'No placement exam is published for $activeCode. Switch certificate in ACCOUNT to take a placement test.'
+                : '${exam.durationMinutes} MIN · ${exam.questionCount} QUESTIONS · Diagnose your starting Band for $activeCode',
+            style: SignageTypography.body(
+              fontSize: 14,
+              color: SignageColors.inkMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MockExamRow extends StatelessWidget {
   const _MockExamRow({required this.exam});
 
@@ -272,6 +355,12 @@ class _MockExamRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final title = exam.name.isEmpty ? 'Mock Exam ${exam.examId}' : exam.name;
+    final facts = [
+      '${exam.durationMinutes} MIN',
+      if (exam.questionCount != null) '${exam.questionCount} QUESTIONS',
+    ].join(' · ');
+
     return DecoratedBox(
       decoration: BoxDecoration(
         color: SignageColors.paper,
@@ -286,29 +375,40 @@ class _MockExamRow extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    exam.title,
+                    title,
                     style: SignageTypography.condensedSentence(fontSize: 16),
                   ),
                 ),
-                PlacardBadge.info('${exam.credits} CREDITS'),
+                PlacardBadge.info('${exam.creditCost} CREDITS'),
               ],
             ),
             const SizedBox(height: 6),
             Text(
-              '${exam.durationMinutes} MIN · ${exam.questionCount} QUESTIONS',
+              facts,
               style: SignageTypography.data(
                 fontSize: 12,
                 color: SignageColors.inkMuted,
               ),
             ),
+            if (exam.completedAttemptScore != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                'LAST: ${exam.completedAttemptScore} · '
+                'BAND ${exam.completedAttemptBand ?? '-'}',
+                style: SignageTypography.data(
+                  fontSize: 12,
+                  color: SignageColors.inkMuted,
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
-            if (exam.inProgressAttemptId != null)
+            if (exam.activeAttemptId != null)
               PlacardButton(
                 key: Key('resume-mock-exam-${exam.examId}'),
                 label: 'RESUME IN-PROGRESS',
                 variant: PlacardButtonVariant.secondary,
-                onPress: () => context
-                    .push('/exams/attempts/${exam.inProgressAttemptId}'),
+                onPress: () =>
+                    context.push('/exams/attempts/${exam.activeAttemptId}'),
               )
             else
               PlacardButton(
@@ -345,86 +445,129 @@ class _HistoryReviewView extends ConsumerWidget {
           ),
         ),
       ),
-      data: (attempts) {
+      data: (history) {
+        final attempts = history.attempts;
         if (attempts.isEmpty) {
           return const Padding(
             padding: EdgeInsets.all(16),
             child: StateBlock(
               stamp: 'EMPTY',
               title: 'NO ATTEMPTS YET',
-              description:
-                  'Complete a mock attempt to view your score placard and answer review here.',
+              description: 'Complete a mock attempt to view your score placard and answer review here.',
             ),
           );
         }
-        return ListView.separated(
+        return ListView(
           padding: const EdgeInsets.all(16),
-          itemCount: attempts.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            final item = attempts[index];
-            return PlacardPanel(
-              title: item.examTitle,
-              trailing: item.overallBand != null
-                  ? PlacardBadge.info(item.overallBand!)
-                  : PlacardBadge.muted(item.status),
-              footer: Row(
-                children: [
-                  if (item.isInProgress)
-                    Expanded(
-                      child: PlacardButton(
-                        key: Key('history-resume-${item.attemptId}'),
-                        label: 'RESUME',
-                        onPress: () =>
-                            context.push('/exams/attempts/${item.attemptId}'),
-                      ),
-                    )
-                  else ...[
-                    Expanded(
-                      child: PlacardButton(
-                        key: Key('history-result-${item.attemptId}'),
-                        label: 'RESULT',
-                        variant: PlacardButtonVariant.secondary,
-                        onPress: () => context
-                            .push('/exams/attempts/${item.attemptId}/result'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: PlacardButton(
-                        key: Key('history-review-${item.attemptId}'),
-                        label: 'REVIEW',
-                        onPress: () => context
-                            .push('/exams/attempts/${item.attemptId}/review'),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    item.status,
-                    style: SignageTypography.label(
-                      fontSize: 12,
-                      color: SignageColors.inkMuted,
-                    ),
-                  ),
-                  if (item.totalScaledScore != null)
+          children: [
+            if (history.bestScore != null)
+              PlacardPanel(
+                title: 'RECORD',
+                trailing: history.bestBandCode == null
+                    ? PlacardBadge.muted('NOT BANDED')
+                    : PlacardBadge.info(history.bestBandCode!),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
                     Text(
-                      '${item.totalScaledScore}',
+                      '${history.totalAttempts} ATTEMPTS',
+                      style: SignageTypography.label(fontSize: 12),
+                    ),
+                    Text(
+                      'BEST ${history.bestScore} · AVG ${history.averageScore ?? '-'}',
                       style: SignageTypography.data(
-                        fontSize: 22,
+                        fontSize: 13,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
-            );
-          },
+            if (history.bestScore != null) const SizedBox(height: 12),
+            for (var i = 0; i < attempts.length; i++) ...[
+              if (i > 0) const SizedBox(height: 12),
+              _HistoryRow(item: attempts[i]),
+            ],
+          ],
         );
       },
+    );
+  }
+}
+
+class _HistoryRow extends StatelessWidget {
+  const _HistoryRow({required this.item});
+
+  final ExamHistoryItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = item.examName.isEmpty
+        ? 'Attempt ${item.attemptId}'
+        : item.examName;
+
+    final bandText = item.status.isUnfinished
+        ? 'AWAITING SUBMISSION'
+        : item.bandLabel;
+
+    return PlacardPanel(
+      title: title,
+      trailing: item.status.isUnfinished
+          ? PlacardBadge.warning(item.status.label)
+          : PlacardBadge.info(item.bandLabel),
+      footer: Row(
+        children: [
+          if (item.status.isUnfinished)
+            Expanded(
+              child: PlacardButton(
+                key: Key('history-resume-${item.attemptId}'),
+                label: 'RESUME',
+                onPress: () =>
+                    context.push('/exams/attempts/${item.attemptId}'),
+              ),
+            )
+          else ...[
+            Expanded(
+              child: PlacardButton(
+                key: Key('history-result-${item.attemptId}'),
+                label: 'RESULT',
+                variant: PlacardButtonVariant.secondary,
+                onPress: () =>
+                    context.push('/exams/attempts/${item.attemptId}/result'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: PlacardButton(
+                key: Key('history-review-${item.attemptId}'),
+                label: 'REVIEW',
+                onPress: () =>
+                    context.push('/exams/attempts/${item.attemptId}/review'),
+              ),
+            ),
+          ],
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            bandText,
+            style: SignageTypography.label(
+              fontSize: 12,
+              color: SignageColors.inkMuted,
+            ),
+          ),
+          if (!item.status.isUnfinished)
+            Text(
+              '${item.totalScore}',
+              style: SignageTypography.data(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

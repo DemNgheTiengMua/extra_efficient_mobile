@@ -451,13 +451,14 @@ class PracticeQuestion {
     this.wordFloor,
     this.requiredKeywords = const [],
     this.savedQuestionId,
+    this.itemVersionId,
   });
 
   factory PracticeQuestion.fromJson(Map<String, dynamic> json) {
     final optionsRaw = json['options'] as List<dynamic>? ?? const [];
     final kwRaw = json['requiredKeywords'] as List<dynamic>? ?? const [];
     return PracticeQuestion(
-      questionId: (json['questionId'] as num?)?.toInt() ?? 0,
+      questionId: (json['questionId'] as num?)?.toInt(),
       displayOrder: (json['displayOrder'] as num?)?.toInt() ?? 0,
       questionType: (json['questionType'] as String? ?? 'mcq').toLowerCase(),
       stem: json['stem'] as String? ?? '',
@@ -472,10 +473,12 @@ class PracticeQuestion {
       wordFloor: (json['wordFloor'] as num?)?.toInt(),
       requiredKeywords: kwRaw.whereType<String>().toList(),
       savedQuestionId: (json['savedQuestionId'] as num?)?.toInt(),
+      itemVersionId: (json['itemVersionId'] as num?)?.toInt(),
     );
   }
 
-  final int questionId;
+  /// Null for a pool item, which is addressed by [itemVersionId].
+  final int? questionId;
   final int displayOrder;
   final String questionType;
   final String stem;
@@ -487,6 +490,11 @@ class PracticeQuestion {
   final int? wordFloor;
   final List<String> requiredKeywords;
   final int? savedQuestionId;
+  final int? itemVersionId;
+
+  /// The backend's own handle: the row id when there is one, else the pinned
+  /// item version. Use this to name a question in any request.
+  int? get address => questionId ?? itemVersionId;
 
   bool get isWriting => questionType == 'writing' || wordFloor != null;
 }
@@ -628,86 +636,175 @@ class PracticeInsight {
   final String? errorMessage;
 }
 
+/// One filter facet from `SavedQuestionsViewDto.Sections` / `.Categories`.
 class SavedFilterOption {
-  const SavedFilterOption({required this.id, required this.label});
+  const SavedFilterOption({
+    required this.id,
+    required this.code,
+    required this.label,
+    required this.count,
+  });
 
   final int id;
+  final String code;
   final String label;
+  final int count;
 }
 
+/// One bookmark (`SavedQuestionItemDto`). The list and GET-one return the same
+/// shape, so there is one model for both.
 class SavedQuestionItem {
   const SavedQuestionItem({
     required this.savedQuestionId,
     required this.questionId,
-    this.sectionId,
-    this.sectionTitle,
-    this.categoryId,
-    this.categoryName,
+    required this.itemId,
+    required this.itemVersionId,
+    required this.isRetiredDefective,
     required this.source,
+    required this.savedAt,
+    required this.sectionId,
+    required this.sectionCode,
+    required this.sectionName,
+    required this.topicCode,
+    required this.topicName,
+    required this.categoryId,
+    required this.categoryName,
     required this.stem,
+    required this.passage,
+    required this.imagePath,
+    required this.audioPath,
+    required this.hint,
+    required this.explanation,
+    required this.transcript,
+    required this.scopeCode,
+    required this.scopeName,
+    this.options = const [],
   });
 
   factory SavedQuestionItem.fromJson(Map<String, dynamic> json) {
+    final optRaw = json['options'] as List<dynamic>? ?? const [];
     return SavedQuestionItem(
       savedQuestionId: (json['savedQuestionId'] as num?)?.toInt() ?? 0,
-      questionId: (json['questionId'] as num?)?.toInt() ?? 0,
+      questionId: (json['questionId'] as num?)?.toInt(),
+      itemId: (json['itemId'] as num?)?.toInt(),
+      itemVersionId: (json['itemVersionId'] as num?)?.toInt(),
+      isRetiredDefective: json['isRetiredDefective'] as bool? ?? false,
+      source: json['source'] as String? ?? 'manual',
+      savedAt: DateTime.tryParse(json['savedAt'] as String? ?? ''),
       sectionId: (json['sectionId'] as num?)?.toInt(),
-      sectionTitle: json['sectionTitle'] as String?,
+      sectionCode: json['sectionCode'] as String?,
+      sectionName: json['sectionName'] as String?,
+      topicCode: json['topicCode'] as String?,
+      topicName: json['topicName'] as String?,
       categoryId: (json['categoryId'] as num?)?.toInt(),
       categoryName: json['categoryName'] as String?,
-      source: json['source'] as String? ?? 'manual',
       stem: json['stem'] as String? ?? '',
+      passage: json['passage'] as String?,
+      imagePath: json['imagePath'] as String?,
+      audioPath: json['audioPath'] as String?,
+      hint: json['hint'] as String?,
+      explanation: json['explanation'] as String?,
+      transcript: json['transcript'] as String?,
+      // Derived on the server: a pool item has no section, only a topic.
+      scopeCode: json['scopeCode'] as String? ??
+          json['sectionCode'] as String? ??
+          json['topicCode'] as String? ??
+          '',
+      scopeName: json['scopeName'] as String? ??
+          json['sectionName'] as String? ??
+          json['topicName'] as String? ??
+          '',
+      options: optRaw
+          .whereType<Map<String, dynamic>>()
+          .map(SavedQuestionOption.fromJson)
+          .toList(),
     );
   }
 
+  /// The row's own address — always present, and what GET-one/DELETE take.
   final int savedQuestionId;
-  final int questionId;
+
+  /// Null for a pool item, which is addressed by [itemVersionId] instead.
+  final int? questionId;
+  final int? itemId;
+  final int? itemVersionId;
+  final bool isRetiredDefective;
+  final String source;
+  final DateTime? savedAt;
   final int? sectionId;
-  final String? sectionTitle;
+  final String? sectionCode;
+  final String? sectionName;
+  final String? topicCode;
+  final String? topicName;
   final int? categoryId;
   final String? categoryName;
-  final String source;
   final String stem;
+  final String? passage;
+  final String? imagePath;
+  final String? audioPath;
+  final String? hint;
+  final String? explanation;
+  final String? transcript;
+  final String scopeCode;
+  final String scopeName;
+  final List<SavedQuestionOption> options;
+
+  bool get isPoolItem => questionId == null && itemVersionId != null;
 }
 
 class SavedQuestionsResponse {
   const SavedQuestionsResponse({
-    required this.items,
+    this.items = const [],
+    this.sectionNoun = 'Section',
+    this.totalSavedCount = 0,
+    this.manualSavedCount = 0,
+    this.incorrectSavedCount = 0,
     this.sections = const [],
     this.categories = const [],
   });
 
   factory SavedQuestionsResponse.fromJson(Map<String, dynamic> json) {
-    final itemsRaw = json['items'] as List<dynamic>? ?? const [];
+    final itemsRaw = json['questions'] as List<dynamic>? ?? const [];
     final sectionsRaw = json['sections'] as List<dynamic>? ?? const [];
     final categoriesRaw = json['categories'] as List<dynamic>? ?? const [];
+    final cert = json['certificate'];
     return SavedQuestionsResponse(
       items: itemsRaw
           .whereType<Map<String, dynamic>>()
           .map(SavedQuestionItem.fromJson)
           .toList(),
-      sections: sectionsRaw
-          .whereType<Map<String, dynamic>>()
-          .map(
-            (e) => SavedFilterOption(
-              id: (e['sectionId'] as num?)?.toInt() ?? 0,
-              label: e['title'] as String? ?? '',
-            ),
-          )
-          .toList(),
-      categories: categoriesRaw
-          .whereType<Map<String, dynamic>>()
-          .map(
-            (e) => SavedFilterOption(
-              id: (e['categoryId'] as num?)?.toInt() ?? 0,
-              label: e['name'] as String? ?? '',
-            ),
-          )
-          .toList(),
+      sectionNoun: (cert is Map<String, dynamic>
+              ? cert['sectionNoun'] as String?
+              : null) ??
+          'Section',
+      totalSavedCount: (json['totalSavedCount'] as num?)?.toInt() ?? 0,
+      manualSavedCount: (json['manualSavedCount'] as num?)?.toInt() ?? 0,
+      incorrectSavedCount:
+          (json['incorrectSavedCount'] as num?)?.toInt() ?? 0,
+      sections: sectionsRaw.whereType<Map<String, dynamic>>().map((e) {
+        return SavedFilterOption(
+          id: (e['sectionId'] as num?)?.toInt() ?? 0,
+          code: e['code'] as String? ?? '',
+          label: e['name'] as String? ?? '',
+          count: (e['count'] as num?)?.toInt() ?? 0,
+        );
+      }).toList(),
+      categories: categoriesRaw.whereType<Map<String, dynamic>>().map((e) {
+        return SavedFilterOption(
+          id: (e['categoryId'] as num?)?.toInt() ?? 0,
+          code: '',
+          label: e['name'] as String? ?? '',
+          count: (e['count'] as num?)?.toInt() ?? 0,
+        );
+      }).toList(),
     );
   }
 
   final List<SavedQuestionItem> items;
+  final String sectionNoun;
+  final int totalSavedCount;
+  final int manualSavedCount;
+  final int incorrectSavedCount;
   final List<SavedFilterOption> sections;
   final List<SavedFilterOption> categories;
 }
@@ -735,43 +832,29 @@ class SavedQuestionOption {
   final bool isCorrect;
 }
 
-class SavedQuestionDetail {
-  const SavedQuestionDetail({
-    required this.savedQuestionId,
-    required this.stem,
-    this.generalExplanation,
-    this.transcript,
-    this.audioUrl,
-    this.clipStartMs,
-    this.clipEndMs,
-    this.options = const [],
+/// `SaveQuestionResultDto` — the answer to both save routes and to DELETE
+/// (which also answers 200, with `isSaved: false`).
+class SavedQuestionResult {
+  const SavedQuestionResult({
+    required this.isSaved,
+    this.source,
+    this.savedAt,
+    this.savedQuestionId,
   });
 
-  factory SavedQuestionDetail.fromJson(Map<String, dynamic> json) {
-    final optRaw = json['options'] as List<dynamic>? ?? const [];
-    return SavedQuestionDetail(
-      savedQuestionId: (json['savedQuestionId'] as num?)?.toInt() ?? 0,
-      stem: json['stem'] as String? ?? '',
-      generalExplanation: json['generalExplanation'] as String?,
-      transcript: json['transcript'] as String?,
-      audioUrl: json['audioUrl'] as String?,
-      clipStartMs: (json['clipStartMs'] as num?)?.toInt(),
-      clipEndMs: (json['clipEndMs'] as num?)?.toInt(),
-      options: optRaw
-          .whereType<Map<String, dynamic>>()
-          .map(SavedQuestionOption.fromJson)
-          .toList(),
+  factory SavedQuestionResult.fromJson(Map<String, dynamic> json) {
+    return SavedQuestionResult(
+      isSaved: json['isSaved'] as bool? ?? false,
+      source: json['source'] as String?,
+      savedAt: DateTime.tryParse(json['savedAt'] as String? ?? ''),
+      savedQuestionId: (json['savedQuestionId'] as num?)?.toInt(),
     );
   }
 
-  final int savedQuestionId;
-  final String stem;
-  final String? generalExplanation;
-  final String? transcript;
-  final String? audioUrl;
-  final int? clipStartMs;
-  final int? clipEndMs;
-  final List<SavedQuestionOption> options;
+  final bool isSaved;
+  final String? source;
+  final DateTime? savedAt;
+  final int? savedQuestionId;
 }
 
 /// One row of `WeaknessAnalysisDto.Sections` (`SectionAccuracyDto`).
