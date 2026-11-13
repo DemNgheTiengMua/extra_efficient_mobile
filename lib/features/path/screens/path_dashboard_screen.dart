@@ -324,6 +324,13 @@ class _UnfinishedAttemptCard extends StatelessWidget {
 
   final UnfinishedAttemptSummary attempt;
 
+  /// Every door leads to the same device gate. A placement is addressed by
+  /// `placementId` — which the dashboard does not carry — so it goes to the
+  /// placement sheet, whose RESUME opens the gate with the right id.
+  String get _route => attempt.purpose == 'placement'
+      ? '/placement'
+      : '/exams/attempts/${attempt.attemptId}/preflight';
+
   @override
   Widget build(BuildContext context) {
     return PlacardPanel(
@@ -348,9 +355,10 @@ class _UnfinishedAttemptCard extends StatelessWidget {
           ],
           const SizedBox(height: 10),
           PlacardButton(
+            key: const Key('resume-unfinished-attempt-btn'),
             label: 'RESUME ATTEMPT',
             variant: PlacardButtonVariant.secondary,
-            onPress: () => context.go('/exams'),
+            onPress: () => context.go(_route),
           ),
         ],
       ),

@@ -8,24 +8,21 @@ import 'package:go_router/go_router.dart';
 import '../../../core/media/audio_media_adapter.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../models/exam_room_stop.dart';
 import '../models/placement_models.dart';
 import '../providers/placement_exam_controller.dart';
 import '../providers/placement_providers.dart';
 import '../widgets/answer_navigator_sheet.dart';
 import '../widgets/exam_room_helpers.dart';
+import '../widgets/exam_room_states.dart';
 
 /// Full-screen portrait Exam Room for a Placement attempt.
 /// Hides bottom navigation and displays server-authoritative countdown,
 /// ~400ms debounced autosave status, GRID navigator trigger, and SUBMIT.
 class PlacementExamRoomScreen extends ConsumerStatefulWidget {
-  const PlacementExamRoomScreen({
-    super.key,
-    required this.placementId,
-    this.resume = false,
-  });
+  const PlacementExamRoomScreen({super.key, required this.placementId});
 
   final int placementId;
-  final bool resume;
 
   @override
   ConsumerState<PlacementExamRoomScreen> createState() =>
@@ -51,7 +48,6 @@ class _PlacementExamRoomScreenState
       placementId: widget.placementId,
       repository: ref.read(placementRepositoryProvider),
       audioAdapter: ref.read(audioMediaAdapterProvider),
-      resume: widget.resume,
       onSubmitted: () {
         if (!mounted) return;
         context.go('/placement/result/${widget.placementId}');
@@ -62,7 +58,16 @@ class _PlacementExamRoomScreenState
 
   void _onControllerChanged() {
     if (!mounted) return;
-    final q = _controller.state.currentQuestion;
+    final state = _controller.state;
+    if (state.needsPreflight) {
+      // This door cannot open the sitting: the shared device gate owns entry.
+      // `go` keeps it single-entry, so no back-stack loop can form.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.go('/placement/take/${widget.placementId}/preflight');
+      });
+    }
+    final q = state.currentQuestion;
     if (q != null && q.skill == 'writing' && _writingQuestionId != q.questionId) {
       _writingQuestionId = q.questionId;
       _writingController.text = q.responseText ?? '';
@@ -98,7 +103,6 @@ class _PlacementExamRoomScreenState
   }
 
   Future<void> _confirmAbandon() async {
-    final router = GoRouter.of(context);
     final confirmed = await showExamConfirmDialog(
       context: context,
       title: 'ABANDON ATTEMPT',
@@ -108,11 +112,27 @@ class _PlacementExamRoomScreenState
       confirmVariant: PlacardButtonVariant.destructive,
       cancelLabel: 'KEEP WORKING',
     );
-    if (confirmed && mounted) {
-      await _controller.abandon();
-      if (mounted) {
-        router.go('/exams');
-      }
+    if (!confirmed || !mounted) return;
+    final router = GoRouter.of(context);
+    final ok = await _controller.abandon();
+    if (!mounted) return;
+    if (ok) {
+      router.go('/exams');
+    } else {
+      // The cancel was refused (already graded or expired). The learner still
+      // gets out; only the fact that the sitting is not cancelled is reported.
+      setState(() {});
+    }
+  }
+
+  /// Leaving. Deliberately unconditional: it awaits nothing and navigates, so a
+  /// sitting the backend refuses to cancel cannot trap the learner.
+  void _leaveRoom() {
+    final router = GoRouter.of(context);
+    if (router.canPop()) {
+      router.pop();
+    } else {
+      router.go('/exams');
     }
   }
 
@@ -200,18 +220,23 @@ class _PlacementExamRoomScreenState
               const SizedBox(width: 8),
               _buildAutosaveBadge(state.autosaveStatus),
               const Spacer(),
+              ExamRoomExitButton(onLeave: _leaveRoom),
+              const SizedBox(width: 6),
               FTappable(
                 key: const Key('exam-abandon-btn'),
                 onPress: _confirmAbandon,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   decoration: BoxDecoration(
-                    color: SignageColors.paper,
+                    color: SignageColors.signRed,
                     border: Border.all(color: SignageColors.ink, width: 2),
                   ),
                   child: Text(
-                    'EXIT',
-                    style: SignageTypography.label(fontSize: 11),
+                    'CANCEL',
+                    style: SignageTypography.label(
+                      fontSize: 11,
+                      color: SignageColors.paper,
+                    ),
                   ),
                 ),
               ),
@@ -468,27 +493,48 @@ class _PlacementExamRoomScreenState
             Expanded(
               child: state.isLoading
                   ? const Center(child: FCircularProgress())
-                  : state.error != null
-                      ? ListView(
-                          padding: const EdgeInsets.all(16),
-                          children: [
-                            PlacardAlert(
-                              variant: PlacardAlertVariant.danger,
-                              title: 'Exam room error',
-                              subtitle: state.error,
-                            ),
-                          ],
+                  : state.stop != null
+                      ? ExamRoomTerminalView(
+                          stop: state.stop!,
+                          onLeave: _leaveRoom,
                         )
-                      : question == null
-                          ? const Center(
-                              child: StateBlock(
-                                stamp: 'EMPTY',
-                                title: 'No questions in this placement attempt',
-                                description:
-                                    'Please contact support or return to the exams hub.',
-                              ),
+                      : state.error != null
+                          ? ListView(
+                              padding: const EdgeInsets.all(16),
+                              children: [
+                                PlacardAlert(
+                                  variant: PlacardAlertVariant.danger,
+                                  title: 'Exam room error',
+                                  subtitle: state.error,
+                                ),
+                                const SizedBox(height: 12),
+                                PlacardButton(
+                                  key: const Key('exam-retry-btn'),
+                                  label: 'RETRY',
+                                  onPress: () => unawaited(_controller.init()),
+                                ),
+                                const SizedBox(height: 8),
+                                PlacardButton(
+                                  key: const Key('exam-terminal-leave-btn'),
+                                  label: 'LEAVE ROOM',
+                                  variant: PlacardButtonVariant.secondary,
+                                  onPress: _leaveRoom,
+                                ),
+                              ],
                             )
-                        : ListView(
+                      : question == null
+                          ? ExamRoomTerminalView(
+                              stop: const ExamRoomStop(
+                                stamp: 'EMPTY',
+                                title: 'This sitting has no questions',
+                                description: 'The paper came back empty, so '
+                                    'there is nothing to answer.',
+                                actionLabel: 'BACK TO EXAMS',
+                                actionRoute: '/exams',
+                              ),
+                              onLeave: _leaveRoom,
+                            )
+                          : ListView(
                             padding: const EdgeInsets.all(16),
                             children: [
                               Row(
@@ -531,9 +577,20 @@ class _PlacementExamRoomScreenState
                                   ),
                                 ],
                               ),
+                              if (state.answeredCount > 0) ...[
+                                const SizedBox(height: 10),
+                                PlacardAlert(
+                                  key: const Key('resume-answered-banner'),
+                                  variant: PlacardAlertVariant.info,
+                                  title: 'RESUMING',
+                                  subtitle: '${state.answeredCount} of '
+                                      '${state.questions.length} questions '
+                                      'already answered. Your answers are kept.',
+                                ),
+                              ],
                               const SizedBox(height: 12),
-                              if (question.audioUrl != null &&
-                                  question.audioUrl!.isNotEmpty) ...[
+                              if (question.audioPath != null &&
+                                  question.audioPath!.isNotEmpty) ...[
                                 _buildAudioPlayerBar(question),
                                 const SizedBox(height: 12),
                               ],

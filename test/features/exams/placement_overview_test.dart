@@ -32,6 +32,16 @@ void main() {
             ),
           ),
         ),
+        GoRoute(
+          path: '/placement/take/:placementId/preflight',
+          builder: (context, state) => Scaffold(
+            body: Center(
+              child: Text(
+                'PLACEMENT PREFLIGHT #${state.pathParameters['placementId']}',
+              ),
+            ),
+          ),
+        ),
       ],
     );
 
@@ -160,7 +170,8 @@ void main() {
     expect(startPayload, isNotNull);
     expect(startPayload!['examId'], 101);
     expect(startPayload!['scope'], 'all_skills');
-    expect(find.text('PLACEMENT ROOM #555'), findsOneWidget);
+    // A freshly started sitting takes the same device gate as a resumed one.
+    expect(find.text('PLACEMENT PREFLIGHT #555'), findsOneWidget);
   });
 
   testWidgets('paid retake offers both scopes at the catalogue prices and '
@@ -234,7 +245,8 @@ void main() {
     expect(find.text('IN-PROGRESS ATTEMPT'), findsOneWidget);
     await tester.tap(find.byKey(const Key('resume-placement-btn')));
     await tester.pumpAndSettle();
-    expect(find.text('PLACEMENT ROOM #41'), findsOneWidget);
+    // RESUME goes through the device gate, not straight into the room.
+    expect(find.text('PLACEMENT PREFLIGHT #41'), findsOneWidget);
   });
 
   testWidgets('no published exam disables the start control', (tester) async {

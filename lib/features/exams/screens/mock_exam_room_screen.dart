@@ -9,11 +9,13 @@ import '../../../core/media/audio_media_adapter.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
 import '../models/placement_models.dart';
+import '../models/exam_room_stop.dart';
 import '../providers/mock_exam_controller.dart';
 import '../providers/mock_exam_providers.dart';
 import '../providers/placement_exam_controller.dart';
 import '../widgets/answer_navigator_sheet.dart';
 import '../widgets/exam_room_helpers.dart';
+import '../widgets/exam_room_states.dart';
 
 /// Full-screen portrait Exam Room for a timed Mock Attempt.
 class MockExamRoomScreen extends ConsumerStatefulWidget {
@@ -52,7 +54,15 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
 
   void _onControllerChanged() {
     if (!mounted) return;
-    final q = _controller.state.currentQuestion;
+    final state = _controller.state;
+    if (state.needsPreflight) {
+      // This door cannot open the attempt: the shared device gate owns entry.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.go('/exams/attempts/${widget.attemptId}/preflight');
+      });
+    }
+    final q = state.currentQuestion;
     if (q != null && q.skill == 'writing' && _writingQuestionId != q.questionId) {
       _writingQuestionId = q.questionId;
       _writingController.text = q.responseText ?? '';
@@ -87,21 +97,37 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
   }
 
   Future<void> _confirmCancel() async {
-    final router = GoRouter.of(context);
     final confirmed = await showExamConfirmDialog(
       context: context,
       title: 'CANCEL ATTEMPT',
-      message: 'Cancel this mock attempt and return to the Exams hub?',
+      message: 'Cancel this mock attempt? This ends the attempt; it is not the '
+          'same as leaving the room.',
       confirmLabel: 'YES, CANCEL ATTEMPT',
       confirmKey: const Key('confirm-cancel-btn'),
       confirmVariant: PlacardButtonVariant.destructive,
       cancelLabel: 'KEEP WORKING',
     );
-    if (confirmed && mounted) {
-      final ok = await _controller.cancel();
-      if (ok && mounted) {
-        router.go('/exams');
-      }
+    if (!confirmed || !mounted) return;
+    final router = GoRouter.of(context);
+    final ok = await _controller.cancel();
+    if (!mounted) return;
+    if (ok) {
+      router.go('/exams');
+    } else {
+      // The backend refused (already graded or expired). The room stays usable
+      // and the failure is reported; EXIT is the unconditional way out.
+      setState(() {});
+    }
+  }
+
+  /// Leaving. Deliberately unconditional: it awaits nothing and navigates, so a
+  /// graded or expired attempt cannot trap the learner behind a failed cancel.
+  void _leaveRoom() {
+    final router = GoRouter.of(context);
+    if (router.canPop()) {
+      router.pop();
+    } else {
+      router.go('/exams');
     }
   }
 
@@ -171,23 +197,8 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
               children: [
-                FTappable(
-                  key: const Key('cancel-exam-btn'),
-                  onPress: _confirmCancel,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: SignageColors.paper,
-                      border: Border.all(color: SignageColors.ink, width: 2),
-                    ),
-                    child: Text(
-                      'EXIT',
-                      style: SignageTypography.label(fontSize: 11),
-                    ),
-                  ),
+                ExamRoomExitButton(
+                  onLeave: _leaveRoom,
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -248,6 +259,28 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
                 ),
                 const SizedBox(width: 6),
                 FTappable(
+                  key: const Key('cancel-exam-btn'),
+                  onPress: _confirmCancel,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: SignageColors.signRed,
+                      border: Border.all(color: SignageColors.ink, width: 2),
+                    ),
+                    child: Text(
+                      'CANCEL',
+                      style: SignageTypography.label(
+                        fontSize: 11,
+                        color: SignageColors.paper,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                FTappable(
                   key: const Key('submit-exam-btn'),
                   onPress: _confirmSubmit,
                   child: Container(
@@ -275,22 +308,49 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
       ),
       child: s.isLoading
           ? const Center(child: FCircularProgress())
-          : (s.error != null && q == null)
-              ? Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: StateBlock(
-                    stamp: 'ERROR',
-                    title: 'UNABLE TO LOAD MOCK ATTEMPT',
-                    description: s.error!,
-                    action: PlacardButton(
-                      label: 'RETRY',
-                      onPress: () => unawaited(_controller.init()),
-                    ),
-                  ),
-                )
-              : q == null
-                  ? const Center(child: Text('No questions in attempt.'))
-                  : Column(
+          : s.stop != null
+              ? ExamRoomTerminalView(stop: s.stop!, onLeave: _leaveRoom)
+              : (s.error != null && q == null)
+                  ? ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        StateBlock(
+                          stamp: 'ERROR',
+                          title: 'UNABLE TO LOAD MOCK ATTEMPT',
+                          description: s.error!,
+                          action: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              PlacardButton(
+                                key: const Key('exam-retry-btn'),
+                                label: 'RETRY',
+                                onPress: () => unawaited(_controller.init()),
+                              ),
+                              const SizedBox(height: 8),
+                              PlacardButton(
+                                key: const Key('exam-terminal-leave-btn'),
+                                label: 'LEAVE ROOM',
+                                variant: PlacardButtonVariant.secondary,
+                                onPress: _leaveRoom,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : q == null
+                      ? ExamRoomTerminalView(
+                          stop: const ExamRoomStop(
+                            stamp: 'EMPTY',
+                            title: 'This attempt has no questions',
+                            description: 'The paper came back empty, so there '
+                                'is nothing to answer.',
+                            actionLabel: 'BACK TO EXAMS',
+                            actionRoute: '/exams',
+                          ),
+                          onLeave: _leaveRoom,
+                        )
+                      : Column(
                       children: [
                         Expanded(
                           child: ListView(
@@ -331,8 +391,19 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
                                   ),
                                 ],
                               ),
+                              if (s.answeredCount > 0) ...[
+                                const SizedBox(height: 10),
+                                PlacardAlert(
+                                  key: const Key('resume-answered-banner'),
+                                  variant: PlacardAlertVariant.info,
+                                  title: 'RESUMING',
+                                  subtitle: '${s.answeredCount} of '
+                                      '${s.questions.length} questions already '
+                                      'answered. Your answers are kept.',
+                                ),
+                              ],
                               const SizedBox(height: 12),
-                              if (q.audioUrl != null && q.audioUrl!.isNotEmpty)
+                              if (q.audioPath != null && q.audioPath!.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 12),
                                   child: Column(
