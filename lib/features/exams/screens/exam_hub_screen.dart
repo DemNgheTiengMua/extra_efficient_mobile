@@ -476,11 +476,14 @@ class _HistoryRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            bandText,
-            style: SignageTypography.label(
-              fontSize: 12,
-              color: SignageColors.inkMuted,
+          Flexible(
+            child: Text(
+              bandText,
+              overflow: TextOverflow.ellipsis,
+              style: SignageTypography.label(
+                fontSize: 12,
+                color: SignageColors.inkMuted,
+              ),
             ),
           ),
           if (!item.status.isUnfinished)
