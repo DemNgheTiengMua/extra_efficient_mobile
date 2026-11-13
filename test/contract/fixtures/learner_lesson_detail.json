@@ -1,0 +1,49 @@
+{
+  "lessonId": 1,
+  "title": "Present Continuous Tense",
+  "summary": "Master the present continuous tense for ongoing actions.",
+  "skillId": 2,
+  "categoryId": 1,
+  "estimatedMinutes": 5,
+  "cards": [
+    {
+      "cardId": 1,
+      "cardType": "rule",
+      "title": "Rule: Present Continuous for Ongoing Actions",
+      "contentMarkdown": "Use am/is/are + verb-ing for something happening now.",
+      "questionPrompt": null,
+      "optionA": null,
+      "optionB": null,
+      "optionC": null,
+      "optionD": null,
+      "correctOption": null,
+      "explanation": null,
+      "displayOrder": 0,
+      "rationale": null,
+      "module": "primary"
+    },
+    {
+      "cardId": 4,
+      "cardType": "micro_check",
+      "title": "Check Your Understanding",
+      "contentMarkdown": "Choose the correct option to complete the sentence.",
+      "questionPrompt": "The marketing team ------- the new campaign this week.",
+      "optionA": "evaluates",
+      "optionB": "is evaluating",
+      "optionC": "evaluated",
+      "optionD": "evaluating",
+      "correctOption": null,
+      "explanation": "The time adverbial \"this week\" frames an action in progress, so the present continuous is required.",
+      "displayOrder": 3,
+      "rationale": "(A) is simple present, (C) is past, (D) is not a finite verb form.",
+      "module": "primary"
+    }
+  ],
+  "topicId": 12,
+  "topicCode": "R-GRAM",
+  "topicName": "Morphosyntactic structure and lexical precision",
+  "cefrLevel": "B1",
+  "module": "primary",
+  "hasRemedialModule": false,
+  "isRemedial": false
+}

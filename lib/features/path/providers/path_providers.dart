@@ -49,11 +49,13 @@ class TargetBandGoalNotifier extends AsyncNotifier<TargetBandGoal?> {
   }
 
   Future<void> updateTargetBand(String targetBandCode) async {
-    final updated = await ref
-        .read(pathRepositoryProvider)
-        .updateTargetBand(targetBandCode);
-    state = AsyncData(updated);
+    final repo = ref.read(pathRepositoryProvider);
+    await repo.updateTargetBand(targetBandCode);
+    state = AsyncData(await repo.fetchTargetBand());
     ref.invalidate(dashboardProvider);
+    // A target band is what a path is generated towards, so the path screen's
+    // gate is now open.
+    ref.invalidate(learningPathProvider);
   }
 
   Future<void> saveGoal({
@@ -62,16 +64,16 @@ class TargetBandGoalNotifier extends AsyncNotifier<TargetBandGoal?> {
     String? targetDate,
     num? weeklyStudyHours,
   }) async {
-    final updated = await ref
-        .read(pathRepositoryProvider)
-        .saveGoal(
-          currentBandCode: currentBandCode,
-          targetBandCode: targetBandCode,
-          targetDate: targetDate,
-          weeklyStudyHours: weeklyStudyHours,
-        );
-    state = AsyncData(updated);
+    final repo = ref.read(pathRepositoryProvider);
+    await repo.saveGoal(
+      currentBandCode: currentBandCode,
+      targetBandCode: targetBandCode,
+      targetDate: targetDate,
+      weeklyStudyHours: weeklyStudyHours,
+    );
+    state = AsyncData(await repo.fetchTargetBand());
     ref.invalidate(dashboardProvider);
+    ref.invalidate(learningPathProvider);
   }
 }
 
@@ -113,14 +115,15 @@ class LearningPathNotifier extends AsyncNotifier<LearningPathOverview?> {
     return ref.watch(pathRepositoryProvider).fetchLearningPath();
   }
 
-  Future<void> generate({String? targetBandCode}) async {
+  /// Generation needs a target band; the screen only offers this once one is
+  /// set, so the 422 "no goal to build a path from" is not reachable from here.
+  Future<void> generate() async {
     state = const AsyncLoading();
-    await ref
-        .read(pathRepositoryProvider)
-        .generateLearningPath(targetBandCode: targetBandCode);
-    state = await AsyncValue.guard(
-      () => ref.read(pathRepositoryProvider).fetchLearningPath(),
-    );
+    final repo = ref.read(pathRepositoryProvider);
+    state = await AsyncValue.guard(() async {
+      await repo.generateLearningPath();
+      return repo.fetchLearningPath();
+    });
     ref.invalidate(pathInsightProvider);
     ref.invalidate(dashboardProvider);
   }
@@ -128,22 +131,17 @@ class LearningPathNotifier extends AsyncNotifier<LearningPathOverview?> {
   Future<void> reset() async {
     state = const AsyncLoading();
     await ref.read(pathRepositoryProvider).resetLearningPath();
-    state = const AsyncData(null);
     ref.invalidate(dashboardProvider);
-  }
-
-  Future<PathModuleItem> startStep(int stepId) async {
-    final repo = ref.read(pathRepositoryProvider);
-    await repo.fetchStep(stepId);
-    final started = await repo.startStep(stepId);
     ref.invalidateSelf();
-    return started;
   }
 }
 
 final learningPathProvider =
     AsyncNotifierProvider<LearningPathNotifier, LearningPathOverview?>(
       LearningPathNotifier.new,
+      // A failed load must reach the screen's error branch rather than spin for
+      // 38 s of invisible retries.
+      retry: (_, _) => null,
     );
 
 class PathInsightNotifier extends AsyncNotifier<AiInsight?> {

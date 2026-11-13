@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:forui/forui.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:extra_efficient_mobile/app.dart';
 import 'package:extra_efficient_mobile/core/media/audio_media_adapter.dart';
 import 'package:extra_efficient_mobile/core/network/dio_client.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
+import 'package:extra_efficient_mobile/features/path/models/path_models.dart';
 import 'package:extra_efficient_mobile/features/path/screens/goal_calibration_screen.dart';
+import 'package:extra_efficient_mobile/theme/signage_theme.dart';
 
 import '../../helpers/fake_http_adapter.dart';
+import 'path_fixtures.dart';
 
 void main() {
   testWidgets(
@@ -285,5 +290,148 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('CALIBRATION APPLIED'), findsOneWidget);
     },
+  );
+
+  testWidgets(
+    'the bands offered are the certificate\'s own, each with its score range',
+    (tester) async {
+      final adapter = adapterForBands();
+
+      await tester.pumpWidget(appWith(adapter));
+      await tester.pumpAndSettle();
+
+      // All six of the certificate's real bands, by code — the payload's ladder,
+      // not a hardcoded one.
+      for (final code in ['below_A1', 'A1', 'A2', 'B1', 'B2', 'C1']) {
+        expect(
+          find.byKey(Key('target-band-$code')),
+          findsOneWidget,
+          reason: 'band $code is in the certificate payload',
+        );
+      }
+      // The ready-to-print range the backend supplies beside each band.
+      expect(find.text('10 to 119 points'), findsOneWidget);
+      expect(find.text('945 to 990 points'), findsOneWidget);
+      // The code and name as the tile prints them.
+      expect(find.textContaining('BELOW A1'), findsWidgets);
+    },
+  );
+
+  testWidgets(
+    'no saved goal renders no target badge, because "" is absent, not a band',
+    (tester) async {
+      final payload = targetBandNoGoalPayload();
+
+      // The live oddity: `goal.targetBandCode` is "" while the outer one is null.
+      expect(payload['targetBandCode'], isNull);
+      expect((payload['goal'] as Map)['targetBandCode'], '');
+
+      final goal = TargetBandGoal.fromJson(payload);
+      expect(goal.targetBandCode, isNull);
+      expect(goal.hasTargetBand, isFalse);
+    },
+  );
+
+  testWidgets('a failed save reports the backend message', (tester) async {
+    final adapter = FakeHttpClientAdapter((options, body) async {
+      if (options.path == '/api/learner/goal' && options.method == 'POST') {
+        return FakeHttpClientAdapter.jsonResponse({
+          'title': 'Invalid goal',
+          'status': 400,
+          'detail': "Band code 'Z9' is not valid for this certificate.",
+          'code': 'TARGET_BAND_INVALID',
+        }, statusCode: 400);
+      }
+      return adapterForBands(
+        targetBand: targetBandWithGoalPayload(),
+      ).handler(options, body);
+    });
+
+    await tester.pumpWidget(appWith(adapter));
+    await tester.pumpAndSettle();
+
+    final goalScrollable = find
+        .descendant(
+          of: find.byType(GoalCalibrationScreen),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    final saveBtn = find.byKey(const Key('save-goal-btn'));
+    await tester.scrollUntilVisible(saveBtn, 200, scrollable: goalScrollable);
+    await tester.pumpAndSettle();
+    await tester.tap(saveBtn);
+    await tester.pumpAndSettle();
+
+    // The failure notice is painted above the panel, so scroll back to it.
+    await tester.drag(goalScrollable, const Offset(0, 1200));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('is not valid for this certificate'),
+      findsOneWidget,
+    );
+  });
+}
+
+/// The recorded target-band payloads, so the band list is the certificate's own.
+FakeHttpClientAdapter adapterForBands({Map<String, dynamic>? targetBand}) {
+  return FakeHttpClientAdapter((options, body) async {
+    if (options.path == '/api/auth/me') {
+      return FakeHttpClientAdapter.jsonResponse({
+        'userId': 2,
+        'email': 'learner@demo.local',
+        'fullName': 'Demo Learner',
+        'role': 'learner',
+        'emailVerified': true,
+      });
+    }
+    if (options.path == '/api/learner/target-band' &&
+        options.method == 'GET') {
+      return FakeHttpClientAdapter.jsonResponse(
+        targetBand ?? targetBandNoGoalPayload(),
+      );
+    }
+    if (options.path == '/api/learner/calibration' &&
+        options.method == 'GET') {
+      return FakeHttpClientAdapter.jsonResponse({
+        'placedBandCode': '',
+        'validAnswerCount': 0,
+        'requiredValidAnswerCount': 20,
+        'excludedRushedCount': 0,
+        'reason': 'not_enough_answers',
+      });
+    }
+    return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+  });
+}
+
+Widget appWith(FakeHttpClientAdapter adapter) {
+  return ProviderScope(
+    overrides: [
+      tokenStorageProvider.overrideWithValue(
+        InMemoryTokenStorage(initialToken: 'valid-jwt'),
+      ),
+      httpClientAdapterProvider.overrideWithValue(adapter),
+    ],
+    child: MaterialApp.router(
+      theme: ThemeData(
+        useMaterial3: false,
+        scaffoldBackgroundColor: SignageColors.wall,
+      ),
+      builder: (context, child) => FTheme(
+        data: buildSignageTheme(),
+        child: child ?? const SizedBox.shrink(),
+      ),
+      routerConfig: GoRouter(
+        initialLocation: '/path/goal',
+        routes: [
+          GoRoute(
+            path: '/path/goal',
+            builder: (context, state) =>
+                Scaffold(body: GoalCalibrationScreen()),
+          ),
+        ],
+      ),
+    ),
   );
 }

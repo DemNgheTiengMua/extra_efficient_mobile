@@ -4,6 +4,7 @@ import 'package:forui/forui.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../models/path_models.dart';
 import '../providers/path_providers.dart';
 
@@ -71,7 +72,7 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = e.toString());
+        setState(() => _errorMessage = extractApiError(e, fallback: e.toString()));
       }
     } finally {
       if (mounted) {
@@ -102,7 +103,7 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = e.toString());
+        setState(() => _errorMessage = extractApiError(e, fallback: e.toString()));
       }
     } finally {
       if (mounted) {
@@ -128,7 +129,7 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = e.toString());
+        setState(() => _errorMessage = extractApiError(e, fallback: e.toString()));
       }
     } finally {
       if (mounted) {
@@ -177,7 +178,7 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
             return PlacardPanel(
               title: 'TARGET BAND & STUDY GOAL',
               trailing: PlacardBadge.info(
-                'CURRENT ${goal.currentBandCode?.toUpperCase() ?? '--'}',
+                'CURRENT ${goal.currentBandCode == null ? '--' : _bandCodeLabel(goal.currentBandCode!)}',
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -212,15 +213,33 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
                                 horizontal: 14,
                                 vertical: 10,
                               ),
-                              child: Text(
-                                band.label.toUpperCase(),
-                                style: SignageTypography.data(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: selected == band.code
-                                      ? SignageColors.paper
-                                      : SignageColors.ink,
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${_bandCodeLabel(band.code)} · ${band.name}'
+                                        .toUpperCase(),
+                                    style: SignageTypography.data(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: selected == band.code
+                                          ? SignageColors.paper
+                                          : SignageColors.ink,
+                                    ),
+                                  ),
+                                  // The band's own score range, as the
+                                  // certificate defines it.
+                                  Text(
+                                    band.rangeText,
+                                    style: SignageTypography.body(
+                                      fontSize: 12,
+                                      color: selected == band.code
+                                          ? SignageColors.paper
+                                          : SignageColors.inkMuted,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -354,4 +373,11 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
       ],
     );
   }
+}
+
+/// `below_A1` is the server's code for the band the signage bar paints `<A1`.
+String _bandCodeLabel(String code) {
+  final lower = code.toLowerCase();
+  if (lower == 'below_a1' || lower == '<a1') return '<A1';
+  return code.toUpperCase();
 }

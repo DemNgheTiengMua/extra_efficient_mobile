@@ -1,0 +1,7 @@
+{
+  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
+  "title": "Step not found",
+  "status": 404,
+  "detail": "Step 999 not found.",
+  "code": "LEARNING_PATH_STEP_NOT_FOUND"
+}

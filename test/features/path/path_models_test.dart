@@ -137,6 +137,243 @@ void main() {
     expect(body['skillLevels'], isA<Map<String, dynamic>>());
   });
 
+  group('GET /api/learner/learning-path with an active path', () {
+    late LearningPathOverview path;
+
+    setUpAll(() {
+      path = LearningPathOverview.fromJson(learningPathActivePayload());
+    });
+
+    test('hasActivePath is the switch and the bands are real', () {
+      expect(path.hasActivePath, isTrue);
+      expect(path.learnerPathId, isNotNull);
+      expect(path.fromBandCode, 'below_A1');
+      expect(path.toBandCode, 'B2');
+      expect(path.fromBandName, 'Below A1');
+      expect(path.toBandName, 'Upper intermediate');
+      expect(path.targetScore, 785);
+      expect(path.activeCert.code, 'TOEIC');
+    });
+
+    test('remaining time and progress come from the payload, not a zero', () {
+      expect(path.totalSteps, 16);
+      expect(path.remainingMinutes, 720);
+      expect(path.totalEstimatedMinutes, 720);
+      expect(path.completedSteps, 0);
+      expect(path.progressRatio, 0);
+    });
+
+    test('weeks are the plan\'s own, each with its steps and minutes', () {
+      expect(path.weeks, hasLength(4));
+      expect(path.weeks.map((w) => w.weekNumber), [1, 2, 3, 4]);
+
+      final week1 = path.weeks.first;
+      expect(week1.plannedSteps, 4);
+      expect(week1.plannedMinutes, 180);
+      expect(week1.isOnTrack, isFalse);
+      expect(week1.steps, hasLength(4));
+      expect(week1.steps.map((s) => s.stepId), [1, 2, 3, 4]);
+    });
+
+    test('a step carries its sequence, skill, level and exact item count', () {
+      final step = path.openSteps.first;
+
+      expect(step.stepId, 1);
+      expect(step.weekNumber, 1);
+      expect(step.weekSequence, 1);
+      expect(step.stepType, 'focus_practice');
+      expect(step.route, 'item_selector');
+      expect(step.status, 'available');
+      expect(step.skillCode, 'LIST');
+      expect(step.skillName, 'Listening');
+      expect(step.targetCefr, 'A2');
+      expect(step.sizingTier, 'developing');
+      expect(step.plannedItemCount, 10);
+      expect(step.estimatedMinutes, 45);
+      expect(step.targetAccuracyPct, 70);
+      expect(step.canStart, isTrue);
+      expect(step.isLocked, isFalse);
+    });
+
+    test('a not-yet-run step keeps its nulls null', () {
+      final step = path.openSteps.first;
+
+      expect(step.score, isNull);
+      expect(step.actualAccuracyPct, isNull);
+      expect(step.startedAt, isNull);
+      expect(step.completedAt, isNull);
+      expect(step.refLessonId, isNull);
+      expect(step.refExamId, isNull);
+    });
+
+    test('a locked step is unavailable rather than absent', () {
+      final locked = path.openSteps.firstWhere((s) => s.isLocked);
+
+      expect(locked.stepId, 2);
+      expect(locked.canStart, isFalse);
+    });
+
+    test('skillLevels reads each skill\'s own level', () {
+      expect(path.skillLevels, {'LIST': 'A2', 'READ': 'A2'});
+    });
+
+    test('cefrBands mark the current and target rungs', () {
+      final current = path.cefrBands.where((b) => b.isCurrent).single;
+      final target = path.cefrBands.where((b) => b.isTarget).single;
+
+      expect(current.code, 'below_A1');
+      expect(target.code, 'B2');
+      expect(path.cefrBands, hasLength(6));
+    });
+  });
+
+  group('POST /api/learner/learning-path/steps/{id}/start', () {
+    test('carries the server\'s redirect URL and session id', () {
+      final started = StartStepResult.fromJson(startStepResultPayload());
+
+      expect(started.stepId, 1);
+      expect(started.stepType, 'focus_practice');
+      expect(started.route, 'item_selector');
+      expect(started.redirectUrl, '/practice/21');
+      expect(started.sessionId, 21);
+      expect(started.attemptId, isNull);
+      expect(started.isSubstituted, isFalse);
+    });
+  });
+
+  group('GET /api/learner/target-band', () {
+    test('with no goal: the outer target is null and "" is absent', () {
+      final goal = TargetBandGoal.fromJson(targetBandNoGoalPayload());
+
+      expect(goal.hasTargetBand, isFalse);
+      expect(goal.targetBandCode, isNull);
+      expect(goal.currentBandCode, isNull);
+      expect(goal.currentTotalScore, isNull);
+    });
+
+    test('offers the certificate\'s own bands with their score ranges', () {
+      final goal = TargetBandGoal.fromJson(targetBandNoGoalPayload());
+
+      expect(goal.availableBands, hasLength(6));
+      expect(
+        goal.availableBands.map((b) => b.code),
+        ['below_A1', 'A1', 'A2', 'B1', 'B2', 'C1'],
+      );
+
+      final beginner = goal.availableBands[1];
+      expect(beginner.name, 'Beginner');
+      expect(beginner.minTotal, 120);
+      expect(beginner.maxTotal, 220);
+      expect(beginner.description, '120 to 220 points');
+      expect(beginner.rangeText, '120 to 220 points');
+    });
+
+    test('with a saved goal: the band and the certificate flags', () {
+      final goal = TargetBandGoal.fromJson(targetBandWithGoalPayload());
+
+      expect(goal.hasTargetBand, isTrue);
+      expect(goal.targetBandCode, 'B2');
+      expect(goal.currentBandCode, 'below_A1');
+      expect(goal.availableBands.where((b) => b.isTarget).single.code, 'B2');
+    });
+  });
+
+  group('GET /api/learner/lessons/{id}', () {
+    late LessonDetail lesson;
+
+    setUpAll(() {
+      lesson = LessonDetail.fromJson(lessonDetailPayload());
+    });
+
+    test('reads lessonId, the topic and the module', () {
+      expect(lesson.id, 1);
+      expect(lesson.title, 'Present Continuous Tense');
+      expect(lesson.summary, startsWith('Master the present continuous'));
+      expect(lesson.estimatedMinutes, 5);
+      expect(lesson.topicCode, 'R-GRAM');
+      expect(lesson.topicName, startsWith('Morphosyntactic'));
+      expect(lesson.cefrLevel, 'B1');
+      expect(lesson.module, 'primary');
+      expect(lesson.hasRemedialModule, isFalse);
+      expect(lesson.cards, hasLength(2));
+    });
+
+    test('reads cardId, cardType and contentMarkdown', () {
+      final rule = lesson.cards.first;
+
+      expect(rule.id, 1);
+      expect(rule.type, 'rule');
+      expect(
+        rule.title,
+        'Rule: Present Continuous for Ongoing Actions',
+      );
+      expect(
+        rule.body,
+        'Use am/is/are + verb-ing for something happening now.',
+      );
+      expect(rule.isMicroCheck, isFalse);
+      expect(rule.options, isEmpty);
+    });
+
+    test('a micro-check card derives its options from optionA-D', () {
+      final check = lesson.cards.last;
+
+      expect(check.id, 4);
+      expect(check.type, 'micro_check');
+      expect(check.isMicroCheck, isTrue);
+      expect(check.question, contains('The marketing team'));
+      expect(check.options.map((o) => o.label), ['A', 'B', 'C', 'D']);
+      expect(check.options.map((o) => o.text), [
+        'evaluates',
+        'is evaluating',
+        'evaluated',
+        'evaluating',
+      ]);
+      // The key is withheld on the lesson payload; only the graded check
+      // reveals it.
+      expect(check.body, startsWith('Choose the correct option'));
+    });
+  });
+
+  group('GET /api/learner/lessons/{id}/progress', () {
+    test('reads the real progress fields and the 1-based resume index', () {
+      final progress = LessonProgress.fromJson(lessonProgressPayload());
+
+      expect(progress.cardsCompleted, 1);
+      expect(progress.totalCards, 2);
+      expect(progress.isCompleted, isFalse);
+      expect(progress.lastViewedCardId, 1);
+      expect(progress.resumeCardIndex, 1);
+      expect(progress.resumeCardOffset, 0);
+      expect(progress.module, 'primary');
+    });
+
+    test('resumeCardIndex is 1-based, so card two is page offset one', () {
+      final progress = LessonProgress.fromJson({
+        ...lessonProgressPayload(),
+        'resumeCardIndex': 2,
+      });
+
+      expect(progress.resumeCardIndex, 2);
+      expect(progress.resumeCardOffset, 1);
+    });
+  });
+
+  group('POST /api/learner/lessons/{id}/cards/{cardId}/micro-check', () {
+    test('reads isCorrect, the revealed correctOption and the explanation', () {
+      final result = MicroCheckResult.fromJson({
+        'isCorrect': true,
+        'correctOption': 'B',
+        'explanation': 'The time adverbial frames an action in progress.',
+        'categoryId': 1,
+      });
+
+      expect(result.isCorrect, isTrue);
+      expect(result.correctOption, 'B');
+      expect(result.explanation, startsWith('The time adverbial'));
+    });
+  });
+
   test('a tenths-scored certificate divides by scoreDisplayFactor', () {
     final goal = GoalStanding.fromJson({
       'currentBandCode': 'B2',
