@@ -10,15 +10,20 @@ final mentorRepositoryProvider = Provider<MentorRepository>((ref) {
   return MentorRepository(ref.watch(dioProvider));
 });
 
-final mentorsListProvider = FutureProvider<List<MentorProfile>>((ref) async {
-  final authState = ref.watch(authNotifierProvider);
-  if (!authState.isAuthenticated) {
-    return const [];
-  }
-  ref.watch(certificateScopeVersionProvider);
-  final certCode = ref.watch(learnerContextProvider).value?.active.code;
-  return ref.read(mentorRepositoryProvider).getMentors(certCode: certCode);
-});
+/// The directory. Auto-retry is disabled so a failing load reaches the screen's
+/// error branch immediately instead of spinning for ~38 s.
+final mentorsListProvider = FutureProvider<List<MentorProfile>>(
+  (ref) async {
+    final authState = ref.watch(authNotifierProvider);
+    if (!authState.isAuthenticated) {
+      return const [];
+    }
+    ref.watch(certificateScopeVersionProvider);
+    final certCode = ref.watch(learnerContextProvider).value?.active.code;
+    return ref.read(mentorRepositoryProvider).getMentors(certCode: certCode);
+  },
+  retry: (_, _) => null,
+);
 
 class MentorBookingsNotifier extends AsyncNotifier<List<MentorBooking>> {
   @override
@@ -41,4 +46,5 @@ class MentorBookingsNotifier extends AsyncNotifier<List<MentorBooking>> {
 final mentorBookingsProvider =
     AsyncNotifierProvider<MentorBookingsNotifier, List<MentorBooking>>(
   MentorBookingsNotifier.new,
+  retry: (_, _) => null,
 );
