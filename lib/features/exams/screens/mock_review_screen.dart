@@ -29,14 +29,17 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
   final Set<int> _savedQuestionIds = {};
 
   Future<void> _playSlice(MockReviewQuestion q) async {
-    if (q.audioUrl == null || q.audioUrl!.isEmpty) return;
+    final path = q.audioPath;
+    if (path == null || path.isEmpty) return;
     final audio = ref.read(audioMediaAdapterProvider);
     await audio.setAudioUrl(
-      q.audioUrl!,
-      clipStart:
-          q.audioStartMs != null ? Duration(milliseconds: q.audioStartMs!) : null,
-      clipEnd:
-          q.audioEndMs != null ? Duration(milliseconds: q.audioEndMs!) : null,
+      path,
+      clipStart: q.audioStartMs != null
+          ? Duration(milliseconds: q.audioStartMs!)
+          : null,
+      clipEnd: q.audioEndMs != null
+          ? Duration(milliseconds: q.audioEndMs!)
+          : null,
     );
     await audio.play();
   }
@@ -118,8 +121,9 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
         data: (review) {
           final filtered = review.questions.where((q) {
             return switch (_filter) {
+              // A blank answer has no verdict, so it is not "wrong".
               _ReviewFilter.all => true,
-              _ReviewFilter.wrong => !q.isCorrect,
+              _ReviewFilter.wrong => q.isCorrect == false,
               _ReviewFilter.flagged => q.isFlagged,
             };
           }).toList();
@@ -166,17 +170,20 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
                         separatorBuilder: (_, _) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final q = filtered[index];
-                          final isSaved =
-                              _savedQuestionIds.contains(q.questionId);
+                          final isSaved = _savedQuestionIds.contains(
+                            q.questionId,
+                          );
                           return PlacardPanel(
-                            title: 'Q${q.index + 1} · ${q.skill}',
-                            trailing: q.isCorrect
-                                ? const PlacardBadge.success('CORRECT')
-                                : const PlacardBadge.danger('WRONG'),
+                            title: 'Q${q.displayOrder} · ${q.skillName}',
+                            trailing: switch (q.isCorrect) {
+                              true => const PlacardBadge.success('CORRECT'),
+                              false => const PlacardBadge.danger('WRONG'),
+                              null => const PlacardBadge.muted('NOT ANSWERED'),
+                            },
                             footer: Row(
                               children: [
-                                if (q.audioUrl != null &&
-                                    q.audioUrl!.isNotEmpty) ...[
+                                if (q.audioPath != null &&
+                                    q.audioPath!.isNotEmpty) ...[
                                   Expanded(
                                     child: PlacardButton(
                                       key: Key(
@@ -198,8 +205,8 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
                                     onPress: isSaved
                                         ? null
                                         : () => unawaited(
-                                              _saveQuestion(q.questionId),
-                                            ),
+                                            _saveQuestion(q.questionId),
+                                          ),
                                   ),
                                 ),
                               ],
@@ -208,17 +215,37 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  q.prompt,
+                                  q.stem,
                                   style: SignageTypography.body(fontSize: 15),
                                 ),
+                                if (q.passage != null &&
+                                    q.passage!.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    q.passage!,
+                                    style: SignageTypography.body(
+                                      fontSize: 13,
+                                      color: SignageColors.inkMuted,
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 8),
                                 Text(
-                                  'YOURS: ${q.selectedOptionLabel ?? '-'} · CORRECT: ${q.correctOptionLabel ?? '-'}',
+                                  'YOURS: ${q.selectedOptionLabel ?? '—'} · '
+                                  'CORRECT: ${q.correctOptionLabel ?? '—'}',
                                   style: SignageTypography.data(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
+                                if (q.correctOptionText != null &&
+                                    q.correctOptionText!.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'CORRECT ANSWER: ${q.correctOptionText}',
+                                    style: SignageTypography.body(fontSize: 14),
+                                  ),
+                                ],
                                 if (q.wrongOptionRationale != null &&
                                     q.wrongOptionRationale!.isNotEmpty) ...[
                                   const SizedBox(height: 8),

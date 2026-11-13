@@ -37,8 +37,8 @@ class PlacementExamState {
 
   PlacementQuestion? get currentQuestion =>
       (currentIndex >= 0 && currentIndex < questions.length)
-          ? questions[currentIndex]
-          : null;
+      ? questions[currentIndex]
+      : null;
 
   PlacementExamState copyWith({
     bool? isLoading,
@@ -98,9 +98,9 @@ class PlacementExamController extends ChangeNotifier {
   Future<void> init() async {
     _update(_state.copyWith(isLoading: true, clearError: true));
     try {
-      final sitting = resume
-          ? await repository.resumeSitting(placementId)
-          : await repository.fetchSitting(placementId);
+      // The resume payload carries no questions by design. Questions always come
+      // from the take endpoint, which is the authoritative view of the room.
+      final sitting = await repository.fetchSitting(placementId);
 
       final now = DateTime.now().toUtc();
       final remaining = sitting.expiresAt.toUtc().difference(now).inSeconds;
@@ -125,8 +125,10 @@ class PlacementExamController extends ChangeNotifier {
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_disposed || _state.expiresAt == null || _state.isCompleted) return;
-      final remaining =
-          _state.expiresAt!.toUtc().difference(DateTime.now().toUtc()).inSeconds;
+      final remaining = _state.expiresAt!
+          .toUtc()
+          .difference(DateTime.now().toUtc())
+          .inSeconds;
       if (remaining <= 0) {
         _update(_state.copyWith(remainingSeconds: 0));
         _countdownTimer?.cancel();
@@ -150,10 +152,12 @@ class PlacementExamController extends ChangeNotifier {
     _loadedAudioQuestionId = q.questionId;
     await audioAdapter.setAudioUrl(
       q.audioUrl!,
-      clipStart:
-          q.audioStartMs != null ? Duration(milliseconds: q.audioStartMs!) : null,
-      clipEnd:
-          q.audioEndMs != null ? Duration(milliseconds: q.audioEndMs!) : null,
+      clipStart: q.audioStartMs != null
+          ? Duration(milliseconds: q.audioStartMs!)
+          : null,
+      clipEnd: q.audioEndMs != null
+          ? Duration(milliseconds: q.audioEndMs!)
+          : null,
     );
   }
 

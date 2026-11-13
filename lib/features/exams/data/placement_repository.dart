@@ -11,17 +11,19 @@ class PlacementRepository {
 
   final Dio _dio;
 
-  Future<PlacementOverview> fetchOverview() async {
-    final response =
-        await _dio.get<Map<String, dynamic>>('/api/learner/placement');
-    return PlacementOverview.fromJson(
+  Future<PlacementCatalog> fetchCatalog() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/learner/placement',
+    );
+    return PlacementCatalog.fromJson(
       response.data ?? const <String, dynamic>{},
     );
   }
 
   Future<PlacementPreflight> fetchPreflight() async {
-    final response = await _dio
-        .get<Map<String, dynamic>>('/api/learner/placement/preflight');
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/learner/placement/preflight',
+    );
     return PlacementPreflight.fromJson(
       response.data ?? const <String, dynamic>{},
     );
@@ -65,13 +67,32 @@ class PlacementRepository {
     );
   }
 
-  Future<PlacementSitting> resumeSitting(int placementId) async {
-    final response = await _dio.get<Map<String, dynamic>>(
-      '/api/learner/placement/take/$placementId/resume',
-    );
-    return PlacementSitting.fromJson(
-      response.data ?? const <String, dynamic>{},
-    );
+  /// Progress facts for an unfinished sitting: which skills are done, which is
+  /// active, how many answers were synced.
+  ///
+  /// This payload carries **no questions** by design. A finished sitting answers
+  /// 400 `placement_not_active`, which is a terminal state, not a failure —
+  /// [PlacementNotActiveException] says so and callers route to the result.
+  Future<PlacementResumeStatus> fetchResumeStatus(int placementId) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/api/learner/placement/take/$placementId/resume',
+      );
+      return PlacementResumeStatus.fromJson(
+        response.data ?? const <String, dynamic>{},
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 400 &&
+          _errorCode(e.response?.data) == 'placement_not_active') {
+        throw PlacementNotActiveException(placementId);
+      }
+      rethrow;
+    }
+  }
+
+  static String? _errorCode(Object? data) {
+    if (data is Map<String, dynamic>) return data['code'] as String?;
+    return null;
   }
 
   Future<void> saveAnswer(
@@ -100,10 +121,7 @@ class PlacementRepository {
   }) async {
     await _dio.post<void>(
       '/api/learner/placement/take/$placementId/draft',
-      data: {
-        'questionId': questionId,
-        'responseText': responseText,
-      },
+      data: {'questionId': questionId, 'responseText': responseText},
     );
   }
 
@@ -150,10 +168,7 @@ class PlacementRepository {
     await _dio.post<void>('/api/learner/placement/take/$placementId/abandon');
   }
 
-  Future<void> submit(
-    int placementId, {
-    bool isAutoSubmit = false,
-  }) async {
+  Future<void> submit(int placementId, {bool isAutoSubmit = false}) async {
     await _dio.post<void>(
       '/api/learner/placement/take/$placementId/submit',
       data: {'isAutoSubmit': isAutoSubmit},
@@ -164,18 +179,14 @@ class PlacementRepository {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/learner/placement/result/$placementId',
     );
-    return PlacementResult.fromJson(
-      response.data ?? const <String, dynamic>{},
-    );
+    return PlacementResult.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   Future<PlacementResult> fetchResultStatus(int placementId) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/learner/placement/result/$placementId/status',
     );
-    return PlacementResult.fromJson(
-      response.data ?? const <String, dynamic>{},
-    );
+    return PlacementResult.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   Future<void> retryGrading(int placementId) async {

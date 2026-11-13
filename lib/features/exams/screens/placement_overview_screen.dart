@@ -77,21 +77,24 @@ class _PlacementOverviewScreenState
     }
   }
 
-  Future<void> _startPlacement(PlacementOverview overview) async {
+  Future<void> _startPlacement(PlacementCatalog catalog) async {
+    final examId = catalog.startableExamId;
+    if (examId == null) return;
     setState(() {
       _starting = true;
       _errorMessage = null;
     });
     try {
-      final scope = overview.isFirstPlacement ? 'all_skills' : _selectedScope;
-      final placementId =
-          await ref.read(placementRepositoryProvider).startPlacement(
-                examId: overview.examId,
-                scope: scope,
-                reuseValidSkills: _reuseValidSkills,
-                idempotencyKey:
-                    'placement-${overview.examId}-${DateTime.now().millisecondsSinceEpoch}',
-              );
+      final scope = catalog.isRetake ? _selectedScope : 'all_skills';
+      final placementId = await ref
+          .read(placementRepositoryProvider)
+          .startPlacement(
+            examId: examId,
+            scope: scope,
+            reuseValidSkills: _reuseValidSkills,
+            idempotencyKey:
+                'placement-$examId-${DateTime.now().millisecondsSinceEpoch}',
+          );
       ref.invalidate(learnerContextProvider);
       if (!mounted) return;
       context.go('/placement/take/$placementId');
@@ -106,12 +109,12 @@ class _PlacementOverviewScreenState
 
   Future<void> _abandonInProgress(int placementId) async {
     await ref.read(placementRepositoryProvider).abandon(placementId);
-    ref.invalidate(placementOverviewProvider);
+    ref.invalidate(placementCatalogProvider);
   }
 
   @override
   Widget build(BuildContext context) {
-    final overviewAsync = ref.watch(placementOverviewProvider);
+    final catalogAsync = ref.watch(placementCatalogProvider);
     final preflightAsync = ref.watch(placementPreflightProvider);
 
     return FScaffold(
@@ -161,20 +164,26 @@ class _PlacementOverviewScreenState
       ),
       child: Container(
         color: SignageColors.wall,
-        child: overviewAsync.when(
+        child: catalogAsync.when(
           loading: () => const Center(child: FCircularProgress()),
           error: (error, _) => ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              PlacardAlert(
-                variant: PlacardAlertVariant.danger,
-                title: 'Unable to load placement overview',
-                subtitle: error.toString(),
+              StateBlock(
+                stamp: 'ERROR',
+                title: 'UNABLE TO LOAD PLACEMENT',
+                description: error.toString(),
+                action: PlacardButton(
+                  label: 'RETRY',
+                  onPress: () => ref.invalidate(placementCatalogProvider),
+                ),
               ),
             ],
           ),
-          data: (overview) {
+          data: (catalog) {
             final preflight = preflightAsync.value;
+            final exam = catalog.exams.isEmpty ? null : catalog.exams.first;
+            final isFirstPlacement = !catalog.isRetake;
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -186,14 +195,16 @@ class _PlacementOverviewScreenState
                   ),
                   const SizedBox(height: 16),
                 ],
-                if (overview.inProgressPlacementId != null) ...[
+                if (catalog.activePlacementId != null) ...[
                   PlacardPanel(
                     title: 'IN-PROGRESS ATTEMPT',
+                    trailing: PlacardBadge.warning('UNFINISHED'),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'You have an unfinished placement attempt (#${overview.inProgressPlacementId}).',
+                          'You have an unfinished placement attempt '
+                          '(#${catalog.activePlacementId}).',
                           style: SignageTypography.body(fontSize: 14),
                         ),
                         const SizedBox(height: 12),
@@ -204,7 +215,7 @@ class _PlacementOverviewScreenState
                                 key: const Key('resume-placement-btn'),
                                 label: 'RESUME',
                                 onPress: () => context.go(
-                                  '/placement/take/${overview.inProgressPlacementId}?resume=1',
+                                  '/placement/take/${catalog.activePlacementId}?resume=1',
                                 ),
                               ),
                             ),
@@ -215,7 +226,7 @@ class _PlacementOverviewScreenState
                                 label: 'ABANDON',
                                 variant: PlacardButtonVariant.destructive,
                                 onPress: () => _abandonInProgress(
-                                  overview.inProgressPlacementId!,
+                                  catalog.activePlacementId!,
                                 ),
                               ),
                             ),
@@ -227,50 +238,72 @@ class _PlacementOverviewScreenState
                   const SizedBox(height: 16),
                 ],
                 PlacardPanel(
-                  title: overview.certificateCode.isEmpty
+                  title: catalog.certificateCode.isEmpty
                       ? 'PLACEMENT OVERVIEW'
-                      : '${overview.certificateCode} PLACEMENT',
-                  trailing: overview.isFirstPlacement
+                      : '${catalog.certificateCode} PLACEMENT',
+                  trailing: isFirstPlacement
                       ? const PlacardBadge.success('FREE FIRST PLACEMENT')
                       : const PlacardBadge.warning('PAID RETAKE'),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        overview.examTitle,
-                        style: SignageTypography.condensedSentence(fontSize: 20),
+                        exam?.name ?? 'NO PLACEMENT EXAM AVAILABLE',
+                        style: SignageTypography.condensedSentence(
+                          fontSize: 20,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        overview.isFirstPlacement
+                        isFirstPlacement
                             ? '0 CREDITS — First diagnostic placement per certificate is free.'
-                            : 'Select a retake scope below. Available balance: ${overview.creditBalance} CREDITS.',
+                            : 'Select a retake scope below.',
                         style: SignageTypography.body(
                           fontSize: 14,
                           color: SignageColors.inkMuted,
                         ),
                       ),
-                      if (overview.latestPlacementId != null) ...[
+                      if (catalog.currentTotalScore != null) ...[
                         const SizedBox(height: 12),
-                        PlacardButton(
-                          label:
-                              'VIEW LATEST RESULT (${overview.latestBand ?? '-'})',
-                          variant: PlacardButtonVariant.secondary,
-                          onPress: () => context.push(
-                            '/placement/result/${overview.latestPlacementId}',
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'CURRENT BAND ${catalog.currentBandCode ?? '-'}',
+                                style: SignageTypography.label(fontSize: 12),
+                              ),
+                            ),
+                            Text(
+                              '${catalog.currentTotalScore}',
+                              style: SignageTypography.data(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ],
                   ),
                 ),
-                if (!overview.isFirstPlacement) ...[
+                if (!isFirstPlacement) ...[
                   const SizedBox(height: 16),
                   PlacardPanel(
                     title: 'RETAKE SCOPE',
                     child: Column(
                       children: [
-                        for (final option in overview.scopes) ...[
+                        for (final option in [
+                          PlacementScopeOption(
+                            scope: 'all_skills',
+                            label: 'All 4 Skills',
+                            credits: catalog.allSkillsRetakeCredits,
+                          ),
+                          PlacementScopeOption(
+                            scope: 'listening_and_reading',
+                            label: 'Listening & Reading',
+                            credits: catalog.listeningAndReadingRetakeCredits,
+                          ),
+                        ]) ...[
                           FTappable(
                             key: Key('scope-option-${option.scope}'),
                             onPress: () =>
@@ -336,7 +369,9 @@ class _PlacementOverviewScreenState
                                 Expanded(
                                   child: Text(
                                     item.skill.toUpperCase(),
-                                    style: SignageTypography.label(fontSize: 12),
+                                    style: SignageTypography.label(
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ),
                                 PlacardBadge.info(item.band),
@@ -389,7 +424,7 @@ class _PlacementOverviewScreenState
                             _runAudioCheck(preflight?.audioSampleUrl ?? ''),
                       ),
                       if ((preflight?.requiresMicrophone ?? true) &&
-                          (overview.isFirstPlacement ||
+                          (isFirstPlacement ||
                               _selectedScope == 'all_skills')) ...[
                         const Divider(
                           height: 24,
@@ -407,13 +442,13 @@ class _PlacementOverviewScreenState
                               label: _micChecked
                                   ? 'READY'
                                   : (_micGranted == false
-                                      ? 'DENIED'
-                                      : 'NOT TESTED'),
+                                        ? 'DENIED'
+                                        : 'NOT TESTED'),
                               variant: _micChecked
                                   ? PlacardBadgeVariant.success
                                   : (_micGranted == false
-                                      ? PlacardBadgeVariant.danger
-                                      : PlacardBadgeVariant.muted),
+                                        ? PlacardBadgeVariant.danger
+                                        : PlacardBadgeVariant.muted),
                             ),
                           ],
                         ),
@@ -429,23 +464,22 @@ class _PlacementOverviewScreenState
                   ),
                 ),
                 const SizedBox(height: 20),
-                if (overview.examId <= 0) ...[
+                if (exam == null) ...[
                   PlacardAlert(
                     variant: PlacardAlertVariant.warning,
                     title: 'NO PLACEMENT EXAM AVAILABLE',
                     subtitle:
-                        'No placement exam is currently configured for ${overview.certificateCode.isEmpty ? 'this certificate' : overview.certificateCode}. Switch certificate in ACCOUNT to take a placement test.',
+                        'No placement exam is currently published for ${catalog.certificateCode.isEmpty ? 'this certificate' : catalog.certificateCode}. Switch certificate in ACCOUNT to take a placement test.',
                   ),
                   const SizedBox(height: 12),
                 ],
                 PlacardButton(
                   key: const Key('start-placement-btn'),
-                  label: overview.isFirstPlacement
+                  label: isFirstPlacement
                       ? 'START FREE PLACEMENT'
                       : 'START PLACEMENT RETAKE',
                   isLoading: _starting,
-                  onPress:
-                      overview.examId > 0 ? () => _startPlacement(overview) : null,
+                  onPress: exam != null ? () => _startPlacement(catalog) : null,
                 ),
               ],
             );

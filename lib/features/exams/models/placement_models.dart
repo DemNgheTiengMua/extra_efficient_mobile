@@ -42,67 +42,107 @@ class ReusableSkillMeasurement {
   final bool canReuse;
 }
 
-class PlacementOverview {
-  const PlacementOverview({
+/// One placement exam offered by the catalogue.
+class PlacementCatalogExam {
+  const PlacementCatalogExam({
     required this.examId,
-    required this.examTitle,
-    required this.certificateCode,
-    required this.isFirstPlacement,
-    required this.creditBalance,
-    required this.scopes,
-    this.inProgressPlacementId,
-    this.latestPlacementId,
-    this.latestBand,
-    this.latestScore,
+    required this.name,
+    required this.durationMinutes,
+    required this.questionCount,
+    required this.isRecommended,
+    this.description,
+    this.activePlacementId,
   });
 
-  factory PlacementOverview.fromJson(Map<String, dynamic> json) {
-    final rawScopes = json['scopes'] as List<dynamic>? ?? const [];
-    final scopes = rawScopes
-        .whereType<Map<String, dynamic>>()
-        .map(PlacementScopeOption.fromJson)
-        .toList();
-
-    return PlacementOverview(
+  factory PlacementCatalogExam.fromJson(Map<String, dynamic> json) {
+    return PlacementCatalogExam(
       examId: (json['examId'] as num?)?.toInt() ?? 0,
-      examTitle: (json['examTitle'] as String?) ?? 'Placement Assessment',
-      certificateCode: (json['certificateCode'] as String?) ?? '',
-      isFirstPlacement: (json['isFirstPlacement'] as bool?) ??
-          (json['isFree'] as bool?) ??
-          true,
-      creditBalance: (json['creditBalance'] as num?)?.toInt() ?? 0,
-      inProgressPlacementId:
-          (json['inProgressPlacementId'] as num?)?.toInt(),
-      latestPlacementId: (json['latestPlacementId'] as num?)?.toInt(),
-      latestBand: json['latestBand'] as String?,
-      latestScore: (json['latestScore'] as num?)?.toInt(),
-      scopes: scopes.isNotEmpty
-          ? scopes
-          : const [
-              PlacementScopeOption(
-                scope: 'all_skills',
-                label: 'All 4 Skills',
-                credits: 5,
-              ),
-              PlacementScopeOption(
-                scope: 'listening_and_reading',
-                label: 'Listening & Reading',
-                credits: 3,
-              ),
-            ],
+      name: (json['name'] as String?) ?? '',
+      description: json['description'] as String?,
+      durationMinutes: (json['durationMinutes'] as num?)?.toInt() ?? 0,
+      questionCount: (json['questionCount'] as num?)?.toInt() ?? 0,
+      isRecommended: (json['isRecommended'] as bool?) ?? false,
+      activePlacementId: (json['activePlacementId'] as num?)?.toInt(),
     );
   }
 
   final int examId;
-  final String examTitle;
+  final String name;
+  final String? description;
+  final int durationMinutes;
+  final int questionCount;
+  final bool isRecommended;
+  final int? activePlacementId;
+}
+
+/// `GET /api/learner/placement` — the placement catalogue envelope.
+///
+/// The sitting in progress is `activePlacementId`; the exam list is `exams[]`.
+class PlacementCatalog {
+  const PlacementCatalog({
+    required this.certificateCode,
+    required this.certificateName,
+    required this.exams,
+    required this.isRetake,
+    required this.allSkillsRetakeCredits,
+    required this.listeningAndReadingRetakeCredits,
+    this.currentBandCode,
+    this.currentBandName,
+    this.currentTotalScore,
+    this.activePlacementId,
+  });
+
+  factory PlacementCatalog.fromJson(Map<String, dynamic> json) {
+    final rawCert = json['activeCert'] as Map<String, dynamic>? ?? const {};
+    final rawExams = json['exams'] as List<dynamic>? ?? const [];
+    return PlacementCatalog(
+      certificateCode: (rawCert['code'] as String?) ?? '',
+      certificateName: (rawCert['name'] as String?) ?? '',
+      currentBandCode: json['currentBandCode'] as String?,
+      currentBandName: json['currentBandName'] as String?,
+      currentTotalScore: (json['currentTotalScore'] as num?)?.toInt(),
+      exams: rawExams
+          .whereType<Map<String, dynamic>>()
+          .map(PlacementCatalogExam.fromJson)
+          .toList(),
+      activePlacementId: (json['activePlacementId'] as num?)?.toInt(),
+      isRetake: (json['isRetake'] as bool?) ?? false,
+      allSkillsRetakeCredits:
+          (json['allSkillsRetakeCredits'] as num?)?.toInt() ?? 0,
+      listeningAndReadingRetakeCredits:
+          (json['listeningAndReadingRetakeCredits'] as num?)?.toInt() ?? 0,
+    );
+  }
+
   final String certificateCode;
-  final bool isFirstPlacement;
-  final int creditBalance;
-  final int? inProgressPlacementId;
-  final int? latestPlacementId;
-  final String? latestBand;
-  final int? latestScore;
-  final List<PlacementScopeOption> scopes;
+  final String certificateName;
+  final String? currentBandCode;
+  final String? currentBandName;
+  final int? currentTotalScore;
+  final List<PlacementCatalogExam> exams;
+  final int? activePlacementId;
+  final bool isRetake;
+  final int allSkillsRetakeCredits;
+  final int listeningAndReadingRetakeCredits;
+
+  /// The exam the start control points at: the recommended one, else the first.
+  ///
+  /// Null means the backend published no placement exam, so there is nothing to
+  /// start and the control must stay disabled.
+  int? get startableExamId {
+    if (exams.isEmpty) return null;
+    for (final exam in exams) {
+      if (exam.isRecommended) return exam.examId;
+    }
+    return exams.first.examId;
+  }
+
+  bool get hasInProgressAttempt => activePlacementId != null;
+
+  /// Credits a retake costs for [scope], from the certificates's own figures.
+  int retakeCreditsFor(String scope) => scope == 'listening_and_reading'
+      ? listeningAndReadingRetakeCredits
+      : allSkillsRetakeCredits;
 }
 
 class PlacementPreflight {
@@ -138,7 +178,8 @@ class PlacementOption {
 
   factory PlacementOption.fromJson(Map<String, dynamic> json) {
     return PlacementOption(
-      optionId: (json['optionId'] as num?)?.toInt() ??
+      optionId:
+          (json['optionId'] as num?)?.toInt() ??
           (json['id'] as num?)?.toInt() ??
           0,
       label: (json['label'] as String?) ?? '',
@@ -175,10 +216,14 @@ class PlacementQuestion {
     this.groupId,
   });
 
-  factory PlacementQuestion.fromJson(Map<String, dynamic> json, int fallbackIdx) {
+  factory PlacementQuestion.fromJson(
+    Map<String, dynamic> json,
+    int fallbackIdx,
+  ) {
     final rawOptions = json['options'] as List<dynamic>? ?? const [];
     return PlacementQuestion(
-      questionId: (json['questionId'] as num?)?.toInt() ??
+      questionId:
+          (json['questionId'] as num?)?.toInt() ??
           (json['id'] as num?)?.toInt() ??
           0,
       index: (json['index'] as num?)?.toInt() ?? fallbackIdx,
@@ -187,9 +232,11 @@ class PlacementQuestion {
       prompt: (json['prompt'] as String?) ?? (json['stem'] as String?) ?? '',
       passageText: json['passageText'] as String?,
       audioUrl: json['audioUrl'] as String?,
-      audioStartMs: (json['audioStartMs'] as num?)?.toInt() ??
+      audioStartMs:
+          (json['audioStartMs'] as num?)?.toInt() ??
           (json['startMs'] as num?)?.toInt(),
-      audioEndMs: (json['audioEndMs'] as num?)?.toInt() ??
+      audioEndMs:
+          (json['audioEndMs'] as num?)?.toInt() ??
           (json['endMs'] as num?)?.toInt(),
       options: rawOptions
           .whereType<Map<String, dynamic>>()
@@ -292,7 +339,8 @@ class PlacementSitting {
     }
     return PlacementSitting(
       placementId: (json['placementId'] as num?)?.toInt() ?? 0,
-      expiresAt: DateTime.tryParse((json['expiresAt'] as String?) ?? '') ??
+      expiresAt:
+          DateTime.tryParse((json['expiresAt'] as String?) ?? '') ??
           DateTime.now().toUtc().add(const Duration(minutes: 20)),
       status: (json['status'] as String?) ?? 'in_progress',
       questions: questions,
@@ -315,77 +363,205 @@ class PlacementSitting {
   final DateTime? phaseDeadlineAt;
 }
 
-class PlacementSkillBreakdown {
-  const PlacementSkillBreakdown({
-    required this.skill,
-    required this.band,
-    required this.scaledScore,
-    required this.rawScore,
-    required this.gradingStatus,
-    this.feedback,
+/// The sitting is over (already graded, abandoned or expired).
+///
+/// `GET .../take/{id}/resume` answers 400 `placement_not_active` for exactly
+/// this case. It is a terminal state, never a retryable error.
+class PlacementNotActiveException implements Exception {
+  const PlacementNotActiveException(this.placementId);
+
+  final int placementId;
+
+  @override
+  String toString() => 'Placement $placementId is no longer in progress.';
+}
+
+/// One skill's progress inside [PlacementResumeStatus].
+class PlacementResumeSkill {
+  const PlacementResumeSkill({
+    required this.code,
+    required this.name,
+    required this.isDone,
+    required this.isActive,
+    required this.answeredCount,
+    required this.totalQuestions,
   });
 
-  factory PlacementSkillBreakdown.fromJson(Map<String, dynamic> json) {
-    return PlacementSkillBreakdown(
-      skill: (json['skill'] as String?) ?? '',
-      band: (json['band'] as String?) ?? '-',
-      scaledScore: (json['scaledScore'] as num?)?.toInt() ?? 0,
-      rawScore: (json['rawScore'] as num?)?.toInt() ?? 0,
-      gradingStatus: ((json['gradingStatus'] as String?) ?? 'completed').toUpperCase(),
-      feedback: json['feedback'] as String?,
+  factory PlacementResumeSkill.fromJson(Map<String, dynamic> json) {
+    return PlacementResumeSkill(
+      code: (json['code'] as String?) ?? '',
+      name: (json['name'] as String?) ?? '',
+      isDone: (json['isDone'] as bool?) ?? false,
+      isActive: (json['isActive'] as bool?) ?? false,
+      answeredCount: (json['answeredCount'] as num?)?.toInt() ?? 0,
+      totalQuestions: (json['totalQuestions'] as num?)?.toInt() ?? 0,
     );
   }
 
-  final String skill;
-  final String band;
-  final int scaledScore;
-  final int rawScore;
-  final String gradingStatus;
-  final String? feedback;
+  final String code;
+  final String name;
+  final bool isDone;
+  final bool isActive;
+  final int answeredCount;
+  final int totalQuestions;
 }
 
+/// `GET /api/learner/placement/take/{placementId}/resume` — progress only.
+///
+/// The payload has no questions at all, so nothing may render a room from it.
+/// Its job here is to answer "is this sitting still open?" and to say where the
+/// learner had got to.
+class PlacementResumeStatus {
+  const PlacementResumeStatus({
+    required this.placementId,
+    required this.attemptId,
+    required this.examName,
+    required this.syncedAnswerCount,
+    required this.totalQuestions,
+    this.activeSkillName,
+    this.activeStage,
+    this.totalStages = 0,
+    this.lastQuestionId,
+  });
+
+  factory PlacementResumeStatus.fromJson(Map<String, dynamic> json) {
+    return PlacementResumeStatus(
+      placementId: (json['placementId'] as num?)?.toInt() ?? 0,
+      attemptId: (json['attemptId'] as num?)?.toInt() ?? 0,
+      examName: (json['examName'] as String?) ?? '',
+      activeSkillName: json['activeSkillName'] as String?,
+      activeStage: (json['activeStage'] as num?)?.toInt(),
+      totalStages: (json['totalStages'] as num?)?.toInt() ?? 0,
+      syncedAnswerCount: (json['syncedAnswerCount'] as num?)?.toInt() ?? 0,
+      totalQuestions: (json['totalQuestions'] as num?)?.toInt() ?? 0,
+      lastQuestionId: (json['lastQuestionId'] as num?)?.toInt(),
+    );
+  }
+
+  final int placementId;
+  final int attemptId;
+  final String examName;
+  final String? activeSkillName;
+  final int? activeStage;
+  final int totalStages;
+  final int syncedAnswerCount;
+  final int totalQuestions;
+  final int? lastQuestionId;
+}
+
+/// One skill row of a finished placement.
+class PlacementSkillScore {
+  const PlacementSkillScore({
+    required this.skillId,
+    required this.skillCode,
+    required this.skillName,
+    required this.rawScore,
+    required this.totalQuestions,
+    required this.scaledScore,
+    this.bandCode,
+  });
+
+  factory PlacementSkillScore.fromJson(Map<String, dynamic> json) {
+    return PlacementSkillScore(
+      skillId: (json['skillId'] as num?)?.toInt() ?? 0,
+      skillCode: (json['skillCode'] as String?) ?? '',
+      skillName: (json['skillName'] as String?) ?? '',
+      rawScore: (json['rawScore'] as num?)?.toInt() ?? 0,
+      totalQuestions: (json['totalQuestions'] as num?)?.toInt() ?? 0,
+      scaledScore: (json['scaledScore'] as num?)?.toInt() ?? 0,
+      bandCode: json['bandCode'] as String?,
+    );
+  }
+
+  final int skillId;
+  final String skillCode;
+  final String skillName;
+  final int rawScore;
+  final int totalQuestions;
+  final int scaledScore;
+  final String? bandCode;
+
+  /// Unbanded is `""` on `/result` and `null` on `/result/status`.
+  bool get isBanded => bandCode != null && bandCode!.isNotEmpty;
+
+  String get bandLabel => isBanded ? bandCode! : 'NOT YET BANDED';
+}
+
+/// `GET /api/learner/placement/result/{placementId}`.
+///
+/// The same shape serves `/result/{id}/status`, where band fields are null while
+/// grading and only the progress fields are meaningful.
 class PlacementResult {
   const PlacementResult({
     required this.placementId,
-    required this.status,
-    required this.overallBand,
-    required this.totalScaledScore,
-    required this.cefrBand,
-    required this.skillBreakdowns,
-    required this.canRetryGrading,
-    required this.hasFailedGrading,
+    required this.examName,
+    required this.bandCode,
+    required this.bandName,
+    required this.totalScore,
+    required this.skillScores,
+    required this.isGraded,
+    this.scoreDisplayFactor = 1,
+    this.stageDescriptor,
+    this.failedFreeResponseCount = 0,
+    this.weakerSkillName,
   });
 
   factory PlacementResult.fromJson(Map<String, dynamic> json) {
-    final rawSkills = json['skillBreakdowns'] as List<dynamic>? ?? const [];
-    final status = ((json['status'] as String?) ?? 'PENDING').toUpperCase();
+    final rawSkills = json['skillScores'] as List<dynamic>? ?? const [];
     return PlacementResult(
       placementId: (json['placementId'] as num?)?.toInt() ?? 0,
-      status: status,
-      overallBand: (json['overallBand'] as String?) ?? '-',
-      totalScaledScore: (json['totalScaledScore'] as num?)?.toInt() ?? 0,
-      cefrBand: (json['cefrBand'] as String?) ??
-          (json['overallBand'] as String?) ??
-          'A1',
-      skillBreakdowns: rawSkills
+      examName: (json['examName'] as String?) ?? '',
+      bandCode:
+          (json['resultBandCode'] as String?) ??
+          (json['bandCode'] as String?) ??
+          '',
+      bandName:
+          (json['resultBandName'] as String?) ??
+          (json['bandName'] as String?) ??
+          '',
+      totalScore: (json['totalScore'] as num?)?.toInt() ?? 0,
+      scoreDisplayFactor: (json['scoreDisplayFactor'] as num?)?.toInt() ?? 1,
+      skillScores: rawSkills
           .whereType<Map<String, dynamic>>()
-          .map(PlacementSkillBreakdown.fromJson)
+          .map(PlacementSkillScore.fromJson)
           .toList(),
-      canRetryGrading: (json['canRetryGrading'] as bool?) ?? (status == 'FAILED'),
-      hasFailedGrading: (json['hasFailedGrading'] as bool?) ?? (status == 'FAILED'),
+      // `/result` omits isGraded once finished; `/status` always sends it.
+      isGraded: (json['isGraded'] as bool?) ?? true,
+      stageDescriptor: json['stageDescriptor'] as String?,
+      failedFreeResponseCount:
+          (json['failedFreeResponseCount'] as num?)?.toInt() ?? 0,
+      weakerSkillName: json['weakerSkillName'] as String?,
     );
   }
 
-  bool get isPending => status == 'PENDING' || status == 'GRADING';
-  bool get isFailed => status == 'FAILED' || hasFailedGrading;
-  bool get isCompleted => !isPending && !isFailed;
-
   final int placementId;
-  final String status;
-  final String overallBand;
-  final int totalScaledScore;
-  final String cefrBand;
-  final List<PlacementSkillBreakdown> skillBreakdowns;
-  final bool canRetryGrading;
-  final bool hasFailedGrading;
+  final String examName;
+  final String bandCode;
+  final String bandName;
+  final int totalScore;
+  final List<PlacementSkillScore> skillScores;
+  final bool isGraded;
+  final int scoreDisplayFactor;
+  final String? stageDescriptor;
+  final int failedFreeResponseCount;
+  final String? weakerSkillName;
+
+  /// The score as the page prints it: stored units divided by the display factor.
+  int get displayTotalScore =>
+      scoreDisplayFactor > 1 ? totalScore ~/ scoreDisplayFactor : totalScore;
+
+  /// Unbanded is `""` (or null) — render it as a state, never an empty badge.
+  bool get isBanded => bandCode.isNotEmpty;
+
+  String get bandLabel {
+    if (!isBanded) return 'NOT YET BANDED';
+    return bandName.isEmpty
+        ? bandCode
+        : '$bandCode · ${bandName.toUpperCase()}';
+  }
+
+  bool get hasFailedGrading => failedFreeResponseCount > 0;
+
+  /// True while free-response grading is still in flight.
+  bool get isPending => !isGraded;
 }

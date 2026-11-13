@@ -1,0 +1,98 @@
+{
+  "examId": 1,
+  "certId": 1,
+  "certCode": "TOEIC",
+  "examName": "ETS 2024 — Test 1",
+  "description": "A full TOEIC Listening & Reading form.",
+  "durationMinutes": 120,
+  "questionCount": 200,
+  "creditCost": 1,
+  "creditBalance": 11,
+  "activeAttemptId": 1005,
+  "sections": [
+    {
+      "sectionId": 1,
+      "skillCode": "LIST",
+      "skillName": "Listening",
+      "modality": "listening",
+      "sectionCode": "P1",
+      "sectionName": "Photographs",
+      "expectedQuestionCount": 6,
+      "questionCount": 1,
+      "durationMinutes": 45,
+      "displayOrder": 1
+    },
+    {
+      "sectionId": 2,
+      "skillCode": "LIST",
+      "skillName": "Listening",
+      "modality": "listening",
+      "sectionCode": "P2",
+      "sectionName": "Question-Response",
+      "expectedQuestionCount": 25,
+      "questionCount": 1,
+      "durationMinutes": 45,
+      "displayOrder": 2
+    },
+    {
+      "sectionId": 3,
+      "skillCode": "LIST",
+      "skillName": "Listening",
+      "modality": "listening",
+      "sectionCode": "P3",
+      "sectionName": "Conversations",
+      "expectedQuestionCount": 39,
+      "questionCount": 1,
+      "durationMinutes": 45,
+      "displayOrder": 3
+    },
+    {
+      "sectionId": 4,
+      "skillCode": "LIST",
+      "skillName": "Listening",
+      "modality": "listening",
+      "sectionCode": "P4",
+      "sectionName": "Talks",
+      "expectedQuestionCount": 30,
+      "questionCount": 1,
+      "durationMinutes": 45,
+      "displayOrder": 4
+    },
+    {
+      "sectionId": 5,
+      "skillCode": "READ",
+      "skillName": "Reading",
+      "modality": "reading",
+      "sectionCode": "P5",
+      "sectionName": "Incomplete Sentences",
+      "expectedQuestionCount": 30,
+      "questionCount": 3,
+      "durationMinutes": 75,
+      "displayOrder": 1
+    },
+    {
+      "sectionId": 6,
+      "skillCode": "READ",
+      "skillName": "Reading",
+      "modality": "reading",
+      "sectionCode": "P6",
+      "sectionName": "Text Completion",
+      "expectedQuestionCount": 16,
+      "questionCount": 1,
+      "durationMinutes": 75,
+      "displayOrder": 2
+    },
+    {
+      "sectionId": 7,
+      "skillCode": "READ",
+      "skillName": "Reading",
+      "modality": "reading",
+      "sectionCode": "P7",
+      "sectionName": "Reading Comprehension",
+      "expectedQuestionCount": 54,
+      "questionCount": 1,
+      "durationMinutes": 75,
+      "displayOrder": 3
+    }
+  ]
+}
