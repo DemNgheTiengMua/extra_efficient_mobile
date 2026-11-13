@@ -46,3 +46,13 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Graphify & Agent tooling
+graphify-out/
+.agents/
+.claude/
+.gemini/
+AGENTS.md
+CLAUDE.md
+docs/agents/
+
