@@ -1,0 +1,42 @@
+{
+  "attemptId": 1004,
+  "examId": 1,
+  "examName": "ETS 2024 — Test 1",
+  "certId": 1,
+  "certCode": "TOEIC",
+  "certName": "TOEIC Listening & Reading",
+  "status": "graded",
+  "startedAt": "2026-11-13T15:44:31.4420798+00:00",
+  "submittedAt": "2026-11-13T16:00:07.8694473+00:00",
+  "durationSeconds": 936,
+  "isAutoSubmitted": false,
+  "totalScore": 10,
+  "bandCode": "below_A1",
+  "bandName": "Below A1",
+  "skillScores": [
+    {
+      "skillId": 1,
+      "skillCode": "LIST",
+      "skillName": "Listening",
+      "modality": "listening",
+      "rawScore": 0,
+      "scaledScore": 5,
+      "totalQuestions": 4
+    },
+    {
+      "skillId": 2,
+      "skillCode": "READ",
+      "skillName": "Reading",
+      "modality": "reading",
+      "rawScore": 0,
+      "scaledScore": 5,
+      "totalQuestions": 5
+    }
+  ],
+  "previousAttemptScore": 720,
+  "scoreDelta": -710,
+  "freeResponseCount": 0,
+  "gradedFreeResponseCount": 0,
+  "failedFreeResponseCount": 0,
+  "scoreDisplayFactor": 1
+}

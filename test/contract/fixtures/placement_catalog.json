@@ -1,0 +1,29 @@
+{
+  "activeCert": {
+    "code": "TOEIC",
+    "name": "TOEIC Listening & Reading",
+    "sectionNoun": "Part"
+  },
+  "currentBandCode": null,
+  "currentBandName": null,
+  "currentTotalScore": null,
+  "exams": [
+    {
+      "examId": 2,
+      "certId": 1,
+      "certCode": "TOEIC",
+      "name": "TOEIC Placement Test — Diagnostic",
+      "description": "A 29-question diagnostic across all four skills: Listening, Reading, Speaking and Writing. It sets your starting CEFR band, and your practice answers keep checking that band afterwards.",
+      "durationMinutes": 45,
+      "questionCount": 29,
+      "isRecommended": true,
+      "activePlacementId": 1
+    }
+  ],
+  "activePlacementId": 1,
+  "activeAttemptId": 3,
+  "isRetake": false,
+  "allSkillsRetakeCredits": 5,
+  "listeningAndReadingRetakeCredits": 3,
+  "creditBalance": null
+}

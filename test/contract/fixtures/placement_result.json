@@ -1,0 +1,144 @@
+{
+  "placementId": 1,
+  "attemptId": 3,
+  "certId": 1,
+  "certCode": "TOEIC",
+  "examName": "TOEIC Placement Test — Diagnostic",
+  "takenAt": "2026-11-13T16:00:07.1708131+00:00",
+  "durationMinutes": 326,
+  "totalQuestions": 24,
+  "totalScore": 340,
+  "resultBandCode": "",
+  "resultBandName": "",
+  "cefrBands": [
+    {
+      "code": "below_A1",
+      "name": "Below A1",
+      "minTotal": 10,
+      "maxTotal": 119,
+      "isReached": true,
+      "isCurrent": false,
+      "isTarget": false
+    },
+    {
+      "code": "A1",
+      "name": "Beginner",
+      "minTotal": 120,
+      "maxTotal": 220,
+      "isReached": true,
+      "isCurrent": false,
+      "isTarget": false
+    },
+    {
+      "code": "A2",
+      "name": "Elementary",
+      "minTotal": 225,
+      "maxTotal": 545,
+      "isReached": true,
+      "isCurrent": false,
+      "isTarget": false
+    },
+    {
+      "code": "B1",
+      "name": "Intermediate",
+      "minTotal": 550,
+      "maxTotal": 780,
+      "isReached": false,
+      "isCurrent": false,
+      "isTarget": false
+    },
+    {
+      "code": "B2",
+      "name": "Upper intermediate",
+      "minTotal": 785,
+      "maxTotal": 940,
+      "isReached": false,
+      "isCurrent": false,
+      "isTarget": false
+    },
+    {
+      "code": "C1",
+      "name": "Advanced",
+      "minTotal": 945,
+      "maxTotal": 990,
+      "isReached": false,
+      "isCurrent": false,
+      "isTarget": false
+    }
+  ],
+  "skillScores": [
+    {
+      "skillId": 1,
+      "skillCode": "LIST",
+      "skillName": "Listening",
+      "rawScore": 3,
+      "totalQuestions": 10,
+      "scaledScore": 130,
+      "bandCode": ""
+    },
+    {
+      "skillId": 2,
+      "skillCode": "READ",
+      "skillName": "Reading",
+      "rawScore": 5,
+      "totalQuestions": 14,
+      "scaledScore": 210,
+      "bandCode": ""
+    }
+  ],
+  "weakerSkillName": "Listening",
+  "bandNote": null,
+  "isAutoSubmitted": false,
+  "freeResponseCount": 5,
+  "gradedFreeResponseCount": 1,
+  "failedFreeResponseCount": 0,
+  "scoreDisplayFactor": 1,
+  "isGraded": false,
+  "skillResults": [
+    {
+      "skillId": 1,
+      "skillCode": "LIST",
+      "skillName": "Listening",
+      "status": "measured",
+      "levelCode": "A2",
+      "positionInBand": 13,
+      "measuredAt": "2026-11-13T16:00:07.374504+00:00",
+      "reusedFromPrior": false,
+      "failureReason": null
+    },
+    {
+      "skillId": 2,
+      "skillCode": "READ",
+      "skillName": "Reading",
+      "status": "measured",
+      "levelCode": "A2",
+      "positionInBand": 61,
+      "measuredAt": "2026-11-13T16:00:07.374504+00:00",
+      "reusedFromPrior": false,
+      "failureReason": null
+    },
+    {
+      "skillId": 3,
+      "skillCode": "SPEA",
+      "skillName": "Speaking",
+      "status": "grading",
+      "levelCode": null,
+      "positionInBand": null,
+      "measuredAt": null,
+      "reusedFromPrior": false,
+      "failureReason": null
+    },
+    {
+      "skillId": 4,
+      "skillCode": "WRIT",
+      "skillName": "Writing",
+      "status": "not_measured",
+      "levelCode": null,
+      "positionInBand": null,
+      "measuredAt": null,
+      "reusedFromPrior": false,
+      "failureReason": "candidate_skipped"
+    }
+  ],
+  "scope": "all_skills"
+}
