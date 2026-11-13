@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/account/account_screen.dart';
+import '../../features/account/screens/complaints_screen.dart';
+import '../../features/account/screens/file_complaint_screen.dart';
+import '../../features/account/screens/profile_screen.dart';
 import '../../features/auth/auth_models.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/auth/screens/forgot_password_screen.dart';
@@ -116,6 +119,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/account',
                 builder: (context, state) => const AccountScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'profile',
+                    builder: (context, state) => const ProfileScreen(),
+                  ),
+                  GoRoute(
+                    path: 'complaints',
+                    builder: (context, state) => const ComplaintsScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'new',
+                        builder: (context, state) =>
+                            const FileComplaintScreen(),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),

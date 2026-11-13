@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:forui/forui.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../theme/signage_theme.dart';
 import '../../widgets/signage_primitives.dart';
@@ -62,6 +63,13 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         ],
         PlacardPanel(
           title: 'LEARNER PROFILE',
+          trailing: PlacardButton(
+            key: const Key('open-profile-button'),
+            label: 'EDIT',
+            variant: PlacardButtonVariant.secondary,
+            expand: false,
+            onPress: () => context.go('/account/profile'),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -131,6 +139,29 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 ],
               );
             },
+          ),
+        ),
+        const SizedBox(height: 16),
+        PlacardPanel(
+          title: 'COMPLAINTS CENTER',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Report a mentor no-show, grading issue, technical error, or payment issue.',
+                style: SignageTypography.body(
+                  fontSize: 14,
+                  color: SignageColors.inkMuted,
+                ),
+              ),
+              const SizedBox(height: 12),
+              PlacardButton(
+                key: const Key('open-complaints-button'),
+                label: 'OPEN COMPLAINTS CENTER',
+                variant: PlacardButtonVariant.secondary,
+                onPress: () => context.go('/account/complaints'),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),
