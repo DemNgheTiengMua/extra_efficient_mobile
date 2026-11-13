@@ -12,6 +12,10 @@ import '../../features/auth/screens/forgot_password_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/auth/screens/sign_in_screen.dart';
 import '../../features/auth/screens/verify_email_screen.dart';
+import '../../features/exams/screens/exam_hub_screen.dart';
+import '../../features/exams/screens/placement_exam_room_screen.dart';
+import '../../features/exams/screens/placement_overview_screen.dart';
+import '../../features/exams/screens/placement_result_screen.dart';
 import '../../features/path/screens/goal_calibration_screen.dart';
 import '../../features/path/screens/learning_path_screen.dart';
 import '../../features/path/screens/lesson_player_screen.dart';
@@ -116,11 +120,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/exams',
-                builder: (context, state) => const TabPlaceholderScreen(
-                  tabName: 'EXAMS',
-                  description:
-                      'Timed mock exams and AI-graded speaking/writing skill practice.',
-                ),
+                builder: (context, state) => const ExamHubScreen(),
               ),
             ],
           ),
@@ -158,6 +158,30 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/placement',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const PlacementOverviewScreen(),
+      ),
+      GoRoute(
+        path: '/placement/take/:placementId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final id =
+              int.tryParse(state.pathParameters['placementId'] ?? '') ?? 0;
+          final resume = state.uri.queryParameters['resume'] == '1';
+          return PlacementExamRoomScreen(placementId: id, resume: resume);
+        },
+      ),
+      GoRoute(
+        path: '/placement/result/:placementId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final id =
+              int.tryParse(state.pathParameters['placementId'] ?? '') ?? 0;
+          return PlacementResultScreen(placementId: id);
+        },
       ),
     ],
   );
