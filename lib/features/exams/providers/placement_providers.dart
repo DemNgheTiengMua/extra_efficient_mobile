@@ -9,14 +9,19 @@ final placementRepositoryProvider = Provider<PlacementRepository>((ref) {
   return PlacementRepository(ref.watch(dioProvider));
 });
 
-final placementOverviewProvider =
-    FutureProvider.autoDispose<PlacementOverview>((ref) async {
+/// The catalogue is a read with an on-screen RETRY, so a failure should surface
+/// at once rather than after Riverpod's ~38-second default retry ladder.
+Duration? _noRetry(int retryCount, Object error) => null;
+
+final placementCatalogProvider = FutureProvider.autoDispose<PlacementCatalog>((
+  ref,
+) async {
   ref.watch(certificateScopeVersionProvider);
-  return ref.read(placementRepositoryProvider).fetchOverview();
-});
+  return ref.read(placementRepositoryProvider).fetchCatalog();
+}, retry: _noRetry);
 
 final placementPreflightProvider =
     FutureProvider.autoDispose<PlacementPreflight>((ref) async {
-  ref.watch(certificateScopeVersionProvider);
-  return ref.read(placementRepositoryProvider).fetchPreflight();
-});
+      ref.watch(certificateScopeVersionProvider);
+      return ref.read(placementRepositoryProvider).fetchPreflight();
+    }, retry: _noRetry);
