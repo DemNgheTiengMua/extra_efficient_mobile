@@ -7,6 +7,7 @@ import 'package:extra_efficient_mobile/core/media/audio_media_adapter.dart';
 import 'package:extra_efficient_mobile/core/network/dio_client.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
 import '../../helpers/fake_http_adapter.dart';
+import '../../helpers/practice_payloads.dart';
 
 void main() {
   testWidgets(
@@ -64,66 +65,95 @@ void main() {
           options.method == 'GET') {
         catalogCalls++;
         if (activeCode == 'IELTS') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'sectionNoun': 'Section',
-            'unfinishedSession': null,
-            'sections': [
-              {
-                'sectionId': 11,
-                'title': 'Section 1: Academic Reading',
-                'skill': 'reading',
-                'accuracyPercent': 65,
-                'cooldownActive': false,
-                'isSpeaking': false,
-              },
-            ],
-          });
+          return FakeHttpClientAdapter.jsonResponse(
+            practiceCatalogResponse(
+              code: 'IELTS',
+              name: 'IELTS Academic & General',
+              sectionNoun: 'Section',
+              sections: [
+                practiceSection(
+                  sectionId: 11,
+                  code: 'S1',
+                  name: 'Academic Reading',
+                  skillCode: 'READ',
+                  skillName: 'Reading',
+                  accuracyPercentage: 65,
+                ),
+              ],
+            ),
+          );
         }
-        return FakeHttpClientAdapter.jsonResponse({
-          'sectionNoun': 'Part',
-          'unfinishedSession': {
-            'sessionId': 99,
-            'title': 'Part 2: Question-Response',
-            'answeredCount': 3,
-            'totalCount': 10,
-          },
-          'sections': [
-            {
-              'sectionId': 5,
-              'title': 'Part 5: Incomplete Sentences',
-              'skill': 'reading',
-              'accuracyPercent': 72,
-              'cooldownActive': true,
-              'cooldownRemainingSeconds': 180,
-              'isSpeaking': false,
+        return FakeHttpClientAdapter.jsonResponse(
+          practiceCatalogResponse(
+            sections: [
+              practiceSection(
+                sectionId: 5,
+                code: 'P5',
+                name: 'Incomplete Sentences',
+                accuracyPercentage: 72,
+                categoriesInCooldown: 1,
+                nextReviewDueAt: '2026-11-13T18:00:00+00:00',
+              ),
+              practiceSection(
+                sectionId: 8,
+                code: 'S1',
+                name: 'Read Aloud',
+                modality: 'speaking',
+                skillCode: 'SPEA',
+                skillName: 'Speaking',
+                availableQuestionCount: 0,
+                expectedQuestionCount: 2,
+              ),
+            ],
+            unfinishedSession: {
+              'sessionId': 99,
+              'sectionId': 2,
+              'sectionCode': 'P2',
+              'sectionName': 'Question-Response',
+              'modality': 'listening',
+              'questionCount': 10,
+              'status': 'in_progress',
+              'correctCount': 3,
+              'questionSource': 'all',
+              'startedAt': '2026-11-13T16:03:52+00:00',
+              'finishedAt': null,
+              'topicId': null,
+              'cefrLevelCode': null,
+              'isShort': false,
             },
-            {
-              'sectionId': 8,
-              'title': 'Part 8: Read Aloud',
-              'skill': 'speaking',
-              'accuracyPercent': 55,
-              'cooldownActive': false,
-              'isSpeaking': true,
-            },
-          ],
-        });
+          ),
+        );
       }
       if (options.path == '/api/learner/practice/matrix' &&
           options.method == 'GET') {
-        return FakeHttpClientAdapter.jsonResponse({
-          'levels': ['A2', 'B1', 'B2'],
-          'topics': [
-            {
-              'topicId': 101,
-              'name': 'Verb Tenses',
-              'cells': [
-                {'cefrLevelCode': 'A2', 'questionCount': 12, 'accuracyPercent': 80},
-                {'cefrLevelCode': 'B1', 'questionCount': 8, 'accuracyPercent': 50},
-                {'cefrLevelCode': 'B2', 'questionCount': 0, 'accuracyPercent': null},
-              ],
-            },
-          ],
-        });
+        return FakeHttpClientAdapter.jsonResponse([
+          practiceCell(
+            topicId: 101,
+            topicCode: 'R-TEN',
+            topicName: 'Verb Tenses',
+            levelCode: 'A2',
+            mastery: 2,
+          ),
+          practiceCell(
+            topicId: 101,
+            topicCode: 'R-TEN',
+            topicName: 'Verb Tenses',
+            levelCode: 'B1',
+            mastery: 1,
+          ),
+          practiceCell(
+            topicId: 101,
+            topicCode: 'R-TEN',
+            topicName: 'Verb Tenses',
+            levelCode: 'B2',
+            mastery: 0,
+          ),
+        ]);
+      }
+      if (options.path == '/api/learner/practice/free-drill') {
+        return FakeHttpClientAdapter.jsonResponse(
+          practiceFreeDrillResponse(),
+        );
       }
       if (options.path == '/api/learner/practice/sessions' &&
           options.method == 'POST') {
@@ -163,16 +193,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(catalogCalls, 1);
-    expect(find.textContaining('Part 2: Question-Response'), findsOneWidget);
+    expect(find.textContaining('Question-Response'), findsOneWidget);
     expect(find.text('RESUME SESSION'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Part 5: Incomplete Sentences'),
+      find.text('P5 · Incomplete Sentences'),
       200,
       scrollable: find.byType(Scrollable).last,
     );
-    expect(find.text('Part 5: Incomplete Sentences'), findsOneWidget);
+    expect(find.text('P5 · Incomplete Sentences'), findsOneWidget);
     expect(find.text('72%'), findsOneWidget);
-    expect(find.text('COOLDOWN'), findsOneWidget);
+    expect(find.text('1 RESTING'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('SPEAKING ATTEMPT'),
       200,
@@ -219,6 +249,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(catalogCalls, greaterThanOrEqualTo(2));
-    expect(find.text('Section 1: Academic Reading'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('S1 · Academic Reading'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('S1 · Academic Reading'), findsOneWidget);
+    expect(find.text('SECTION CATALOG'), findsOneWidget);
   });
 }

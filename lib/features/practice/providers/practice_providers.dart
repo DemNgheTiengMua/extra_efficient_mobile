@@ -17,10 +17,24 @@ class PracticeRepository {
     return PracticeCatalog.fromJson(res.data ?? const <String, dynamic>{});
   }
 
+  /// `GET /practice/matrix` is a bare array of cells, not an object.
   Future<PracticeMatrix> fetchMatrix() async {
-    final res =
-        await _dio.get<Map<String, dynamic>>('/api/learner/practice/matrix');
-    return PracticeMatrix.fromJson(res.data ?? const <String, dynamic>{});
+    final res = await _dio.get<List<dynamic>>('/api/learner/practice/matrix');
+    return PracticeMatrix.parse(res.data ?? const []);
+  }
+
+  /// Asks the backend whether a cell may start, before the learner taps it.
+  Future<PracticeFreeDrillState> fetchFreeDrill({
+    required int topicId,
+    required String cefrLevelCode,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/learner/practice/free-drill',
+      queryParameters: {'topicId': topicId, 'cefrLevelCode': cefrLevelCode},
+    );
+    return PracticeFreeDrillState.fromJson(
+      res.data ?? const <String, dynamic>{},
+    );
   }
 
   Future<int> startSession({
@@ -190,10 +204,12 @@ final practiceCatalogProvider =
   ref.watch(certificateScopeVersionProvider);
   final auth = ref.watch(authNotifierProvider);
   if (!auth.isAuthenticated) {
-    return const PracticeCatalog(sectionNoun: 'Section', sections: []);
+    return const PracticeCatalog();
   }
   return ref.read(practiceRepositoryProvider).fetchCatalog();
-});
+  // Retry is disabled here because a refused load must reach the screen's own
+  // error branch; the app-wide stance is #12's.
+}, retry: (count, error) => null);
 
 final practiceMatrixProvider =
     FutureProvider.autoDispose<PracticeMatrix>((ref) async {
@@ -203,7 +219,44 @@ final practiceMatrixProvider =
     return const PracticeMatrix(levels: [], topics: []);
   }
   return ref.read(practiceRepositoryProvider).fetchMatrix();
-});
+}, retry: (count, error) => null);
+
+/// The grid's own availability: the matrix cells plus the backend's lock state
+/// for every cell, asked **before** the learner taps rather than discovered by a
+/// failed start. Keyed `"<topicId>:<levelCode>"`.
+class PracticeGrid {
+  const PracticeGrid({required this.matrix, required this.locks});
+
+  final PracticeMatrix matrix;
+  final Map<String, PracticeFreeDrillState> locks;
+
+  static String keyFor(int topicId, String levelCode) => '$topicId:$levelCode';
+
+  PracticeFreeDrillState? lockFor(int topicId, String levelCode) =>
+      locks[keyFor(topicId, levelCode)];
+}
+
+final practiceGridProvider =
+    FutureProvider.autoDispose<PracticeGrid>((ref) async {
+  final matrix = await ref.watch(practiceMatrixProvider.future);
+  final repo = ref.read(practiceRepositoryProvider);
+  final states = await Future.wait([
+    for (final topic in matrix.topics)
+      for (final cell in topic.cells)
+        repo
+            .fetchFreeDrill(
+              topicId: cell.topicId,
+              cefrLevelCode: cell.levelCode,
+            )
+            .then(
+              (state) => MapEntry(
+                PracticeGrid.keyFor(cell.topicId, cell.levelCode),
+                state,
+              ),
+            ),
+  ]);
+  return PracticeGrid(matrix: matrix, locks: Map.fromEntries(states));
+}, retry: (count, error) => null);
 
 class SavedSectionFilterNotifier extends Notifier<int?> {
   @override
