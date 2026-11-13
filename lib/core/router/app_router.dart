@@ -9,6 +9,8 @@ import '../../features/auth/screens/forgot_password_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/auth/screens/sign_in_screen.dart';
 import '../../features/auth/screens/verify_email_screen.dart';
+import '../../features/practice/screens/practice_hub_screen.dart';
+import '../../features/practice/screens/practice_session_screen.dart';
 import '../../features/shell/main_shell.dart';
 import '../../features/shell/tab_placeholder_screen.dart';
 
@@ -82,11 +84,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/practice',
-                builder: (context, state) => const TabPlaceholderScreen(
-                  tabName: 'PRACTICE',
-                  description:
-                      'Free section & matrix drills, saved questions, and weakness report.',
-                ),
+                builder: (context, state) => const PracticeHubScreen(),
               ),
             ],
           ),
@@ -123,6 +121,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/practice/sessions/:sessionId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['sessionId'] ?? '') ?? 0;
+          return PracticeSessionScreen(sessionId: id);
+        },
       ),
     ],
   );
