@@ -1,0 +1,57 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/network/dio_client.dart';
+import '../auth/auth_provider.dart';
+import 'wallet_models.dart';
+import 'wallet_repository.dart';
+
+/// Abstraction for launching external payment / Meet URLs, overridable in tests.
+abstract class UrlLauncherAdapter {
+  Future<bool> launchExternalUrl(String url);
+}
+
+class NoopUrlLauncherAdapter implements UrlLauncherAdapter {
+  const NoopUrlLauncherAdapter();
+
+  @override
+  Future<bool> launchExternalUrl(String url) async => false;
+}
+
+final urlLauncherAdapterProvider = Provider<UrlLauncherAdapter>(
+  (ref) => const NoopUrlLauncherAdapter(),
+);
+
+final walletRepositoryProvider = Provider<WalletRepository>((ref) {
+  return WalletRepository(ref.watch(dioProvider));
+});
+
+class WalletSummaryNotifier extends AsyncNotifier<WalletSummary?> {
+  @override
+  Future<WalletSummary?> build() async {
+    final authState = ref.watch(authNotifierProvider);
+    if (!authState.isAuthenticated) {
+      return null;
+    }
+    return ref.read(walletRepositoryProvider).getWallet();
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref.read(walletRepositoryProvider).getWallet(),
+    );
+  }
+}
+
+final walletSummaryProvider =
+    AsyncNotifierProvider<WalletSummaryNotifier, WalletSummary?>(
+  WalletSummaryNotifier.new,
+);
+
+final creditPackagesProvider = FutureProvider<List<CreditPackage>>((ref) async {
+  final authState = ref.watch(authNotifierProvider);
+  if (!authState.isAuthenticated) {
+    return const [];
+  }
+  return ref.read(walletRepositoryProvider).getPackages();
+});

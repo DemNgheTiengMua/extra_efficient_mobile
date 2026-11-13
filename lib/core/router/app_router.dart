@@ -11,6 +11,7 @@ import '../../features/auth/screens/sign_in_screen.dart';
 import '../../features/auth/screens/verify_email_screen.dart';
 import '../../features/shell/main_shell.dart';
 import '../../features/shell/tab_placeholder_screen.dart';
+import '../../features/wallet/screens/wallet_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -106,11 +107,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/wallet',
-                builder: (context, state) => const TabPlaceholderScreen(
-                  tabName: 'WALLET',
-                  description:
-                      'Credit balance, append-only ledger, credit packages, and mentors.',
-                ),
+                builder: (context, state) => const WalletScreen(),
               ),
             ],
           ),
