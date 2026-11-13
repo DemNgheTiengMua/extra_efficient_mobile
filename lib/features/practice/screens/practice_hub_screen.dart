@@ -65,7 +65,8 @@ class _PracticeHubScreenState extends ConsumerState<PracticeHubScreen> {
                     _startSession(topicId: topicId, cefrLevelCode: level),
                 onResumeSession: (sessionId) =>
                     context.push('/practice/sessions/$sessionId'),
-                onOpenSpeaking: () => context.go('/exams'),
+                onOpenSpeaking: () =>
+                    context.push('/practice/skill-practice'),
               ),
             _PracticeSubTab.saved => const SavedQuestionsView(),
             _PracticeSubTab.weakness => const WeaknessAnalysisView(),

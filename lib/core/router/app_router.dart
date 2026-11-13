@@ -13,9 +13,17 @@ import '../../features/auth/screens/register_screen.dart';
 import '../../features/auth/screens/sign_in_screen.dart';
 import '../../features/auth/screens/verify_email_screen.dart';
 import '../../features/exams/screens/exam_hub_screen.dart';
+import '../../features/exams/screens/mock_exam_room_screen.dart';
+import '../../features/exams/screens/mock_instructions_screen.dart';
+import '../../features/exams/screens/mock_preflight_screen.dart';
+import '../../features/exams/screens/mock_result_screen.dart';
+import '../../features/exams/screens/mock_review_screen.dart';
 import '../../features/exams/screens/placement_exam_room_screen.dart';
 import '../../features/exams/screens/placement_overview_screen.dart';
 import '../../features/exams/screens/placement_result_screen.dart';
+import '../../features/exams/screens/skill_practice_catalog_screen.dart';
+import '../../features/exams/screens/skill_practice_result_screen.dart';
+import '../../features/exams/screens/skill_practice_room_screen.dart';
 import '../../features/path/screens/goal_calibration_screen.dart';
 import '../../features/path/screens/learning_path_screen.dart';
 import '../../features/path/screens/lesson_player_screen.dart';
@@ -186,6 +194,76 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final id = int.tryParse(state.pathParameters['sessionId'] ?? '') ?? 0;
           return PracticeSessionScreen(sessionId: id);
+        },
+      ),
+      GoRoute(
+        path: '/exams/:examId/instructions',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final examId =
+              int.tryParse(state.pathParameters['examId'] ?? '') ?? 0;
+          return MockInstructionsScreen(examId: examId);
+        },
+      ),
+      GoRoute(
+        path: '/exams/attempts/:attemptId/preflight',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final attemptId =
+              int.tryParse(state.pathParameters['attemptId'] ?? '') ?? 0;
+          return MockPreflightScreen(attemptId: attemptId);
+        },
+      ),
+      GoRoute(
+        path: '/exams/attempts/:attemptId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final attemptId =
+              int.tryParse(state.pathParameters['attemptId'] ?? '') ?? 0;
+          return MockExamRoomScreen(attemptId: attemptId);
+        },
+      ),
+      GoRoute(
+        path: '/exams/attempts/:attemptId/result',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final attemptId =
+              int.tryParse(state.pathParameters['attemptId'] ?? '') ?? 0;
+          return MockResultScreen(attemptId: attemptId);
+        },
+      ),
+      GoRoute(
+        path: '/exams/attempts/:attemptId/review',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final attemptId =
+              int.tryParse(state.pathParameters['attemptId'] ?? '') ?? 0;
+          return MockReviewScreen(attemptId: attemptId);
+        },
+      ),
+      GoRoute(
+        path: '/practice/skill-practice',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const SkillPracticeCatalogScreen(),
+      ),
+      GoRoute(
+        path: '/practice/skill-practice/:skill/attempts/:attemptId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final skill = state.pathParameters['skill'] ?? 'speaking';
+          final attemptId =
+              int.tryParse(state.pathParameters['attemptId'] ?? '') ?? 0;
+          return SkillPracticeRoomScreen(skill: skill, attemptId: attemptId);
+        },
+      ),
+      GoRoute(
+        path: '/practice/skill-practice/:skill/attempts/:attemptId/result',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final skill = state.pathParameters['skill'] ?? 'speaking';
+          final attemptId =
+              int.tryParse(state.pathParameters['attemptId'] ?? '') ?? 0;
+          return SkillPracticeResultScreen(skill: skill, attemptId: attemptId);
         },
       ),
     ],
