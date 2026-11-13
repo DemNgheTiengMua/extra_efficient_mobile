@@ -31,7 +31,10 @@ class LearningPathScreen extends ConsumerWidget {
           StateBlock(
             stamp: 'PATH ERROR',
             title: 'Could not load learning path',
-            description: error.toString(),
+            description: extractApiError(
+              error,
+              fallback: 'The learning path could not be loaded.',
+            ),
             action: PlacardButton(
               label: 'RETRY',
               onPress: () => ref.invalidate(learningPathProvider),

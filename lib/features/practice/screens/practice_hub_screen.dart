@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:forui/forui.dart';
@@ -50,17 +49,13 @@ class _PracticeHubScreenState extends ConsumerState<PracticeHubScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      // The backend's explanation lives in `detail`; `title` is only a short
-      // label ("No questions available"). Prefer the sentence it wrote.
-      final data = e is DioException ? e.response?.data : null;
-      final detail =
-          data is Map<String, dynamic> ? data['detail'] as String? : null;
+      // `extractApiError` prefers the backend's `detail`, which is where the
+      // actionable sentence lives; `title` is only a short label.
       setState(() {
-        _startError = detail ??
-            extractApiError(
-              e,
-              fallback: 'This drill could not be started.',
-            );
+        _startError = extractApiError(
+          e,
+          fallback: 'This drill could not be started.',
+        );
       });
     } finally {
       if (mounted) {

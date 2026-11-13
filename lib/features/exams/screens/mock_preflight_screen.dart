@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/media/audio_media_adapter.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../providers/mock_exam_providers.dart';
 
 /// Audio & Microphone Preflight Check for a started Mock Attempt.
@@ -133,7 +134,7 @@ class _MockPreflightScreenState extends ConsumerState<MockPreflightScreen> {
           child: StateBlock(
             stamp: 'ERROR',
             title: 'UNABLE TO LOAD PREFLIGHT',
-            description: err.toString(),
+            description: extractApiError(err, fallback: 'The preflight check could not be loaded.'),
             action: PlacardButton(
               label: 'RETRY',
               onPress: () =>

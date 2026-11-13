@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../theme/signage_theme.dart';
 import '../../widgets/signage_primitives.dart';
+import '../auth/auth_provider.dart';
 import '../context/learner_context_provider.dart';
 
 /// Certificate-scoped tab landing screen for `PATH`, `PRACTICE`, `EXAMS`, and `WALLET`.
@@ -32,7 +33,10 @@ class TabPlaceholderScreen extends ConsumerWidget {
           error: (error, _) => PlacardAlert(
             variant: PlacardAlertVariant.danger,
             title: 'Unable to load learner context',
-            subtitle: error.toString(),
+            subtitle: extractApiError(
+              error,
+              fallback: 'The learner context could not be loaded.',
+            ),
           ),
           data: (ctx) {
             final certName = ctx == null

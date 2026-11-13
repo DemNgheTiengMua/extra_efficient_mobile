@@ -170,7 +170,18 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           label: 'SIGN OUT',
           variant: PlacardButtonVariant.destructive,
           onPress: () async {
-            await ref.read(authNotifierProvider.notifier).signOut();
+            try {
+              await ref.read(authNotifierProvider.notifier).signOut();
+            } catch (e) {
+              if (mounted) {
+                setState(() {
+                  _errorMessage = extractApiError(
+                    e,
+                    fallback: 'Could not sign out',
+                  );
+                });
+              }
+            }
           },
         ),
       ],

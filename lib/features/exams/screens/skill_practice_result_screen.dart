@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../models/skill_practice_models.dart';
 import '../providers/skill_practice_providers.dart';
 
@@ -74,7 +75,8 @@ class _SkillPracticeResultScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        
+        _error = extractApiError(e, fallback: 'The skill practice result could not be loaded.');
         _loading = false;
       });
     }
@@ -104,7 +106,8 @@ class _SkillPracticeResultScreenState
       if (!mounted) return;
       setState(() {
         _retrying = false;
-        _error = e.toString();
+        
+        _error = extractApiError(e, fallback: 'The skill practice result could not be loaded.');
       });
     }
   }

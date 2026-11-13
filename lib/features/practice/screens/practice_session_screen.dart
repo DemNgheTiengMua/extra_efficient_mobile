@@ -36,6 +36,9 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
   bool _isPlayingAudio = false;
   String? _bookmarkError;
 
+  /// The backend's refusal for the last answer/hint, cleared on the next try.
+  String? _actionError;
+
   bool _showingSummary = false;
   PracticeSummary? _summary;
   PracticeInsight? _insight;
@@ -116,7 +119,10 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = extractApiError(
+          e,
+          fallback: 'The practice session could not be loaded.',
+        );
         _loading = false;
       });
     }
@@ -148,13 +154,24 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
   }
 
   Future<void> _requestHint(PracticeQuestion q) async {
-    final hint = await ref
-        .read(practiceRepositoryProvider)
-        .requestHint(widget.sessionId, _addressOf(q));
-    if (!mounted) return;
-    setState(() {
-      _hints[_addressOf(q)] = hint;
-    });
+    setState(() => _actionError = null);
+    try {
+      final hint = await ref
+          .read(practiceRepositoryProvider)
+          .requestHint(widget.sessionId, _addressOf(q));
+      if (!mounted) return;
+      setState(() {
+        _hints[_addressOf(q)] = hint;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _actionError = extractApiError(
+          e,
+          fallback: 'Could not fetch a hint for this question.',
+        );
+      });
+    }
   }
 
   Future<void> _submitAnswer(PracticeQuestion q) async {
@@ -162,7 +179,10 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
     if (q.isWriting) {
       final text = (_writingResponses[_addressOf(q)] ?? '').trim();
       if (text.isEmpty) return;
-      setState(() => _submitting = true);
+      setState(() {
+        _submitting = true;
+        _actionError = null;
+      });
       try {
         final result = await ref.read(practiceRepositoryProvider).submitAnswer(
               widget.sessionId,
@@ -174,6 +194,14 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
         setState(() {
           _results[_addressOf(q)] = result;
         });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _actionError = extractApiError(
+            e,
+            fallback: 'Could not submit this answer.',
+          );
+        });
       } finally {
         if (mounted) setState(() => _submitting = false);
       }
@@ -182,7 +210,10 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
 
     final selectedId = _selectedOptions[_addressOf(q)];
     if (selectedId == null) return;
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _actionError = null;
+    });
     try {
       final result = await ref.read(practiceRepositoryProvider).submitAnswer(
             widget.sessionId,
@@ -192,6 +223,14 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
       if (!mounted) return;
       setState(() {
         _results[_addressOf(q)] = result;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _actionError = extractApiError(
+          e,
+          fallback: 'Could not submit this answer.',
+        );
       });
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -217,18 +256,31 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = extractApiError(
+          e,
+          fallback: 'The practice summary could not be loaded.',
+        );
         _loading = false;
       });
     }
   }
 
   Future<void> _retryInsight() async {
-    final updated = await ref
-        .read(practiceRepositoryProvider)
-        .retryInsight(widget.sessionId);
-    if (!mounted) return;
-    setState(() => _insight = updated);
+    try {
+      final updated = await ref
+          .read(practiceRepositoryProvider)
+          .retryInsight(widget.sessionId);
+      if (!mounted) return;
+      setState(() => _insight = updated);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _actionError = extractApiError(
+          e,
+          fallback: 'Could not retry the practice insight.',
+        );
+      });
+    }
   }
 
   @override
@@ -275,6 +327,7 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
       return _SummaryView(
         summary: _summary!,
         insight: _insight,
+        actionError: _actionError,
         onRetryInsight: _retryInsight,
         onDone: () => context.pop(),
       );
@@ -331,6 +384,17 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
           PlacardAlert(
             key: const Key('bookmark-error'),
             title: _bookmarkError!,
+            variant: PlacardAlertVariant.danger,
+          ),
+          const SizedBox(height: 12),
+        ],
+        // A refused answer or hint must say so: the control springs back and
+        // the learner needs to know why nothing was graded.
+        if (_actionError != null) ...[
+          PlacardAlert(
+            key: const Key('session-action-error'),
+            title: 'ACTION FAILED',
+            subtitle: _actionError!,
             variant: PlacardAlertVariant.danger,
           ),
           const SizedBox(height: 12),
@@ -565,12 +629,14 @@ class _SummaryView extends StatelessWidget {
   const _SummaryView({
     required this.summary,
     required this.insight,
+    required this.actionError,
     required this.onRetryInsight,
     required this.onDone,
   });
 
   final PracticeSummary summary;
   final PracticeInsight? insight;
+  final String? actionError;
   final VoidCallback onRetryInsight;
   final VoidCallback onDone;
 
@@ -600,6 +666,15 @@ class _SummaryView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
+        if (actionError != null) ...[
+          PlacardAlert(
+            key: const Key('session-action-error'),
+            title: 'ACTION FAILED',
+            subtitle: actionError!,
+            variant: PlacardAlertVariant.danger,
+          ),
+          const SizedBox(height: 16),
+        ],
         if (insight != null) ...[
           PlacardPanel(
             title: 'AI PRACTICE INSIGHT',

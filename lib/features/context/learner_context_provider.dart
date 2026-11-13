@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/dio_client.dart';
+import '../../core/network/provider_retry.dart';
 import '../auth/auth_provider.dart';
 import 'learner_context_models.dart';
 
@@ -55,4 +56,5 @@ class LearnerContextNotifier extends AsyncNotifier<LearnerContext?> {
 final learnerContextProvider =
     AsyncNotifierProvider<LearnerContextNotifier, LearnerContext?>(
   LearnerContextNotifier.new,
+  retry: noProviderRetry,
 );

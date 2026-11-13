@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../../context/learner_context_provider.dart';
 import '../providers/mock_exam_providers.dart';
 
@@ -41,7 +42,10 @@ class _MockInstructionsScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = extractApiError(
+          e,
+          fallback: 'The mock attempt could not be started.',
+        );
         _starting = false;
       });
     }
@@ -107,7 +111,7 @@ class _MockInstructionsScreenState
           child: StateBlock(
             stamp: 'ERROR',
             title: 'UNABLE TO LOAD INSTRUCTIONS',
-            description: err.toString(),
+            description: extractApiError(err, fallback: 'The exam instructions could not be loaded.'),
             action: PlacardButton(
               label: 'RETRY',
               onPress: () =>

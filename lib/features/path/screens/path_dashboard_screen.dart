@@ -27,7 +27,10 @@ class PathDashboardScreen extends ConsumerWidget {
             child: PlacardAlert(
               variant: PlacardAlertVariant.danger,
               title: 'Unable to load learner context',
-              subtitle: error.toString(),
+              subtitle: extractApiError(
+                error,
+                fallback: 'The learner context could not be loaded.',
+              ),
             ),
           ),
           data: (ctx) {
@@ -65,7 +68,10 @@ class PathDashboardScreen extends ConsumerWidget {
           error: (error, _) => StateBlock(
             stamp: 'DASHBOARD UNAVAILABLE',
             title: 'Could not load dashboard summary',
-            description: error.toString(),
+            description: extractApiError(
+              error,
+              fallback: 'The dashboard summary could not be loaded.',
+            ),
             action: PlacardButton(
               label: 'RETRY',
               onPress: () => ref.invalidate(dashboardProvider),

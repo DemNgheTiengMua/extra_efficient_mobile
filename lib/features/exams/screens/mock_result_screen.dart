@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../models/mock_exam_models.dart';
 import '../providers/mock_exam_providers.dart';
 
@@ -100,7 +101,7 @@ class _MockResultScreenState extends ConsumerState<MockResultScreen> {
           child: StateBlock(
             stamp: 'ERROR',
             title: 'UNABLE TO LOAD RESULT',
-            description: err.toString(),
+            description: extractApiError(err, fallback: 'The result could not be loaded.'),
             action: PlacardButton(
               label: 'RETRY',
               onPress: () =>
@@ -184,7 +185,7 @@ class _MockResultScreenState extends ConsumerState<MockResultScreen> {
                   error: (err, _) => StateBlock(
                     stamp: 'ERROR',
                     title: 'INSIGHT UNAVAILABLE',
-                    description: err.toString(),
+                    description: extractApiError(err, fallback: 'The result could not be loaded.'),
                     action: PlacardButton(
                       key: const Key('retry-exam-insight-btn'),
                       label: _retryingInsight ? 'RETRYING...' : 'RETRY INSIGHT',

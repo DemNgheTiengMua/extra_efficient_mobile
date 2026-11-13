@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/provider_retry.dart';
 import '../../auth/auth_provider.dart';
 import '../../context/learner_context_provider.dart';
 import '../models/practice_models.dart';
@@ -214,9 +215,7 @@ final practiceCatalogProvider =
     return const PracticeCatalog();
   }
   return ref.read(practiceRepositoryProvider).fetchCatalog();
-  // Retry is disabled here because a refused load must reach the screen's own
-  // error branch; the app-wide stance is #12's.
-}, retry: (count, error) => null);
+}, retry: noProviderRetry);
 
 final practiceMatrixProvider =
     FutureProvider.autoDispose<PracticeMatrix>((ref) async {
@@ -226,7 +225,7 @@ final practiceMatrixProvider =
     return const PracticeMatrix(levels: [], topics: []);
   }
   return ref.read(practiceRepositoryProvider).fetchMatrix();
-}, retry: (count, error) => null);
+}, retry: noProviderRetry);
 
 /// The grid's own availability: the matrix cells plus the backend's lock state
 /// for every cell, asked **before** the learner taps rather than discovered by a
@@ -263,7 +262,7 @@ final practiceGridProvider =
             ),
   ]);
   return PracticeGrid(matrix: matrix, locks: Map.fromEntries(states));
-}, retry: (count, error) => null);
+}, retry: noProviderRetry);
 
 class SavedSectionFilterNotifier extends Notifier<int?> {
   @override
@@ -299,7 +298,7 @@ final savedQuestionsProvider =
     return const SavedQuestionsResponse();
   }
   return ref.read(practiceRepositoryProvider).fetchSavedQuestions();
-}, retry: (count, error) => null);
+}, retry: noProviderRetry);
 
 final weaknessAnalysisProvider =
     FutureProvider.autoDispose<WeaknessAnalysisData>((ref) async {
@@ -314,4 +313,4 @@ final weaknessAnalysisProvider =
     );
   }
   return ref.read(practiceRepositoryProvider).fetchWeaknessAnalysis();
-});
+}, retry: noProviderRetry);

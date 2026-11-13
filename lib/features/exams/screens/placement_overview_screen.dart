@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/media/audio_media_adapter.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../../context/learner_context_provider.dart';
 import '../models/placement_models.dart';
 import '../providers/placement_providers.dart';
@@ -101,14 +102,29 @@ class _PlacementOverviewScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = extractApiError(
+          e,
+          fallback: 'The placement test could not be started.',
+        );
         _starting = false;
       });
     }
   }
 
   Future<void> _abandonInProgress(int placementId) async {
-    await ref.read(placementRepositoryProvider).abandon(placementId);
+    try {
+      await ref.read(placementRepositoryProvider).abandon(placementId);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = extractApiError(
+          e,
+          fallback: 'The unfinished placement could not be cancelled.',
+        );
+      });
+      return;
+    }
+    if (!mounted) return;
     ref.invalidate(placementCatalogProvider);
   }
 
@@ -172,7 +188,7 @@ class _PlacementOverviewScreenState
               StateBlock(
                 stamp: 'ERROR',
                 title: 'UNABLE TO LOAD PLACEMENT',
-                description: error.toString(),
+                description: extractApiError(error, fallback: 'The placement catalogue could not be loaded.'),
                 action: PlacardButton(
                   label: 'RETRY',
                   onPress: () => ref.invalidate(placementCatalogProvider),

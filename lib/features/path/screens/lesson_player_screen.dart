@@ -5,6 +5,7 @@ import 'package:forui/forui.dart';
 import '../../../core/media/audio_media_adapter.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../models/path_models.dart';
 import '../providers/path_providers.dart';
 
@@ -26,6 +27,7 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
   final Map<int, String> _selectedOptions = {};
   final Map<int, MicroCheckResult> _microCheckResults = {};
   bool _isSubmittingCheck = false;
+  String? _actionError;
 
   @override
   void dispose() {
@@ -64,9 +66,22 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
     final currentCard = lesson.cards[_currentIndex];
     if (!_canAdvanceFrom(currentCard)) return;
 
-    await ref
-        .read(pathRepositoryProvider)
-        .markCardViewed(lesson.id, currentCard.id);
+    // Progress is a write: if it fails the card must not advance silently.
+    try {
+      await ref
+          .read(pathRepositoryProvider)
+          .markCardViewed(lesson.id, currentCard.id);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _actionError = extractApiError(
+          e,
+          fallback: 'Could not save your progress in this lesson.',
+        );
+      });
+      return;
+    }
+    if (!mounted) return;
 
     final next = _currentIndex + 1;
     setState(() => _currentIndex = next);
@@ -81,9 +96,20 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
     final currentCard = lesson.cards[_currentIndex];
     if (!_canAdvanceFrom(currentCard)) return;
 
-    await ref
-        .read(pathRepositoryProvider)
-        .markCardViewed(lesson.id, currentCard.id);
+    try {
+      await ref
+          .read(pathRepositoryProvider)
+          .markCardViewed(lesson.id, currentCard.id);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _actionError = extractApiError(
+          e,
+          fallback: 'Could not save your progress in this lesson.',
+        );
+      });
+      return;
+    }
     if (mounted) {
       setState(() => _completed = true);
     }
@@ -95,7 +121,10 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
   Future<void> _submitMicroCheck(LessonDetail lesson, LessonCard card) async {
     final selected = _selectedOptions[card.id];
     if (selected == null) return;
-    setState(() => _isSubmittingCheck = true);
+    setState(() {
+      _isSubmittingCheck = true;
+      _actionError = null;
+    });
     try {
       final result = await ref.read(pathRepositoryProvider).submitMicroCheck(
             lessonId: lesson.id,
@@ -105,6 +134,14 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
       if (mounted) {
         setState(() => _microCheckResults[card.id] = result);
       }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _actionError = extractApiError(
+          e,
+          fallback: 'Could not check this answer.',
+        );
+      });
     } finally {
       if (mounted) {
         setState(() => _isSubmittingCheck = false);
@@ -145,7 +182,17 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
           StateBlock(
             stamp: 'LESSON ERROR',
             title: 'Unable to load lesson',
-            description: error.toString(),
+            description: extractApiError(
+              error,
+              fallback: 'This lesson could not be opened.',
+            ),
+            action: PlacardButton(
+              label: 'RETRY',
+              onPress: () {
+                ref.invalidate(lessonDetailProvider(widget.lessonId));
+                ref.invalidate(lessonProgressProvider(widget.lessonId));
+              },
+            ),
           ),
         ],
       ),
@@ -241,10 +288,13 @@ class _LessonPlayerScreenState extends ConsumerState<LessonPlayerScreen> {
                       card: card,
                       selectedOption: _selectedOptions[card.id],
                       checkResult: _microCheckResults[card.id],
+                      checkError: _actionError,
                       isSubmittingCheck: _isSubmittingCheck,
                       isAudioPlaying: _isAudioPlaying,
-                      onSelectOption: (opt) =>
-                          setState(() => _selectedOptions[card.id] = opt),
+                      onSelectOption: (opt) => setState(() {
+                        _selectedOptions[card.id] = opt;
+                        _actionError = null;
+                      }),
                       onSubmitCheck: () => _submitMicroCheck(lesson, card),
                       onToggleAudio: card.audioUrl != null
                           ? () => _toggleAudio(card.audioUrl!)
@@ -307,6 +357,7 @@ class _LessonCardView extends StatelessWidget {
     required this.card,
     required this.selectedOption,
     required this.checkResult,
+    required this.checkError,
     required this.isSubmittingCheck,
     required this.isAudioPlaying,
     required this.onSelectOption,
@@ -317,6 +368,7 @@ class _LessonCardView extends StatelessWidget {
   final LessonCard card;
   final String? selectedOption;
   final MicroCheckResult? checkResult;
+  final String? checkError;
   final bool isSubmittingCheck;
   final bool isAudioPlaying;
   final ValueChanged<String> onSelectOption;
@@ -403,6 +455,14 @@ class _LessonCardView extends StatelessWidget {
                     : PlacardAlertVariant.danger,
                 title: checkResult!.correct ? 'CORRECT' : 'TRY AGAIN',
                 subtitle: checkResult!.explanation,
+              ),
+            ] else if (checkError != null) ...[
+              const SizedBox(height: 12),
+              PlacardAlert(
+                key: const Key('lesson-check-error'),
+                variant: PlacardAlertVariant.danger,
+                title: 'CHECK FAILED',
+                subtitle: checkError!,
               ),
             ],
           ],

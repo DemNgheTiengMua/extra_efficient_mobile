@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/media/audio_media_adapter.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../../context/learner_context_provider.dart';
 import '../models/skill_practice_models.dart';
 import '../providers/skill_practice_providers.dart';
@@ -37,7 +38,7 @@ class _SkillPracticeCatalogScreenState
           .fetchInstructions(skill, summary.examId);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      setState(() => _error = extractApiError(e, fallback: 'Could not start this skill practice.'));
       return;
     }
     if (!mounted) return;
@@ -75,7 +76,7 @@ class _SkillPracticeCatalogScreenState
       context.push('/practice/skill-practice/$skill/attempts/$attemptId');
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      setState(() => _error = extractApiError(e, fallback: 'Could not start this skill practice.'));
     } finally {
       if (mounted) {
         setState(() => _starting = false);
@@ -195,7 +196,10 @@ class _CatalogSection extends StatelessWidget {
       error: (err, _) => StateBlock(
         stamp: 'ERROR',
         title: 'UNABLE TO LOAD',
-        description: err.toString(),
+        description: extractApiError(
+          err,
+          fallback: 'The skill practice catalogue could not be loaded.',
+        ),
         action: PlacardButton(label: 'RETRY', onPress: onRetry),
       ),
       data: (items) {

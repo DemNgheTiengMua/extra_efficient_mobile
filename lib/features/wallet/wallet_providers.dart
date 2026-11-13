@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/dio_client.dart';
+import '../../core/network/provider_retry.dart';
 import '../auth/auth_provider.dart';
 import 'wallet_models.dart';
 import 'wallet_repository.dart';
@@ -33,6 +34,7 @@ class WalletSummaryNotifier extends AsyncNotifier<WalletSummary?> {
 final walletSummaryProvider =
     AsyncNotifierProvider<WalletSummaryNotifier, WalletSummary?>(
   WalletSummaryNotifier.new,
+  retry: noProviderRetry,
 );
 
 final creditPackagesProvider = FutureProvider<List<CreditPackage>>((ref) async {
@@ -41,4 +43,4 @@ final creditPackagesProvider = FutureProvider<List<CreditPackage>>((ref) async {
     return const [];
   }
   return ref.read(walletRepositoryProvider).getPackages();
-});
+}, retry: noProviderRetry);

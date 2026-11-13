@@ -4,6 +4,7 @@ import 'package:forui/forui.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../models/path_models.dart';
 import '../providers/path_providers.dart';
 
@@ -71,7 +72,7 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = e.toString());
+        setState(() => _errorMessage = extractApiError(e, fallback: 'Could not save your goal.'));
       }
     } finally {
       if (mounted) {
@@ -102,7 +103,7 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = e.toString());
+        setState(() => _errorMessage = extractApiError(e, fallback: 'Could not save your goal.'));
       }
     } finally {
       if (mounted) {
@@ -128,7 +129,7 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = e.toString());
+        setState(() => _errorMessage = extractApiError(e, fallback: 'Could not save your goal.'));
       }
     } finally {
       if (mounted) {
@@ -167,7 +168,14 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
           error: (error, _) => StateBlock(
             stamp: 'UNAVAILABLE',
             title: 'Could not load target band',
-            description: error.toString(),
+            description: extractApiError(
+              error,
+              fallback: 'The target band could not be loaded.',
+            ),
+            action: PlacardButton(
+              label: 'RETRY',
+              onPress: () => ref.invalidate(targetBandGoalProvider),
+            ),
           ),
           data: (goal) {
             if (goal == null) return const SizedBox.shrink();
@@ -281,7 +289,10 @@ class _GoalCalibrationScreenState extends ConsumerState<GoalCalibrationScreen> {
           error: (error, _) => PlacardAlert(
             variant: PlacardAlertVariant.warning,
             title: 'Calibration unavailable',
-            subtitle: error.toString(),
+            subtitle: extractApiError(
+              error,
+              fallback: 'Calibration status could not be loaded.',
+            ),
           ),
           data: (calibration) {
             if (calibration == null) return const SizedBox.shrink();
