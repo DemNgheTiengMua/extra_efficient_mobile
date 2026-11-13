@@ -198,93 +198,133 @@ class _PlacementExamRoomScreenState
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                key: const Key('exam-countdown-clock'),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: clockBg,
-                  border: Border.all(color: SignageColors.paper, width: 1),
-                ),
-                child: Text(
-                  formatClock(state.remainingSeconds),
-                  style: SignageTypography.data(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: clockFg,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              _buildAutosaveBadge(state.autosaveStatus),
-              const Spacer(),
-              ExamRoomExitButton(onLeave: _leaveRoom),
-              const SizedBox(width: 6),
-              FTappable(
-                key: const Key('exam-abandon-btn'),
-                onPress: _confirmAbandon,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: SignageColors.signRed,
-                    border: Border.all(color: SignageColors.ink, width: 2),
-                  ),
-                  child: Text(
-                    'CANCEL',
-                    style: SignageTypography.label(
-                      fontSize: 11,
-                      color: SignageColors.paper,
+              // Row 1 never collapses: the clock is the one thing a learner must
+              // never lose, and SUBMIT must always be reachable. A Spacer would
+              // overflow at 320dp, so the autosave label is the flexible member.
+              Row(
+                children: [
+                  Container(
+                    key: const Key('exam-countdown-clock'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: clockBg,
+                      border: Border.all(color: SignageColors.paper, width: 1),
+                    ),
+                    child: Text(
+                      formatClock(state.remainingSeconds),
+                      style: SignageTypography.data(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: clockFg,
+                      ),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              FTappable(
-                key: const Key('exam-grid-btn'),
-                onPress: () {
-                  showFSheet<void>(
-                    context: context,
-                    side: FLayout.btt,
-                    builder: (_) => AnswerNavigatorSheet(
-                      questions: state.questions,
-                      currentIndex: state.currentIndex,
-                      onSelectIndex: (idx) =>
-                          unawaited(_controller.jumpToQuestion(idx)),
-                    ),
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: SignageColors.paper,
-                    border: Border.all(color: SignageColors.ink, width: 2),
-                  ),
-                  child: Text(
-                    'GRID',
-                    style: SignageTypography.label(fontSize: 12),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              FTappable(
-                key: const Key('exam-submit-btn'),
-                onPress: _confirmSubmit,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: SignageColors.ink,
-                    border: Border.all(color: SignageColors.paper, width: 1),
-                  ),
-                  child: Text(
-                    'SUBMIT',
-                    style: SignageTypography.label(
-                      fontSize: 12,
-                      color: SignageColors.paper,
+                  const SizedBox(width: 8),
+                  // Expanded rather than Flexible: a loose FittedBox keeps its
+                  // intrinsic width and would still overflow at 320dp.
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: _buildAutosaveBadge(state.autosaveStatus),
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  FTappable(
+                    key: const Key('exam-submit-btn'),
+                    onPress: _confirmSubmit,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: SignageColors.ink,
+                        border: Border.all(color: SignageColors.paper, width: 1),
+                      ),
+                      child: Text(
+                        'SUBMIT',
+                        style: SignageTypography.label(
+                          fontSize: 12,
+                          color: SignageColors.paper,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Row 2 wraps instead of overflowing; these are the controls that
+              // may collapse, never the clock or SUBMIT.
+              Row(
+                children: [
+                  ExamRoomExitButton(onLeave: _leaveRoom),
+                  const SizedBox(width: 6),
+                  FTappable(
+                    key: const Key('exam-abandon-btn'),
+                    onPress: _confirmAbandon,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: SignageColors.signRed,
+                        border: Border.all(
+                          color: SignageColors.ink,
+                          width: 2,
+                        ),
+                      ),
+                      child: Text(
+                        'CANCEL',
+                        style: SignageTypography.label(
+                          fontSize: 11,
+                          color: SignageColors.paper,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  FTappable(
+                    key: const Key('exam-grid-btn'),
+                    onPress: () {
+                      showFSheet<void>(
+                        context: context,
+                        side: FLayout.btt,
+                        builder: (_) => AnswerNavigatorSheet(
+                          questions: state.questions,
+                          currentIndex: state.currentIndex,
+                          onSelectIndex: (idx) =>
+                              unawaited(_controller.jumpToQuestion(idx)),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: SignageColors.paper,
+                        border: Border.all(color: SignageColors.ink, width: 2),
+                      ),
+                      child: Text(
+                        'GRID',
+                        style: SignageTypography.label(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -543,10 +583,21 @@ class _PlacementExamRoomScreenState
                                     'Q${state.currentIndex + 1}/${state.questions.length}',
                                   ),
                                   const SizedBox(width: 8),
-                                  PlacardBadge.muted(
-                                    question.sectionName.isNotEmpty
-                                        ? question.sectionName
-                                        : question.skill.toUpperCase(),
+                                  // The section name is free text; it gives way
+                                  // rather than pushing FLAG off a 320dp screen.
+                                  Flexible(
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: PlacardBadge.muted(
+                                          question.sectionName.isNotEmpty
+                                              ? question.sectionName
+                                              : question.skill.toUpperCase(),
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                   const Spacer(),
                                   FTappable(

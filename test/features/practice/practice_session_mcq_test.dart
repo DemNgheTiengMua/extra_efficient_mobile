@@ -7,6 +7,7 @@ import 'package:extra_efficient_mobile/core/media/audio_media_adapter.dart';
 import 'package:extra_efficient_mobile/core/network/dio_client.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
 import '../../helpers/fake_http_adapter.dart';
+import '../../helpers/practice_payloads.dart';
 
 void main() {
   testWidgets(
@@ -50,22 +51,29 @@ void main() {
         });
       }
       if (options.path == '/api/learner/practice/catalog') {
-        return FakeHttpClientAdapter.jsonResponse({
-          'sectionNoun': 'Part',
-          'sections': [
-            {
-              'sectionId': 2,
-              'title': 'Part 2: Question-Response',
-              'skill': 'listening',
-              'accuracyPercent': 68,
-              'cooldownActive': false,
-              'isSpeaking': false,
-            },
-          ],
-        });
+        return FakeHttpClientAdapter.jsonResponse(
+          practiceCatalogResponse(
+            sections: [
+              practiceSection(
+                sectionId: 2,
+                code: 'P2',
+                name: 'Question-Response',
+                modality: 'listening',
+                skillCode: 'LIST',
+                skillName: 'Listening',
+                accuracyPercentage: 68,
+              ),
+            ],
+          ),
+        );
       }
       if (options.path == '/api/learner/practice/matrix') {
-        return FakeHttpClientAdapter.jsonResponse({'levels': [], 'topics': []});
+        return FakeHttpClientAdapter.jsonResponse(const <dynamic>[]);
+      }
+      if (options.path == '/api/learner/practice/free-drill') {
+        return FakeHttpClientAdapter.jsonResponse(
+          practiceFreeDrillResponse(),
+        );
       }
       if (options.path == '/api/learner/practice/sessions' &&
           options.method == 'POST') {

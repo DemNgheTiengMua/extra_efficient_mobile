@@ -506,54 +506,6 @@ void main() {
     expect(find.text('NO ATTEMPTS YET'), findsOneWidget);
   });
 
-  testWidgets('resuming via authorizationCode still opens the attempt', (
-    tester,
-  ) async {
-    final audio = FakeAudioMediaAdapter();
-    String? resumedCode;
-    final adapter = FakeHttpClientAdapter((options, body) async {
-      switch ('${options.method} ${options.path}') {
-        case 'GET /api/learner/context':
-          return FakeHttpClientAdapter.jsonResponse(contextPayload());
-        case 'GET /api/learner/placement':
-          return FakeHttpClientAdapter.jsonResponse(
-            placementCatalogPayload(activePlacementId: null),
-          );
-        case 'GET /api/learner/exams':
-          return FakeHttpClientAdapter.jsonResponse(mockListPayload());
-        case 'GET /api/learner/exams/history':
-          return FakeHttpClientAdapter.jsonResponse(historyPayload());
-        case 'POST /api/learner/attempts/resume':
-          resumedCode =
-              (body as Map<String, dynamic>)['authorizationCode'] as String?;
-          return FakeHttpClientAdapter.jsonResponse({'attemptId': 901});
-        default:
-          return gateResponseFor(options) ??
-              FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
-      }
-    });
-
-    await tester.pumpWidget(
-      buildTestApp(adapter: adapter, audioAdapter: audio),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('resume-auth-code-btn')),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.enterText(
-      find.byKey(const Key('resume-auth-code-input')),
-      'AUTH-901',
-    );
-    await tester.tap(find.byKey(const Key('resume-auth-code-btn')));
-    await tester.pumpAndSettle();
-
-    expect(resumedCode, 'AUTH-901');
-    expect(find.text('MOCK ATTEMPT PREFLIGHT'), findsOneWidget);
-  });
-
   testWidgets(
     'Mock Exam flow opens instructions with the real name and credit cost, '
     'starts an attempt, verifies preflight, and enters the room',

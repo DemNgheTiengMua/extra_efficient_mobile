@@ -75,6 +75,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
             const SizedBox(height: 12),
           ],
           FTextField.email(
+            key: const Key('sign-in-email-field'),
             control: FTextFieldControl.managed(controller: _emailController),
             label: Text(
               'EMAIL',
@@ -84,6 +85,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           ),
           const SizedBox(height: 12),
           FTextField.password(
+            key: const Key('sign-in-password-field'),
             control: FTextFieldControl.managed(controller: _passwordController),
             label: Text(
               'PASSWORD',
@@ -101,32 +103,25 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           const SizedBox(height: 16),
           const Divider(height: 1, color: SignageColors.lineSoft),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              PlacardButton(
-                key: const Key('go-register-button'),
-                label: 'CREATE ACCOUNT',
-                variant: PlacardButtonVariant.secondary,
-                expand: false,
-                onPress: () => context.go('/register'),
-              ),
-              PlacardButton(
-                key: const Key('go-verify-email-button'),
-                label: 'VERIFY EMAIL',
-                variant: PlacardButtonVariant.secondary,
-                expand: false,
-                onPress: () => context.go('/verify-email'),
-              ),
-              PlacardButton(
-                key: const Key('go-forgot-password-button'),
-                label: 'FORGOT PASSWORD',
-                variant: PlacardButtonVariant.secondary,
-                expand: false,
-                onPress: () => context.go('/forgot-password'),
-              ),
-            ],
+          PlacardButton(
+            key: const Key('go-register-button'),
+            label: 'CREATE ACCOUNT',
+            variant: PlacardButtonVariant.secondary,
+            onPress: () => context.go('/register'),
+          ),
+          const SizedBox(height: 8),
+          PlacardButton(
+            key: const Key('go-verify-email-button'),
+            label: 'VERIFY EMAIL',
+            variant: PlacardButtonVariant.secondary,
+            onPress: () => context.go('/verify-email'),
+          ),
+          const SizedBox(height: 8),
+          PlacardButton(
+            key: const Key('go-forgot-password-button'),
+            label: 'FORGOT PASSWORD',
+            variant: PlacardButtonVariant.secondary,
+            onPress: () => context.go('/forgot-password'),
           ),
         ],
       ),

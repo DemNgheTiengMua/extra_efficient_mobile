@@ -9,6 +9,7 @@ import 'package:extra_efficient_mobile/core/network/dio_client.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
 import 'package:extra_efficient_mobile/features/practice/models/practice_models.dart';
 import '../../helpers/fake_http_adapter.dart';
+import '../../helpers/practice_payloads.dart';
 
 /// The shape `GET /api/learner/weakness-analysis` really returns, recorded from the running
 /// backend (`Contracts/WeaknessAnalysis/*.cs`). An invented `categories` array is included so the
@@ -157,13 +158,12 @@ FakeHttpClientAdapter weaknessAdapter({
       });
     }
     if (options.path == '/api/learner/practice/catalog') {
-      return FakeHttpClientAdapter.jsonResponse({
-        'sectionNoun': 'Part',
-        'sections': [],
-      });
+      return FakeHttpClientAdapter.jsonResponse(
+        practiceCatalogResponse(sections: const []),
+      );
     }
     if (options.path == '/api/learner/practice/matrix') {
-      return FakeHttpClientAdapter.jsonResponse({'levels': [], 'topics': []});
+      return FakeHttpClientAdapter.jsonResponse(const <dynamic>[]);
     }
     if (options.path == '/api/learner/weakness-analysis' &&
         options.method == 'GET') {
@@ -359,7 +359,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(posts, hasLength(1));
-    expect(find.text('Recommendation not found'), findsOneWidget);
+    expect(find.text('Recommendation 301 was not found for this learner.'),
+        findsOneWidget);
     // The recommendation is still there, and its control is offered again.
     expect(find.textContaining('accuracy is 42% across 24 items'), findsOneWidget);
     await scrollTo(tester, button);

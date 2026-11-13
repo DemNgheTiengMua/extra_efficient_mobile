@@ -78,6 +78,26 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
     super.dispose();
   }
 
+  /// The framed 2px-keyline secondary header control, shared by the wrapping
+  /// row so one style covers CANCEL, SYNC and GRID.
+  Widget _headerControl(
+    String label, {
+    Color background = SignageColors.paper,
+    Color foreground = SignageColors.ink,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: background,
+        border: Border.all(color: SignageColors.ink, width: 2),
+      ),
+      child: Text(
+        label,
+        style: SignageTypography.label(fontSize: 11, color: foreground),
+      ),
+    );
+  }
+
   Future<void> _confirmSubmit() async {
     final router = GoRouter.of(context);
     final confirmed = await showExamConfirmDialog(
@@ -194,111 +214,93 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
         child: SafeArea(
           bottom: false,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                ExamRoomExitButton(
-                  onLeave: _leaveRoom,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  formatClock(s.remainingSeconds),
-                  key: const Key('exam-countdown-clock'),
-                  style: SignageTypography.data(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: SignageColors.paper,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    autosaveLabel,
-                    style: SignageTypography.label(
-                      fontSize: 11,
-                      color: SignageColors.bandScoreCaption,
-                    ),
-                  ),
-                ),
-                FTappable(
-                  key: const Key('sync-sitting-btn'),
-                  onPress: () => unawaited(_controller.syncNow()),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: SignageColors.paper,
-                      border: Border.all(color: SignageColors.ink, width: 2),
-                    ),
-                    child: Text(
-                      'SYNC',
-                      style: SignageTypography.label(fontSize: 11),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                FTappable(
-                  key: const Key('open-grid-btn'),
-                  onPress: _openNavigatorSheet,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: SignageColors.paper,
-                      border: Border.all(color: SignageColors.ink, width: 2),
-                    ),
-                    child: Text(
-                      'GRID',
-                      style: SignageTypography.label(fontSize: 11),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                FTappable(
-                  key: const Key('cancel-exam-btn'),
-                  onPress: _confirmCancel,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: SignageColors.signRed,
-                      border: Border.all(color: SignageColors.ink, width: 2),
-                    ),
-                    child: Text(
-                      'CANCEL',
-                      style: SignageTypography.label(
-                        fontSize: 11,
+                // Row 1 keeps the clock and SUBMIT: they must never be lost, and
+                // an `Expanded` label is the only flexible member, so this row
+                // cannot overflow.
+                Row(
+                  children: [
+                    Text(
+                      formatClock(s.remainingSeconds),
+                      key: const Key('exam-countdown-clock'),
+                      style: SignageTypography.data(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
                         color: SignageColors.paper,
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                FTappable(
-                  key: const Key('submit-exam-btn'),
-                  onPress: _confirmSubmit,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: SignageColors.signGold,
-                      border: Border.all(color: SignageColors.ink, width: 2),
-                    ),
-                    child: Text(
-                      'SUBMIT',
-                      style: SignageTypography.label(
-                        fontSize: 11,
-                        color: SignageColors.ink,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        autosaveLabel,
+                        overflow: TextOverflow.ellipsis,
+                        style: SignageTypography.label(
+                          fontSize: 11,
+                          color: SignageColors.bandScoreCaption,
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    FTappable(
+                      key: const Key('submit-exam-btn'),
+                      onPress: _confirmSubmit,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: SignageColors.signGold,
+                          border: Border.all(
+                            color: SignageColors.ink,
+                            width: 2,
+                          ),
+                        ),
+                        child: Text(
+                          'SUBMIT',
+                          style: SignageTypography.label(
+                            fontSize: 11,
+                            color: SignageColors.ink,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Row 2 scrolls sideways when 320dp cannot fit four framed
+                // controls; these are the ones allowed to give way.
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      ExamRoomExitButton(onLeave: _leaveRoom),
+                      const SizedBox(width: 6),
+                      FTappable(
+                        key: const Key('cancel-exam-btn'),
+                        onPress: _confirmCancel,
+                        child: _headerControl(
+                          'CANCEL',
+                          background: SignageColors.signRed,
+                          foreground: SignageColors.paper,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      FTappable(
+                        key: const Key('sync-sitting-btn'),
+                        onPress: () => unawaited(_controller.syncNow()),
+                        child: _headerControl('SYNC'),
+                      ),
+                      const SizedBox(width: 6),
+                      FTappable(
+                        key: const Key('open-grid-btn'),
+                        onPress: _openNavigatorSheet,
+                        child: _headerControl('GRID'),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -362,7 +364,20 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
                                     'Q${s.currentIndex + 1}/${s.questions.length}',
                                   ),
                                   const SizedBox(width: 8),
-                                  PlacardBadge.muted(q.skill.toUpperCase()),
+                                  // Flexible so a long skill word can never push
+                                  // FLAG off a narrow screen.
+                                  Flexible(
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: PlacardBadge.muted(
+                                          q.skill.toUpperCase(),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                   const Spacer(),
                                   FTappable(
                                     key: const Key('flag-question-btn'),

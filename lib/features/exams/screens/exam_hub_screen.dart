@@ -24,40 +24,6 @@ class ExamHubScreen extends ConsumerStatefulWidget {
 
 class _ExamHubScreenState extends ConsumerState<ExamHubScreen> {
   _ExamSubTab _subTab = _ExamSubTab.mockExams;
-  final TextEditingController _authCodeController = TextEditingController();
-  bool _resumingCode = false;
-  String? _resumeError;
-
-  @override
-  void dispose() {
-    _authCodeController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _resumeWithCode() async {
-    final code = _authCodeController.text.trim();
-    if (code.isEmpty || _resumingCode) return;
-    setState(() {
-      _resumingCode = true;
-      _resumeError = null;
-    });
-    try {
-              final attemptId = await ref
-                  .read(mockExamRepositoryProvider)
-                  .resumeByAuthorizationCode(code);
-              if (!mounted) return;
-              context.push('/exams/attempts/$attemptId/preflight');
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _resumeError = e.toString();
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _resumingCode = false);
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,12 +36,7 @@ class _ExamHubScreenState extends ConsumerState<ExamHubScreen> {
         ),
         Expanded(
           child: switch (_subTab) {
-            _ExamSubTab.mockExams => _MockExamsView(
-              authCodeController: _authCodeController,
-              resumingCode: _resumingCode,
-              resumeError: _resumeError,
-              onResumeWithCode: _resumeWithCode,
-            ),
+            _ExamSubTab.mockExams => const _MockExamsView(),
             _ExamSubTab.history => const _HistoryReviewView(),
           },
         ),
@@ -137,17 +98,7 @@ class _ExamSubTabBar extends StatelessWidget {
 }
 
 class _MockExamsView extends ConsumerWidget {
-  const _MockExamsView({
-    required this.authCodeController,
-    required this.resumingCode,
-    required this.resumeError,
-    required this.onResumeWithCode,
-  });
-
-  final TextEditingController authCodeController;
-  final bool resumingCode;
-  final String? resumeError;
-  final VoidCallback onResumeWithCode;
+  const _MockExamsView();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -208,40 +159,14 @@ class _MockExamsView extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         PlacardPanel(
-          title: 'RESUME BY AUTHORIZATION CODE',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Enter an authorization code to unlock and resume an interrupted mock attempt.',
-                style: SignageTypography.body(
-                  fontSize: 13,
-                  color: SignageColors.inkMuted,
-                ),
-              ),
-              const SizedBox(height: 10),
-              if (resumeError != null) ...[
-                PlacardAlert(
-                  variant: PlacardAlertVariant.danger,
-                  title: 'RESUME FAILED',
-                  subtitle: resumeError!,
-                ),
-                const SizedBox(height: 10),
-              ],
-              FTextField(
-                key: const Key('resume-auth-code-input'),
-                control: FTextFieldControl.managed(
-                  controller: authCodeController,
-                ),
-                hint: 'Authorization code (e.g. AUTH-901)',
-              ),
-              const SizedBox(height: 10),
-              PlacardButton(
-                key: const Key('resume-auth-code-btn'),
-                label: resumingCode ? 'RESUMING...' : 'RESUME ATTEMPT',
-                onPress: resumingCode ? null : onResumeWithCode,
-              ),
-            ],
+          title: 'RESUME AN ATTEMPT',
+          child: Text(
+            'A sitting you have not finished appears in the catalogue above with its '
+            'RESUME control. Interrupted sittings are listed under HISTORY & REVIEW.',
+            style: SignageTypography.body(
+              fontSize: 13,
+              color: SignageColors.inkMuted,
+            ),
           ),
         ),
       ],

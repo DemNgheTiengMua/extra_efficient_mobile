@@ -433,6 +433,113 @@ void main() {
     });
   });
 
+  group('the header survives a narrow phone', () {
+    /// 320dp is the narrowest phone the app targets. A `RenderFlex overflowed`
+    /// throws in `flutter test`, so this is the assertion.
+    Future<void> pumpAt(WidgetTester tester, Size size) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+    }
+
+    for (final (name, size) in [
+      ('320dp', const Size(320, 640)),
+      ('360dp', const Size(360, 720)),
+    ]) {
+      testWidgets('$name: every control is reachable, nothing overflows',
+          (tester) async {
+        await pumpAt(tester, size);
+        final adapter = FakeHttpClientAdapter((options, body) async {
+          if (options.path == '/api/learner/placement/take/555' &&
+              options.method == 'GET') {
+            return FakeHttpClientAdapter.jsonResponse(
+              sitting(questions: 29, answered: 24),
+            );
+          }
+          return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+        });
+
+        await tester.pumpWidget(
+          buildApp(adapter: adapter, initialLocation: '/placement/take/555'),
+        );
+        await tester.pumpAndSettle();
+
+        // No RenderFlex overflow was thrown.
+        expect(tester.takeException(), isNull);
+
+        // The clock and SUBMIT are always present and hit-testable.
+        final clock = find.byKey(const Key('exam-countdown-clock'));
+        expect(clock, findsOneWidget);
+        expect(
+          tester.getRect(clock).right,
+          lessThanOrEqualTo(size.width),
+          reason: 'the clock must not be pushed off-screen',
+        );
+
+        final submit = find.byKey(const Key('exam-submit-btn'));
+        expect(submit, findsOneWidget);
+        expect(
+          tester.getRect(submit).right,
+          lessThanOrEqualTo(size.width),
+          reason: 'SUBMIT must stay on-screen',
+        );
+
+        // The collapsing controls are still reachable, and EXIT still works.
+        expect(find.byKey(const Key('exam-exit-btn')), findsOneWidget);
+        expect(find.byKey(const Key('exam-grid-btn')), findsOneWidget);
+        expect(find.byKey(const Key('exam-abandon-btn')), findsOneWidget);
+
+        await tester.tap(submit);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('confirm-submit-btn')), findsOneWidget);
+      });
+
+      testWidgets('$name: the mock header also fits', (tester) async {
+        await pumpAt(tester, size);
+        final adapter = FakeHttpClientAdapter((options, body) async {
+          if (options.path == '/api/learner/attempts/777' &&
+              options.method == 'GET') {
+            return FakeHttpClientAdapter.jsonResponse({
+              'attemptId': 777,
+              'examName': 'ETS 2024 — Test 1',
+              'status': 'in_progress',
+              'expiresAt': DateTime.now()
+                  .toUtc()
+                  .add(const Duration(hours: 1))
+                  .toIso8601String(),
+              'totalQuestions': 1,
+              'currentQuestion': _question(1),
+              'navigator': <dynamic>[],
+              'questions': [_question(1)],
+            });
+          }
+          return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+        });
+
+        await tester.pumpWidget(
+          buildApp(adapter: adapter, initialLocation: '/exams/attempts/777'),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        final clock = find.byKey(const Key('exam-countdown-clock'));
+        expect(clock, findsOneWidget);
+        expect(tester.getRect(clock).right, lessThanOrEqualTo(size.width));
+
+        final submit = find.byKey(const Key('submit-exam-btn'));
+        expect(submit, findsOneWidget);
+        expect(tester.getRect(submit).right, lessThanOrEqualTo(size.width));
+
+        // The four secondary controls are all still painted.
+        expect(find.byKey(const Key('exam-exit-btn')), findsOneWidget);
+        expect(find.byKey(const Key('cancel-exam-btn')), findsOneWidget);
+        expect(find.byKey(const Key('sync-sitting-btn')), findsOneWidget);
+        expect(find.byKey(const Key('open-grid-btn')), findsOneWidget);
+      });
+    }
+  });
+
   group('resume shows the progress the server holds', () {
     testWidgets('a resumed placement shows how many questions were answered',
         (tester) async {

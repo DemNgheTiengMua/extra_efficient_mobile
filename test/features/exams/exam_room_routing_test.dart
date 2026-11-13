@@ -145,10 +145,10 @@ void main() {
 
     expect(tester.takeException(), isNull);
     await tester.ensureVisible(
-      find.byKey(const Key('resume-unfinished-attempt-btn')),
+      find.byKey(const Key('resume-attempt-btn')),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('resume-unfinished-attempt-btn')));
+    await tester.tap(find.byKey(const Key('resume-attempt-btn')));
     await tester.pumpAndSettle();
 
     // `attempt_not_found` is an honest terminal state, and it is reachable only
