@@ -157,19 +157,9 @@ class PlacementExamController extends ChangeNotifier {
         _update(
           _state.copyWith(
             isLoading: false,
-            stop: ExamRoomStop(
-              stamp: isSittingMissing(e) ? 'NOT FOUND' : 'FINISHED',
-              title: isSittingMissing(e)
-                  ? 'This sitting no longer exists'
-                  : 'This sitting is over',
-              description: isSittingMissing(e)
-                  ? 'The backend does not recognise it, so there is nothing to '
-                      'open.'
-                  : 'It was submitted, graded or expired, so it can no longer be '
-                      'answered. Your score is on the result placard.',
-              actionLabel: isSittingMissing(e) ? 'BACK TO EXAMS' : 'VIEW RESULT',
-              actionRoute:
-                  isSittingMissing(e) ? '/exams' : '/placement/result/$placementId',
+            stop: terminalStopForError(
+              e,
+              resultRoute: '/placement/result/$placementId',
             ),
           ),
         );

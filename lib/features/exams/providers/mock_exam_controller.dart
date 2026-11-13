@@ -175,24 +175,12 @@ class MockExamController extends ChangeNotifier {
         return;
       }
       if (isSittingOver(e) || isSittingMissing(e)) {
-        final missing = isSittingMissing(e);
         _update(
           _state.copyWith(
             isLoading: false,
-            stop: ExamRoomStop(
-              stamp: missing ? 'NOT FOUND' : 'FINISHED',
-              title: missing
-                  ? 'This attempt no longer exists'
-                  : 'This attempt is over',
-              description: missing
-                  ? 'The backend does not recognise it, so there is nothing to '
-                      'open.'
-                  : 'It was submitted, graded or expired, so it can no longer be '
-                      'answered. Open RESULT on the exams hub to see the score.',
-              actionLabel: missing ? 'BACK TO EXAMS' : 'VIEW RESULT',
-              actionRoute: missing
-                  ? '/exams'
-                  : '/exams/attempts/$attemptId/result',
+            stop: terminalStopForError(
+              e,
+              resultRoute: '/exams/attempts/$attemptId/result',
             ),
           ),
         );

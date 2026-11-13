@@ -71,6 +71,29 @@ ExamRoomStop? stopForSitting({
   return null;
 }
 
+/// The terminal state for a sitting the backend refuses to serve because it is
+/// already finished or no longer exists.
+///
+/// Three callers need this — both room controllers and the device gate — so the
+/// wording and the destination live here once, rather than drifting apart.
+ExamRoomStop terminalStopForError(
+  Object error, {
+  required String resultRoute,
+  String hubRoute = '/exams',
+}) {
+  final missing = isSittingMissing(error);
+  return ExamRoomStop(
+    stamp: missing ? 'NOT FOUND' : 'FINISHED',
+    title: missing ? 'This sitting no longer exists' : 'This sitting is over',
+    description: missing
+        ? 'The backend does not recognise it, so there is nothing to open.'
+        : 'It was submitted, graded or expired, so it can no longer be '
+            'answered. Your score is on the result placard.',
+    actionLabel: missing ? 'BACK TO EXAMS' : 'VIEW RESULT',
+    actionRoute: missing ? hubRoute : resultRoute,
+  );
+}
+
 /// The backend's `code` on a failed request, lowercased (the emitters disagree
 /// on casing), or null when the failure carried no code.
 String? apiErrorCode(Object error) {
