@@ -359,7 +359,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(posts, hasLength(1));
-    expect(find.text('Recommendation not found'), findsOneWidget);
+    expect(find.text('Recommendation 301 was not found for this learner.'),
+        findsOneWidget);
     // The recommendation is still there, and its control is offered again.
     expect(find.textContaining('accuracy is 42% across 24 items'), findsOneWidget);
     await scrollTo(tester, button);
