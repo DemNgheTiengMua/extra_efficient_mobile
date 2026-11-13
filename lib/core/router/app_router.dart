@@ -20,8 +20,9 @@ import '../../features/path/screens/goal_calibration_screen.dart';
 import '../../features/path/screens/learning_path_screen.dart';
 import '../../features/path/screens/lesson_player_screen.dart';
 import '../../features/path/screens/path_dashboard_screen.dart';
+import '../../features/practice/screens/practice_hub_screen.dart';
+import '../../features/practice/screens/practice_session_screen.dart';
 import '../../features/shell/main_shell.dart';
-import '../../features/shell/tab_placeholder_screen.dart';
 import '../../features/wallet/screens/wallet_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -108,11 +109,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/practice',
-                builder: (context, state) => const TabPlaceholderScreen(
-                  tabName: 'PRACTICE',
-                  description:
-                      'Free section & matrix drills, saved questions, and weakness report.',
-                ),
+                builder: (context, state) => const PracticeHubScreen(),
               ),
             ],
           ),
@@ -181,6 +178,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final id =
               int.tryParse(state.pathParameters['placementId'] ?? '') ?? 0;
           return PlacementResultScreen(placementId: id);
+        },
+      ),
+      GoRoute(
+        path: '/practice/sessions/:sessionId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['sessionId'] ?? '') ?? 0;
+          return PracticeSessionScreen(sessionId: id);
         },
       ),
     ],
