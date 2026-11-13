@@ -149,8 +149,11 @@ class PracticeRepository {
     );
   }
 
-  Future<void> resolveRecommendation(int recId) async {
-    await _dio.post<void>('/api/learner/recommendations/$recId/resolve');
+  Future<bool> resolveRecommendation(int recId) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/learner/recommendations/$recId/resolve',
+    );
+    return res.data?['isResolved'] as bool? ?? false;
   }
 }
 
@@ -245,8 +248,9 @@ final weaknessAnalysisProvider =
   final auth = ref.watch(authNotifierProvider);
   if (!auth.isAuthenticated) {
     return const WeaknessAnalysisData(
+      hasData: false,
       sections: [],
-      categories: [],
+      topics: [],
       recommendations: [],
     );
   }
