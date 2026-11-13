@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/router/server_route.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
 import '../../auth/auth_provider.dart';
@@ -171,21 +172,18 @@ class _DashboardBody extends StatelessWidget {
   /// door, one path - the same one the hub and the history rows use.
   String _resumeAttemptUrl(LearnerDashboard dashboard) {
     final action = dashboard.nextAction;
-    final url = action != null && action.isResume && action.actionUrl.isNotEmpty
-        ? action.actionUrl
-        : (dashboard.unfinishedAttempt!.isPlacement
-              ? '/placement'
-              : '/exams/attempts/${dashboard.unfinishedAttempt!.attemptId}');
-    return _gatedUrl(url);
-  }
-
-  static final _gatedSitting = RegExp(
-    r'^/(placement/take|exams/attempts)/\d+$',
-  );
-
-  static String _gatedUrl(String url) {
-    final path = Uri.tryParse(url)?.path ?? url;
-    return _gatedSitting.hasMatch(path) ? '$url/preflight' : url;
+    if (action != null && action.isResume && action.actionUrl.isNotEmpty) {
+      // The server speaks the web app's URL vocabulary; map it onto ours. An
+      // unmappable one (a skill-practice take URL has no screen here) falls back
+      // to the practice catalogue, where that practice is started and priced.
+      return resolveServerRoute(action.actionUrl)?.route ??
+          '/practice/skill-practice';
+    }
+    final attempt = dashboard.unfinishedAttempt!;
+    final route = attempt.isPlacement
+        ? '/placement'
+        : '/exams/attempts/${attempt.attemptId}';
+    return resolveServerRoute(route)?.route ?? '/exams';
   }
 }
 
@@ -199,9 +197,11 @@ class _FirstStepCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final action = dashboard.nextAction;
-    final actionUrl = action != null && action.actionUrl.isNotEmpty
+    final rawUrl = action != null && action.actionUrl.isNotEmpty
         ? action.actionUrl
         : '/placement';
+    // The server's URL vocabulary is not this app's; map it first.
+    final actionUrl = resolveServerRoute(rawUrl)?.route ?? '/placement';
 
     return StateBlock(
       stamp: action?.eyebrow.isNotEmpty == true
@@ -266,6 +266,9 @@ class _NextActionCard extends StatelessWidget {
     final badgeLabel = action.metaLabel?.isNotEmpty == true
         ? action.metaLabel!
         : action.eyebrow;
+    final destination = action.actionUrl.isEmpty
+        ? null
+        : resolveServerRoute(action.actionUrl);
 
     return PlacardPanel(
       title: action.eyebrow.isNotEmpty ? action.eyebrow : 'NEXT ACTION',
@@ -293,9 +296,9 @@ class _NextActionCard extends StatelessWidget {
           PlacardButton(
             key: const Key('next-action-btn'),
             label: action.actionLabel,
-            onPress: action.actionUrl.isEmpty
-                ? null
-                : () => context.push(action.actionUrl),
+            onPress: destination == null
+                ? () => context.push('/path')
+                : () => context.push(destination.route),
           ),
         ],
       ),

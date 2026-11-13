@@ -9,6 +9,33 @@ import '../../contract/fixture_loader.dart';
 Map<String, dynamic> dashboardMeasuredPayload() =>
     _asMap(loadFixture('learner_dashboard'));
 
+/// The measured dashboard with the cascade resuming a *practice* session, whose
+/// `actionUrl` is the web vocabulary `/practice/30`. The recorded fixture
+/// resumes a speaking attempt instead, whose URL has no screen here, so this
+/// variant exists to pin the practice mapping.
+Map<String, dynamic> dashboardResumePracticePayload() {
+  final payload = dashboardMeasuredPayload();
+  final action = _asMap(payload['nextAction']);
+  return {
+    ...payload,
+    'nextAction': {
+      ...action,
+      'title': 'Finish Respond to a written request',
+      'actionLabel': 'Resume practice',
+      'actionUrl': '/practice/30',
+    },
+    'unfinishedAttempt': null,
+    'unfinishedPractice': {
+      'sessionId': 30,
+      'sectionName': 'Respond to a written request',
+      'status': 'in_progress',
+      'correctCount': 0,
+      'questionCount': 2,
+      'startedAt': '2026-11-13T18:35:38.4049534+00:00',
+    },
+  };
+}
+
 /// `GET /api/learner/dashboard` for `learner.fresh@demo.local`: nothing measured,
 /// and a placement already open, so the cascade offers to resume it.
 Map<String, dynamic> dashboardUnmeasuredWithOpenPlacementPayload() =>

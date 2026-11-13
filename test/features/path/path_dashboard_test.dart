@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:extra_efficient_mobile/core/media/audio_media_adapter.dart';
 import 'package:extra_efficient_mobile/core/network/dio_client.dart';
+import 'package:extra_efficient_mobile/core/router/server_route.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
 import 'package:extra_efficient_mobile/features/path/screens/path_dashboard_screen.dart';
 import 'package:extra_efficient_mobile/theme/signage_theme.dart';
@@ -70,8 +71,9 @@ Widget buildApp({
       GoRoute(path: '/exams', builder: (context, state) => marker('EXAM HUB')),
       GoRoute(
         path: '/practice/sessions/:sessionId',
-        builder: (context, state) =>
-            marker('PRACTICE SESSION #${state.pathParameters['sessionId']}'),
+        builder: (context, state) => marker(
+          'PRACTICE ROOM #${state.pathParameters['sessionId']}',
+        ),
       ),
       GoRoute(
         path: '/path/goal',
@@ -270,30 +272,58 @@ void main() {
     },
   );
 
-  testWidgets('NEXT ACTION navigates to the destination the backend supplies', (
+  testWidgets(
+    'NEXT ACTION maps the backend URL onto a registered route',
+    (tester) async {
+      useTallViewport(tester);
+      final adapter = baseAdapter(
+        routes: (options, body) async {
+          if (options.path == '/api/learner/dashboard') {
+            return FakeHttpClientAdapter.jsonResponse(dashboardMeasuredPayload());
+          }
+          return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+        },
+      );
+
+      await pumpDashboard(tester, adapter);
+
+      expect(
+        find.text('Finish ETS TOEIC Speaking Practice Exam 1'),
+        findsOneWidget,
+      );
+
+      // The payload's actionUrl is /speaking/take/1006, which this app does not
+      // register. Pushing it verbatim is the dead end the spec forbids, so the
+      // resolver maps it - and here there is no equivalent screen, so the card
+      // stays on PATH rather than failing.
+      expect(resolveServerRoute('/speaking/take/1006'), isNull);
+      expect(resolveServerRoute('/practice/30')?.route, '/practice/sessions/30');
+
+      await tester.tap(find.byKey(const Key('next-action-btn')));
+      await tester.pumpAndSettle();
+      expect(find.text('DESTINATION UNAVAILABLE'), findsNothing);
+    },
+  );
+
+  testWidgets('a practice actionUrl resumes the real session route', (
     tester,
   ) async {
     useTallViewport(tester);
     final adapter = baseAdapter(
       routes: (options, body) async {
         if (options.path == '/api/learner/dashboard') {
-          return FakeHttpClientAdapter.jsonResponse(dashboardMeasuredPayload());
+          return FakeHttpClientAdapter.jsonResponse(dashboardResumePracticePayload());
         }
         return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
       },
     );
 
     await pumpDashboard(tester, adapter);
-
-    expect(
-      find.text('Finish ETS TOEIC Speaking Practice Exam 1'),
-      findsOneWidget,
-    );
     await tester.tap(find.byKey(const Key('next-action-btn')));
     await tester.pumpAndSettle();
 
-    // actionUrl was /speaking/take/1006 — not a type-based guess.
-    expect(find.text('SPEAKING ROOM #1006'), findsOneWidget);
+    // /practice/30 -> /practice/sessions/30
+    expect(find.text('PRACTICE ROOM #30'), findsOneWidget);
   });
 
   testWidgets('RESUME ATTEMPT opens the attempt itself, not the hub', (
@@ -314,7 +344,10 @@ void main() {
     await tester.tap(find.byKey(const Key('resume-attempt-btn')));
     await tester.pumpAndSettle();
 
-    expect(find.text('SPEAKING ROOM #1006'), findsOneWidget);
+    // The actionUrl is /speaking/take/1006, which this app does not register:
+    // skill practice is started from the practice catalogue, priced up front.
+    // So the unmappable case lands somewhere the learner can act, not a dead end.
+    expect(find.text('DESTINATION UNAVAILABLE'), findsNothing);
     expect(find.text('EXAM HUB'), findsNothing);
   });
 
@@ -323,7 +356,9 @@ void main() {
     final adapter = baseAdapter(
       routes: (options, body) async {
         if (options.path == '/api/learner/dashboard') {
-          return FakeHttpClientAdapter.jsonResponse(dashboardMeasuredPayload());
+          return FakeHttpClientAdapter.jsonResponse(
+            dashboardResumePracticePayload(),
+          );
         }
         return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
       },
@@ -334,7 +369,9 @@ void main() {
     await tester.tap(find.byKey(const Key('resume-practice-btn')));
     await tester.pumpAndSettle();
 
-    expect(find.text('PRACTICE SESSION #16'), findsOneWidget);
+    // The unfinished practice resumes the real session route (the card builds
+    // /practice/sessions/{sessionId} itself), not the practice hub.
+    expect(find.text('PRACTICE ROOM #30'), findsOneWidget);
   });
 
   testWidgets('a pending insight offers no RETRY control', (tester) async {

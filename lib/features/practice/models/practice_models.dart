@@ -914,13 +914,19 @@ class PracticeInsight {
     return PracticeInsight(
       status: (json['status'] as String? ?? 'none').toLowerCase(),
       narrative: json['narrative'] as String?,
-      errorMessage: json['errorMessage'] as String?,
+      // The backend names the failure reason `failureReason`, not errorMessage.
+      errorMessage: (json['failureReason'] ?? json['errorMessage']) as String?,
     );
   }
 
   final String status;
   final String? narrative;
   final String? errorMessage;
+
+  /// `AiInsightStatusDto` is `pending | done | failed`.
+  bool get isFailed => status == 'failed';
+  bool get isPending => status == 'pending';
+  bool get isDone => status == 'done';
 }
 
 /// One filter facet from `SavedQuestionsViewDto.Sections` / `.Categories`.

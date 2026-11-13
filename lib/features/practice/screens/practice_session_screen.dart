@@ -731,22 +731,39 @@ class _SummaryView extends StatelessWidget {
         if (insight != null) ...[
           PlacardPanel(
             title: 'AI PRACTICE INSIGHT',
-            child: insight!.status == 'ready' && insight!.narrative != null
+            trailing: insight!.isFailed
+                ? const PlacardBadge.danger('FAILED')
+                : (insight!.narrative != null
+                      ? const PlacardBadge.success('READY')
+                      : const PlacardBadge.warning('PENDING')),
+            // AiInsightStatusDto is pending|done|failed. A `done` insight with
+            // prose is the success path; only a failed one may be retried - the
+            // backend rejects a retry of anything else with 400.
+            child: insight!.narrative != null
                 ? Text(insight!.narrative!, style: SignageTypography.body())
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       PlacardAlert(
-                        title: 'Insight unavailable',
-                        subtitle: insight!.errorMessage ?? 'Could not generate.',
-                        variant: PlacardAlertVariant.warning,
+                        title: insight!.isFailed
+                            ? 'Insight unavailable'
+                            : 'Insight still generating',
+                        subtitle: insight!.errorMessage ??
+                            (insight!.isFailed
+                                ? 'Could not generate.'
+                                : 'Your insight appears here once it is ready.'),
+                        variant: insight!.isFailed
+                            ? PlacardAlertVariant.warning
+                            : PlacardAlertVariant.info,
                       ),
-                      const SizedBox(height: 12),
-                      PlacardButton(
-                        label: 'RETRY INSIGHT',
-                        variant: PlacardButtonVariant.secondary,
-                        onPress: onRetryInsight,
-                      ),
+                      if (insight!.isFailed) ...[
+                        const SizedBox(height: 12),
+                        PlacardButton(
+                          label: 'RETRY INSIGHT',
+                          variant: PlacardButtonVariant.secondary,
+                          onPress: onRetryInsight,
+                        ),
+                      ],
                     ],
                   ),
           ),
