@@ -6,6 +6,8 @@ import 'package:extra_efficient_mobile/app.dart';
 import 'package:extra_efficient_mobile/core/media/audio_media_adapter.dart';
 import 'package:extra_efficient_mobile/core/network/dio_client.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
+import 'package:extra_efficient_mobile/widgets/signage_primitives.dart';
+import '../../contract/fixture_loader.dart';
 import '../../helpers/fake_http_adapter.dart';
 
 Widget _buildTestApp(
@@ -227,44 +229,9 @@ void main() {
         }
         if (options.path == '/api/learner/complaints' &&
             options.method == 'GET') {
-          return FakeHttpClientAdapter.jsonResponse([
-            {
-              'id': 101,
-              'type': 'mentor_no_show',
-              'status': 'resolved',
-              'reason': 'Mentor did not join the Google Meet room.',
-              'bookingId': 55,
-              'subjectSummary': 'Booking #55 — Speaking Coaching',
-              'createdAt': '2026-11-10T08:30:00Z',
-              'resolvedAt': '2026-11-11T10:15:00Z',
-              'resolution': 'Verified mentor absence and refunded credits.',
-              'grantedCredits': 25,
-            },
-            {
-              'id': 102,
-              'type': 'grading_issue',
-              'status': 'reviewing',
-              'reason': 'AI score did not match rubric criteria.',
-              'attemptId': 88,
-              'subjectSummary': 'Attempt #88 — IELTS Writing',
-              'createdAt': '2026-11-12T14:00:00Z',
-              'resolvedAt': null,
-              'resolution': null,
-              'grantedCredits': 0,
-            },
-            {
-              'id': 103,
-              'type': 'payment_issue',
-              'status': 'open',
-              'reason': 'Order paid but credits delayed.',
-              'orderId': 19,
-              'subjectSummary': 'Order #19 — 50 Credits Pack',
-              'createdAt': '2026-11-13T07:00:00Z',
-              'resolvedAt': null,
-              'resolution': null,
-              'grantedCredits': 0,
-            },
-          ]);
+          return FakeHttpClientAdapter.jsonResponse(
+            loadFixture('learner_complaints'),
+          );
         }
         return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
       });
@@ -282,23 +249,19 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('COMPLAINTS CENTER'), findsOneWidget);
-      expect(find.text('Booking #55 — Speaking Coaching'), findsOneWidget);
+      // Both recorded complaints render together — no duplicate-key crash.
+      expect(find.byKey(const Key('complaint-card-2')), findsOneWidget);
+      expect(find.byKey(const Key('complaint-card-1')), findsOneWidget);
+      expect(find.text('Booking #1 (Dr. Trần Minh Khoa)'), findsOneWidget);
+      expect(find.text('REVIEWING'), findsOneWidget);
       expect(find.text('RESOLVED'), findsOneWidget);
       expect(
-        find.text('Verified mentor absence and refunded credits.'),
+        find.textContaining('Audio stream logs confirmed'),
         findsOneWidget,
       );
-      expect(find.text('+25 CREDITS'), findsOneWidget);
-
-      expect(find.text('Attempt #88 — IELTS Writing'), findsOneWidget);
-      expect(find.text('REVIEWING'), findsOneWidget);
-
-      await tester.scrollUntilVisible(
-        find.text('Order #19 — 50 Credits Pack'),
-        200,
-      );
-      expect(find.text('Order #19 — 50 Credits Pack'), findsOneWidget);
-      expect(find.text('OPEN'), findsOneWidget);
+      expect(find.text('+1 CREDITS'), findsOneWidget);
+      expect(find.textContaining('Audio stream froze'), findsOneWidget);
+      expect(find.textContaining('mentor connection troubles'), findsOneWidget);
     },
   );
 
@@ -325,43 +288,25 @@ void main() {
         }
         if (options.path == '/api/learner/complaints/eligible-subjects' &&
             options.method == 'GET') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'bookings': [
-              {
-                'id': 55,
-                'summary': 'Booking #55 — Mentor Alice',
-                'subtitle': '2026-11-10 09:00 UTC',
-              },
-            ],
-            'attempts': [
-              {
-                'id': 88,
-                'summary': 'Attempt #88 — IELTS Writing',
-                'subtitle': '2026-11-12 14:00 UTC',
-              },
-            ],
-            'orders': [
-              {
-                'id': 19,
-                'summary': 'Order #19 — 50 Credits Pack',
-                'subtitle': '2026-11-13 07:00 UTC',
-              },
-            ],
-          });
+          return FakeHttpClientAdapter.jsonResponse(
+            loadFixture('complaint_eligible_subjects'),
+          );
         }
         if (options.path == '/api/learner/complaints' &&
             options.method == 'POST') {
           capturedPostBody = body;
           creditBalance = 38;
           complaints.add({
-            'id': 201,
+            'complaintId': 201,
             'type': body['type'],
             'status': 'open',
             'reason': body['reason'],
             'attemptId': body['attemptId'],
-            'subjectSummary': 'Attempt #88 — IELTS Writing',
+            'bookingId': body['bookingId'],
+            'orderId': body['orderId'],
+            'subjectSummary': 'ETS 2024 - Test 1',
             'createdAt': '2026-11-13T09:00:00Z',
-            'grantedCredits': 0,
+            'grantedCredits': null,
           });
           return FakeHttpClientAdapter.jsonResponse(complaints.last);
         }
@@ -383,9 +328,37 @@ void main() {
       await tester.tap(find.byKey(const Key('new-complaint-button')));
       await tester.pumpAndSettle();
 
-      // Initially booking is not selected or first subject is selected;
-      // select Attempt #88 and verify only attempt types are shown.
-      await tester.tap(find.byKey(const Key('eligible-subject-attempt-88')));
+      // The form renders despite bookings, attempts and orders sharing the
+      // page: before the fix every subject parsed id 0 and the key collided.
+      expect(find.text('FILE COMPLAINT'), findsOneWidget);
+      expect(find.byKey(const Key('eligible-subject-attempt-1005')),
+          findsOneWidget);
+      expect(find.byKey(const Key('eligible-subject-booking-2')), findsOneWidget);
+      expect(find.byKey(const Key('eligible-subject-booking-1')), findsOneWidget);
+      expect(find.byKey(const Key('eligible-subject-order-1003')),
+          findsOneWidget);
+
+      // Each subject shows its own identifying detail.
+      expect(find.text('ETS 2024 - Test 1'), findsWidgets);
+      expect(find.text('Dr. Trần Minh Khoa'), findsWidgets);
+      expect(find.text('DH-20261014-0001 · Intensive Pack'), findsOneWidget);
+
+      // Two orders with different packages are visibly different.
+      final intensiveOrder = find.text('DH-20261014-0001 · Intensive Pack');
+      final starterOrder = find.text('DH-20261014-0002 · Starter Pack');
+      expect(intensiveOrder, findsOneWidget);
+      expect(starterOrder, findsOneWidget);
+      expect(
+        tester.widget<Text>(intensiveOrder).data,
+        isNot(tester.widget<Text>(starterOrder).data),
+      );
+
+      // Select attempt 1005 and verify only attempt types are offered.
+      await tester
+          .ensureVisible(find.byKey(const Key('eligible-subject-attempt-1005')));
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(const Key('eligible-subject-attempt-1005')));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('complaint-type-grading_issue')), findsOneWidget);
@@ -416,16 +389,99 @@ void main() {
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
+      // The reference carries the subject's real identifier.
       expect(capturedPostBody, {
         'type': 'grading_issue',
         'reason': 'Writing task 2 rubric score was cut off.',
-        'attemptId': 88,
+        'attemptId': 1005,
       });
 
-      // Back on Complaints Center with new complaint & refreshed balance (38).
+      // Back on Complaints Center with the new complaint & refreshed balance (38).
       expect(find.text('COMPLAINTS CENTER'), findsOneWidget);
-      expect(find.text('Attempt #88 — IELTS Writing'), findsOneWidget);
+      expect(find.byKey(const Key('complaint-card-201')), findsOneWidget);
       expect(find.textContaining('38'), findsWidgets);
+    },
+  );
+
+  testWidgets(
+    'a failed complaint submission reports the backend message and leaves the form usable',
+    (tester) async {
+      final tokenStorage = InMemoryTokenStorage(initialToken: 'valid-jwt');
+      var attempts = 0;
+
+      final adapter = FakeHttpClientAdapter((options, body) async {
+        if (options.path == '/api/auth/me') {
+          return FakeHttpClientAdapter.jsonResponse(_authMeJson());
+        }
+        if (options.path == '/api/learner/context') {
+          return FakeHttpClientAdapter.jsonResponse(_contextJson());
+        }
+        if (options.path == '/api/learner/complaints' &&
+            options.method == 'GET') {
+          return FakeHttpClientAdapter.jsonResponse([]);
+        }
+        if (options.path == '/api/learner/complaints/eligible-subjects') {
+          return FakeHttpClientAdapter.jsonResponse(
+            loadFixture('complaint_eligible_subjects'),
+          );
+        }
+        if (options.path == '/api/learner/complaints' &&
+            options.method == 'POST') {
+          attempts++;
+          return FakeHttpClientAdapter.jsonResponse({
+            'title': 'Reason is required.',
+            'detail': 'Reason is required.',
+            'status': 400,
+            'code': 'VALIDATION',
+          }, statusCode: 400);
+        }
+        return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+      });
+
+      await tester.pumpWidget(_buildTestApp(adapter, tokenStorage));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('ACCOUNT'));
+      await tester.pumpAndSettle();
+      final openComplaints = find.byKey(const Key('open-complaints-button'));
+      await tester.ensureVisible(openComplaints);
+      await tester.pumpAndSettle();
+      await tester.tap(openComplaints);
+      await tester.pumpAndSettle();
+      final newComplaint = find.byKey(const Key('new-complaint-button'));
+      await tester.ensureVisible(newComplaint);
+      await tester.pumpAndSettle();
+      await tester.tap(newComplaint);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('eligible-subject-booking-2')),
+      );
+      await tester.tap(find.byKey(const Key('eligible-subject-booking-2')));
+      await tester.pumpAndSettle();
+      final submitBtn = find.byKey(const Key('submit-complaint-button'));
+      await tester.enterText(
+        find.byKey(const Key('complaint-reason-field')),
+        'Mentor never joined.',
+      );
+      await tester.ensureVisible(submitBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      expect(attempts, 1);
+      // Still on the form, showing the backend's own message.
+      await tester.drag(find.byType(ListView), const Offset(0, 900));
+      await tester.pumpAndSettle();
+      expect(find.text('FILE COMPLAINT'), findsOneWidget);
+      expect(find.text('Reason is required.'), findsOneWidget);
+      // The control is usable again, not stuck spinning.
+      expect(tester.widget<PlacardButton>(submitBtn).isLoading, isFalse);
+      expect(
+        find.byKey(const Key('eligible-subject-booking-2')),
+        findsOneWidget,
+      );
+      // The learner's typed reason survived the failure.
+      expect(find.text('Mentor never joined.'), findsOneWidget);
     },
   );
 }
