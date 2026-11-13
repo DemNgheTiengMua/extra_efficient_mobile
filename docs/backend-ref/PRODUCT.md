@@ -1,0 +1,402 @@
+# Product
+
+<!-- impeccable:product-schema 1 -->
+
+## Platform
+
+web
+
+## Stack
+
+**Prototype (current):** static HTML5 + CSS3 (custom properties, flexbox, grid) +
+vanilla JS (ES2020). No build step, no framework, no npm, no CDN. Shared
+`tokens.css` / `base.css` / `components.css`; display state switches via
+`?state=` query param handled by `state-switch.js`.
+
+**Target (binding — this is what gets assessed):** .NET 10, N-layer solution
+(BusinessObjects → DataAccess → Services → WebAPI / WebMVC), EF Core
+database-first (`docs/adr/0001`). ASP.NET Core Web API, RESTful, JWT bearer
+auth. Front end is ASP.NET Core MVC + Razor views using jQuery Ajax through the
+MVC server, which forwards to the API (`docs/adr/0002`). SQL Server. JWT lives
+in an **HttpOnly cookie** on the MVC server, never in `localStorage`. Schema is already written: `docs/database-schema.sql` — the
+**multi-certificate companion** schema (10 domains), which supersedes the
+original TOEIC-only schema (see Architecture Pivot below).
+
+The prototype is step 1 of a graded course project; the .NET application is the
+deliverable that follows. The prototype's job is to lock the business flow and
+every screen state before real code exists. It has been re-screened for the
+pivot (see Architecture Pivot), and the schema was then audited against every
+screen state so each piece of displayed data has a column or a derivation
+(`docs/schema-ui-audit.md`).
+
+## Architecture Pivot (2026-09-24)
+
+An advisor reviewed the database design and raised two structural objections:
+features must live in the schema (not hidden in backend logic), and the product
+must broaden beyond a single TOEIC L&R exam. The accepted redesign —
+`docs/superpowers/specs/2026-09-24-multi-cert-companion-design.md` — turns the
+product into a **multi-certificate practice-and-mock-exam companion**:
+
+- **Removed:** the real/high-stakes exam ("thi thật") and the entire KYC/CCCD
+  identity gate. Only **practice** (free) and **mock exams** (paid) exist;
+  nothing pretends to be an official sitting, so no identity verification is
+  needed.
+- **Added:** multiple certificates (TOEIC, IELTS, VSTEP — data-driven, each
+  with its own skills and sections); skills beyond listening/reading
+  (speaking, writing); a placement test that generates a level-matched
+  **learning path**; **AI grading** of speaking/writing against a rubric; and
+  **mentor booking** (human via Google Meet, or AI) with reviews, complaints,
+  and payouts.
+- **Monetisation widened:** one credit was "one real exam"; now credits pay
+  for a mock exam start, AI grading, a mentor booking, or a premium learning
+  path.
+
+The static prototype under `prototype/` has since been re-screened for the
+pivot (plan `docs/superpowers/plans/2026-09-27-multi-cert-ui-redesign.md`): KYC
+screens and messaging are gone; certificate picker, placement, learning path,
+AI grading, mentor booking, speaking practice, and complaint screens were
+added. The 2026-10-08 audit then closed the gaps the screens exposed in the
+schema (tagged `UI-n` in `docs/database-schema.sql`). Schema and screens now
+describe the same product.
+
+## Users
+
+**Primary — individual self-study learners** preparing for an English
+certificate (TOEIC, IELTS, VSTEP, …). Each buys their own credit package and
+manages their own wallet. They are studying for a score they need (graduation,
+job application, certification), not for a class. A learner may pursue
+**several certificates in parallel** — everything learner-scoped is keyed by
+`(user, certificate)` and persists independently; switching the active
+certificate never destroys another certificate's data (only an explicit reset
+does).
+
+**Secondary — Admin.** Authors and imports exams and questions, maintains
+per-certificate score scales and bands, manages credit packages and prices,
+reconciles orders, handles complaints, and sees platform stats.
+
+**Tertiary — Mentors.** Humans who sell bookable slots and meet learners on
+Google Meet (the app collects payment and stores the link; it does not host
+sessions), plus AI mentors that book without a slot.
+
+There is no teacher, class, or cohort concept.
+
+## Product Purpose
+
+A learner picks a certificate, takes a **free first placement test** (retakes charge credits by scope), gets a band
+and a level-matched **learning path**, practises sections for free, and spends
+credits only on the things that move them toward their target band: full
+**mock exams**, **AI grading** of their speaking/writing with concrete
+recommendations, and **mentor sessions**. After purchase, the product stays
+with them — the companion follows the path, unlocks steps upward, and aims
+every correction at the target band.
+
+Success means a learner can answer two questions at any point: *where am I
+weak, and what do I do about it?* and *what is my score worth in a standard I
+can quote?* (raw → scaled → band).
+
+## Positioning
+
+Practice by section, weakness analysis, and the **first placement test per
+certificate per learner** are free and carry no paywall or purchase prompt —
+those flows never write a ledger row. Subsequent placement retakes charge
+configured credits by scope (`placement_retake`: 5 for all 4 skills, 3 for
+Listening & Reading). Weakness analysis draws on **both** free practice sessions and
+graded paid attempts, so it is already useful to a learner who has never paid.
+
+Exactly five things cost credits, each a distinct ledger reason: starting a
+mock exam (`mock_exam_start`), retaking a placement test (`placement_retake`,
+priced by scope), AI-grading an attempt's free responses
+(`ai_grading`, one charge per attempt, not per answer — this is what a
+speaking-practice session costs, 1 credit), booking a mentor (`mentor_booking`,
+charged at the mentor's `PriceCredits`), and upgrading to a premium learning
+path (`premium_path`). Credits come back only as `booking_cancel` (refund of a
+cancelled booking, equal to the charge, once) or an `admin_grant`.
+
+The old identity gate is gone. With only mock testing, gating payment behind
+CCCD verification bought nothing — so verification, and the whole KYC queue,
+were removed rather than softened.
+
+## Operating Context
+
+**Learner path:** register → pick a certificate (placement selects the
+certificate **first**, so the test matches the skills that certificate
+actually has) → free first placement test (paid retakes) → band + target band → generated learning
+path → practise free → buy credits through a redirect gateway (payOS) →
+spend them on mock exams / AI grading / mentor bookings / premium path →
+review answers with explanations → history per certificate.
+
+**Exam-session realities that are normal, not edge cases:** a long mock exam
+will be reloaded mid-attempt; the clock will run out while the submit dialog
+is open; a learner will cancel partway; the network will drop while an answer
+is saving. Each has its own screen and its own message.
+
+**Companion realities:** an attempt with speaking/writing answers **cannot
+finish grading on submit** — it waits for the AI grading pass; a learner
+switches between two certificates and expects both histories intact; a
+resolved mentor complaint may come back as a credit make-good.
+
+**Admin path:** exam authoring (draft / published / hidden, source and internal
+note, one audio file per listening section, photo + required alt text and
+transcript per question group, question-type labels) and **batch import**
+(import is a first-class, queryable feature with per-row logs — an advisor
+requirement) → per-exam raw→scaled tables → packages and prices (one featured
+package) → orders, including `reconciling` ones → complaint resolution with
+internal notes → user list (lock account, resend activation email, adjust
+credits with a required reason).
+
+**Review ritual:** the prototype is reviewed in a browser from
+`prototype/index.html`, a catalog linking every screen and every one of its
+states. The convention throughout is `?state=<name>`.
+
+## Capabilities and Constraints
+
+**Catalog is data-driven.** Certificates → Skills → Sections are tables, not
+code. `Skills.Modality` (listening/reading/speaking/writing) drives the answer
+branch downstream: listening/reading → MCQ, auto-graded; speaking/writing →
+free response, AI-graded. `Sections.OptionCount` generalises the old "Part 2
+has 3 options" rule — per-section, data-driven, NULL for non-MCQ sections,
+never hardcoded.
+
+**Certificate isolation is a schema fact.** A skill belongs to one
+certificate, a section to one skill, an exam to one certificate — and
+composite foreign keys carry `CertId` down so a TOEIC exam *cannot* contain an
+IELTS section, a rubric score *cannot* name another skill's criterion, and a
+path item *cannot* reference another certificate's content. This is enforced
+by keys, not by backend policy.
+
+**Exam format varies by certificate.** Question counts, durations, skill
+counts (TOEIC 2, IELTS 4), and scales all come from catalog rows. Per-skill
+scores are rows (`AttemptSkillScores`), not fixed columns; the total must
+always equal the SUM of scaled skill scores (trigger-enforced).
+
+**Free:** practice by section (a listening/reading drill is marked by its correct option, a writing
+drill by the question's word floor and required keywords, so neither needs paid AI grading), with a
+question source (all / previously wrong / unseen) and a
+feedback mode (after each question / at the end); a rationale for why the
+learner's *chosen* option is wrong, beside the general explanation; a saved
+incorrect-answer bank; weakness analysis by section and by question type,
+across practice **and** graded exams; the placement test (listed apart from
+mocks, resumable) and the basic generated path.
+
+**Exam features.** Flag for review (and "only flagged" on the navigator and in
+review), resume at the last question after a reload, submitted time and time
+taken on results, per-attempt "to reach B2" recommendations, and replay of a
+single listening item with its transcript in review.
+
+**Speaking practice** is its own exam purpose (`speaking_practice`, speaking
+sections only): per-question prep and response timers, a mic check before the
+credit is spent, recorded duration stored, criteria and per-section maxima
+from `SectionCriteria`. It costs one `ai_grading` charge and never
+`mock_exam_start`; a failed grading is retried on the same row at no charge.
+It scores one skill of a summed scale, so it **never carries a certificate
+band** (trigger-enforced). Writing is allowed by the schema but has no screens.
+A writing **practice session** is a different, free thing: a drill that checks the answer's word floor
+and required keywords, not a rubric. Speaking has no typed drill, because a spoken answer cannot be
+typed; its free practice link points at the recorded, AI-graded attempt above.
+
+**Speaking backend contract** (no backend code exists yet; this is what the
+schema expects): the browser records per question and uploads the audio file;
+the server stores it outside the database and writes `FreeResponses.AudioPath`
++ `DurationMs`; one `AiGradings` row per response starts `pending`; a worker
+reads the queue (`IX_AiGradings_Queue`), transcribes and scores against the
+section's criteria, writes `AiGradingScores` with comments, then `done`
+(the trigger flips the response to `graded`) or `failed` with a reason. The
+attempt reaches `graded` only when every response is graded.
+
+**Learning path.** Modules are grouped, described, and estimated in minutes,
+list their topics, and may be premium-only; steps go locked → available →
+in progress → done; module progress comes from the practice sessions linked to
+that step; the path records which placement it was built from.
+
+**Score conversion, two steps with different ownership.** `raw → scaled`
+varies per exam because difficulty varies, so **admin edits it per exam**
+(`ScoreScales`). `scaled → band` is fixed standard data per certificate
+(TOEIC→CEFR, IELTS→0–9, VSTEP→bậc), so **admin cannot edit it** — the admin
+screen shows it read-only with no input fields, and band ranges may not
+overlap within a certificate. Band codes are **snapshotted** into results at
+grading time so history survives later catalog edits.
+
+**Credits.** A wallet balance is the **SUM over an append-only ledger**, never
+a stored counter column. Ledger rows cannot be deleted or rewritten; every
+debit names its provenance (order / attempt / booking / path); the charged
+wallet must own the source row; no transaction may drive a balance negative;
+an order that has been credited cannot leave `paid`. UI must never present the
+balance as an autonomous number.
+
+**Payments.** Redirect gateway: payOS VietQR bank transfer, with a mock gateway
+for demos and tests (`docs/adr/0003`). Each order has a human-readable order
+code, a numeric `PaymentNo` for the gateway, and stores the gateway's
+transaction ref and error code. Every webhook, return redirect and status query
+is kept in `PaymentEvents`; credit is granted only on a signature-verified
+webhook or a server-side status query, never on the return redirect. Order states `pending` → `reconciling` → `paid` | `failed` |
+`expired`. `expired` (past the 15-minute reconciliation window) is deliberately
+separate from `failed` — one invites a retry, the other a new order. **One open
+order per account** — `reconciling` blocks a new order too ("do not pay
+again"). The wallet shows "purchased − used" from a view
+(`vw_UserCreditSummary`), never a stored counter.
+
+**Mentors.** The app collects the booking credit and stores a Meet link; it
+never hosts sessions. Each mentor has a headline, expertise, session length,
+and a price in credits; the learner names a focus area when booking. Human
+mentors need slots (one live booking per slot); AI mentors book without one.
+A cancelled booking refunds its charge through the ledger. Reviews attach only
+to bookings; average rating is a **view**, never stored. Mentor payouts batch
+settled bookings; payout totals are a **view**, and the actual outbound
+transfer happens outside the app.
+
+**Complaints** cover a booking (mentor no-show / quality), an attempt (grading
+issue / technical error), or an order — exactly one subject, its type must
+match, and it must be the complainant's own. Admin keeps internal notes and
+the resolver is recorded. A resolution may issue an `admin_grant` credit
+make-good; every admin grant or revoke requires a reason and names the admin.
+
+**Accounts.** Registration takes full name, phone, and terms acceptance; email
+must be verified (activation tokens stored hashed, re-sendable by admin);
+admin can lock an account; last sign-in is recorded.
+
+**Target-system constraints that shape the UI:**
+1. The timer is **server-authoritative** — the server returns an absolute
+   `expiresAt`; the client counts down for display only. The UI needs a
+   server-decided expired state.
+2. Each answer saves immediately (~400 ms debounce) — the UI needs
+   saving / saved / save-failed indication.
+3. **Correct answers and explanations are never sent to the client during an
+   exam.** Only Review and practice show them.
+4. Credit balance is a ledger sum, so no screen may treat it as authoritative
+   state of its own.
+5. Grading is **asynchronous** for speaking/writing — the UI needs a
+   pending-grading state between submit and result.
+
+**Security constraints already decided:** never store raw passwords (hash);
+password-reset and email-verification tokens are stored hashed. (CCCD hashing and image handling are
+gone with KYC.)
+
+**Explicitly out of scope:** real/high-stakes exam sittings and everything
+they required (KYC/CCCD, identity gates); cash refunds (a resolved complaint
+may issue a *credit* make-good, but money never returns to a card/bank);
+scheduled exam slots with capacity; the outbound money transfer to mentors;
+the concrete question-import file format; OCR/face matching.
+
+**Deliberate constraint:** desktop-first, reference viewport 1440×900. Full
+mobile breakpoint coverage is intentionally not done.
+
+**Undecided — do not treat as settled:**
+- The ingest format for the real question content (see Evidence on Hand).
+- Which AI model/provider performs grading (`AiGradings.Model` records which
+  one did, after the fact).
+- Re-recording a speaking answer: one response per question for now (kept as
+  a decision, `docs/schema-gaps-speaking.md` gap 5).
+- Not tracked by design: time-on-task ("hours studied" is only a rough
+  derivation), premium video watch progress, and admin "needs attention"
+  alerts (computed, not stored).
+
+## Brand Commitments
+
+- **Product name: "extra efficient"** — confirmed brand for the multi-certificate
+  companion.
+- **UI copy and exam content are both English.** The prototype shipped its
+  first pass in Vietnamese; it was translated to English in full (the UI
+  chrome, the generated state-switcher labels, and the inline scripts
+  included) so the screens can be reviewed without a translator in the room.
+- **The product is still Vietnamese**, and the type system is built to survive
+  the copy moving back without a rewrite: IBM Plex is self-hosted in the latin
+  *and* vietnamese subsets, so diacritics render from the same family rather
+  than falling through to a fallback. Prices stay in ₫, the gateway is
+  payOS.
+- Personal names in sample data are Vietnamese and stay Vietnamese. The
+  convention is to localise the language, not the users.
+- No logo, identity assets, or legal/footer copy exist yet.
+
+## Evidence on Hand
+
+- **50 static HTML screens** spanning student (32), admin (10), auth (3), and
+  payment (5), plus `prototype/landing.html` and the `prototype/index.html`
+  catalog (~200 state links). These describe the **post-pivot** product: KYC
+  screens are removed; placement, learning path, AI grading, mentor booking,
+  speaking practice (`speaking-instructions`, `exam-speaking`,
+  `speaking-review`), and admin complaint screens are in.
+- **`docs/schema-ui-audit.md`** (2026-10-08) — every page and state read
+  against the schema; each gap fixed and tagged `UI-n`.
+  `docs/schema-gaps-speaking.md` records the speaking-format gaps (all fixed
+  except gap 5).
+- **Layout system consolidation (2026-09-28):** 173 inline spacing overrides
+  eliminated and converted to utility classes; definition-list grids, progress
+  bars, centered content, and button groups now use consistent token-based
+  layout helpers (`stack--tight`, `row--center`, `container--narrow`,
+  `no-margin`). Skeleton loading animations refined for `prefers-reduced-motion`
+  accessibility.
+- **`docs/database-schema.sql`** — the multi-certificate companion schema,
+  verified by live execution on LocalDB: 47 tables, 8 views, 22 triggers, 13
+  filtered unique indexes, 36 query indexes (FK joins, history reads, the
+  AI-grading queue), 81 named check constraints, plus 11 domain test
+  scripts (`docs/schema-tests/`, including `domain11-ui-coverage.sql` for the
+  audit rules) that all pass (`run-all.sh`).
+- **`docs/superpowers/specs/2026-09-24-multi-cert-companion-design.md`** — the
+  pivot design (10 domains). It predates the 2026-10-08 audit, so for
+  anything tagged `UI-n` the schema and `docs/schema-ui-audit.md` are ahead of
+  it.
+- **`docs/superpowers/plans/2026-09-24-multi-cert-companion-schema.md`** — the
+  11-task schema build plan (executed; this doc update is its closing step).
+- **`docs/toeic-user-flow.md`** — the user flow told by actor, updated to the
+  post-pivot flow; its screen-file citations and "not re-screened" note
+  predate the UI redesign and are stale.
+- **`docs/superpowers/specs/2026-09-27-multi-cert-ui-redesign.md`** and its
+  plan — the prototype redesign for the pivot (executed).
+- **`docs/superpowers/specs/2026-09-20-toeic-ui-design.md`** and
+  **`docs/superpowers/plans/2026-09-20-toeic-ui-prototype.md`** — the
+  pre-pivot screen/state spec and build plan (historical).
+
+**Content is placeholder only.** Exam names like "ETS 2024 — Test 5" are
+invented labels. There is no real question content and no real audio —
+`prototype/assets/img/part1-sample.svg` is a hand-drawn placeholder. **Real
+question sets and audio will be supplied later**; the application must be able
+to ingest them (`ImportBatches` / `ImportLog` make ingest a first-class
+feature), but the ingest format is not yet decided.
+
+**Absences future work must not fabricate:** no real question content, no real
+user data, no testimonials, no customer logos, no benchmarks, no pricing
+research, no deployment or compliance claims, no chosen AI grading provider.
+
+## Product Principles
+
+1. **Practice, weakness analysis, and first placement stay free.** Practice,
+   weakness analysis, and the first placement per certificate per learner never
+   carry a paywall and never write a ledger row. Placement retakes charge
+   configured credits by scope (`placement_retake`). They are the reason a learner buys
+   anything, so anything that monetises them defeats the funnel.
+2. **Block before you charge.** Every precondition is checked *before* a
+   credit is deducted, and every blocking screen states plainly that nothing
+   was deducted and offers a free way forward.
+3. **States are business truth, not decoration.** Timeout, cancellation,
+   reload, save failure, and pending AI grading are ordinary branches of a
+   long exam. Each gets a real screen and a message that says what it cost.
+4. **The server owns time, answers, and balance.** The UI displays these; it
+   never decides them. A screen that treats any of the three as its own state
+   is wrong.
+5. **Every score must be actionable.** Raw → scaled → band, shown as a
+   position on a band with the distance to the next one — because a bare
+   number does not tell a learner where they stand.
+6. **Certificates never leak into each other.** Isolation is enforced by keys
+   in the schema, so no feature built on top can mix one certificate's content,
+   scoring, or rubric into another's.
+7. **Aggregates are always derived.** Wallet balance, mentor rating, payout
+   totals — SUM/AVG over rows, never stored counters that can drift.
+
+## Accessibility & Inclusion
+
+**Target conformance: WCAG 2.1 AA** — confirmed standard for this product.
+
+Requirements already applied across the prototype:
+
+- Every input has a `<label>`; every image has `alt`.
+- Answer groups use `role="radiogroup"`; selection state is exposed via
+  `aria-checked`, not colour alone.
+- Focus must always be visible.
+- The score band bar is `role="img"` with an `aria-label` naming the current
+  band and score; the numeric scale ticks are `aria-hidden` as visual detail.
+- Progress and severity are never communicated by colour alone — colour is the
+  second layer, always paired with a label or number.
+- Tables are used only for real tabular data (score conversions, order lists),
+  never for layout.
+- Skeleton animations respect `prefers-reduced-motion` by replacing motion with
+  fade-in transitions.
