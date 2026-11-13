@@ -43,4 +43,15 @@ class FakeHttpClientAdapter implements HttpClientAdapter {
       },
     );
   }
+
+  /// Sends already-encoded JSON, for recorded payloads pasted verbatim.
+  static ResponseBody rawJsonResponse(String data, {int statusCode = 200}) {
+    return ResponseBody.fromString(
+      data,
+      statusCode,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
 }
