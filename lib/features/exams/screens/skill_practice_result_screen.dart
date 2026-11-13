@@ -159,7 +159,7 @@ class _SkillPracticeResultScreenState
         ),
       ),
       child: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: FCircularProgress())
           : _error != null
               ? Padding(
                   padding: const EdgeInsets.all(16),

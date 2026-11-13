@@ -99,7 +99,7 @@ class _MockInstructionsScreenState
         ),
       ),
       child: instructionsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: FCircularProgress()),
         error: (err, _) => Padding(
           padding: const EdgeInsets.all(16),
           child: StateBlock(

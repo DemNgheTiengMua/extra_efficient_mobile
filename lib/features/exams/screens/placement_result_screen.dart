@@ -123,10 +123,12 @@ class _PlacementResultScreenState extends ConsumerState<PlacementResultScreen> {
   Widget build(BuildContext context) {
     final result = _result;
 
-    return Scaffold(
-      backgroundColor: SignageColors.wall,
-      body: Column(
-        children: [
+    return FScaffold(
+      childPad: false,
+      child: ColoredBox(
+        color: SignageColors.wall,
+        child: Column(
+          children: [
           DecoratedBox(
             decoration: const BoxDecoration(
               color: SignageColors.signBlue,
@@ -176,7 +178,7 @@ class _PlacementResultScreenState extends ConsumerState<PlacementResultScreen> {
           ),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: FCircularProgress())
                 : _error != null
                     ? ListView(
                         padding: const EdgeInsets.all(16),
@@ -281,6 +283,7 @@ class _PlacementResultScreenState extends ConsumerState<PlacementResultScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 }

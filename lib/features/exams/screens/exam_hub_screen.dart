@@ -191,7 +191,7 @@ class _MockExamsView extends ConsumerWidget {
           child: examsAsync.when(
             loading: () => const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(child: FCircularProgress()),
             ),
             error: (err, _) => StateBlock(
               stamp: 'ERROR',
@@ -332,7 +332,7 @@ class _HistoryReviewView extends ConsumerWidget {
     final historyAsync = ref.watch(examHistoryProvider);
 
     return historyAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const Center(child: FCircularProgress()),
       error: (err, _) => Padding(
         padding: const EdgeInsets.all(16),
         child: StateBlock(

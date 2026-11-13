@@ -49,7 +49,7 @@ class _MentorsBookingsViewState extends ConsumerState<MentorsBookingsView> {
           child: mentorsAsync.when(
             loading: () => const Padding(
               padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(child: FCircularProgress()),
             ),
             error: (err, _) => Padding(
               padding: const EdgeInsets.all(16),
@@ -98,7 +98,7 @@ class _MentorsBookingsViewState extends ConsumerState<MentorsBookingsView> {
           child: bookingsAsync.when(
             loading: () => const Padding(
               padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(child: FCircularProgress()),
             ),
             error: (err, _) => Padding(
               padding: const EdgeInsets.all(16),
@@ -443,7 +443,7 @@ class _BookMentorViewState extends ConsumerState<_BookMentorView> {
         ),
         const SizedBox(height: 16),
         if (_isLoading)
-          const Center(child: CircularProgressIndicator())
+          const Center(child: FCircularProgress())
         else if (_mentor != null)
           PlacardPanel(
             title: _mentor!.isAi ? 'BOOK AI MENTOR' : 'BOOK HUMAN MENTOR',

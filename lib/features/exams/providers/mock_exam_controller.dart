@@ -19,6 +19,13 @@ class MockExamState {
     this.autosaveStatus = AutosaveStatus.idle,
     this.isSubmitting = false,
     this.isCompleted = false,
+    this.activeSkillId,
+    this.activeUnitNumber,
+    this.activeGroupId,
+    this.phaseDeadlineAt,
+    this.isAudioReviewActive = false,
+    this.audioReviewRemainingSeconds = 0,
+    this.uploadedAudioQuestionIds = const <int>{},
   });
 
   final bool isLoading;
@@ -31,6 +38,13 @@ class MockExamState {
   final AutosaveStatus autosaveStatus;
   final bool isSubmitting;
   final bool isCompleted;
+  final int? activeSkillId;
+  final int? activeUnitNumber;
+  final int? activeGroupId;
+  final DateTime? phaseDeadlineAt;
+  final bool isAudioReviewActive;
+  final int audioReviewRemainingSeconds;
+  final Set<int> uploadedAudioQuestionIds;
 
   PlacementQuestion? get currentQuestion =>
       (currentIndex >= 0 && currentIndex < questions.length)
@@ -49,6 +63,13 @@ class MockExamState {
     AutosaveStatus? autosaveStatus,
     bool? isSubmitting,
     bool? isCompleted,
+    int? activeSkillId,
+    int? activeUnitNumber,
+    int? activeGroupId,
+    DateTime? phaseDeadlineAt,
+    bool? isAudioReviewActive,
+    int? audioReviewRemainingSeconds,
+    Set<int>? uploadedAudioQuestionIds,
   }) {
     return MockExamState(
       isLoading: isLoading ?? this.isLoading,
@@ -61,11 +82,20 @@ class MockExamState {
       autosaveStatus: autosaveStatus ?? this.autosaveStatus,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       isCompleted: isCompleted ?? this.isCompleted,
+      activeSkillId: activeSkillId ?? this.activeSkillId,
+      activeUnitNumber: activeUnitNumber ?? this.activeUnitNumber,
+      activeGroupId: activeGroupId ?? this.activeGroupId,
+      phaseDeadlineAt: phaseDeadlineAt ?? this.phaseDeadlineAt,
+      isAudioReviewActive: isAudioReviewActive ?? this.isAudioReviewActive,
+      audioReviewRemainingSeconds:
+          audioReviewRemainingSeconds ?? this.audioReviewRemainingSeconds,
+      uploadedAudioQuestionIds:
+          uploadedAudioQuestionIds ?? this.uploadedAudioQuestionIds,
     );
   }
 }
 
-/// Controller for a single timed Mock Attempt Exam Room sitting.
+/// Controller for a single timed Mock Attempt Exam Room.
 class MockExamController extends ChangeNotifier {
   MockExamController({
     required this.attemptId,
@@ -83,6 +113,7 @@ class MockExamController extends ChangeNotifier {
   MockExamState get state => _state;
 
   Timer? _countdownTimer;
+  Timer? _audioReviewTimer;
   Timer? _debounceTimer;
   bool _disposed = false;
   int? _loadedAudioQuestionId;
@@ -90,17 +121,22 @@ class MockExamController extends ChangeNotifier {
   Future<void> init() async {
     _update(_state.copyWith(isLoading: true, clearError: true));
     try {
-      final sitting = await repository.fetchAttemptSitting(attemptId);
+      final attemptState = await repository.fetchAttemptState(attemptId);
       final now = DateTime.now().toUtc();
-      final remaining = sitting.expiresAt.toUtc().difference(now).inSeconds;
+      final remaining =
+          attemptState.expiresAt.toUtc().difference(now).inSeconds;
       _update(
         _state.copyWith(
           isLoading: false,
           attemptId: attemptId,
-          expiresAt: sitting.expiresAt,
+          expiresAt: attemptState.expiresAt,
           remainingSeconds: remaining > 0 ? remaining : 0,
-          questions: sitting.questions,
+          questions: attemptState.questions,
           currentIndex: 0,
+          activeSkillId: attemptState.activeSkillId,
+          activeUnitNumber: attemptState.activeUnitNumber,
+          activeGroupId: attemptState.activeGroupId,
+          phaseDeadlineAt: attemptState.phaseDeadlineAt,
         ),
       );
       _startCountdown();
@@ -148,8 +184,180 @@ class MockExamController extends ChangeNotifier {
 
   Future<void> jumpToQuestion(int index) async {
     if (index < 0 || index >= _state.questions.length) return;
+    final current = _state.currentQuestion;
+    final target = _state.questions[index];
+    if (target.unitNumber != null &&
+        target.unitNumber != current?.unitNumber &&
+        target.unitNumber != _state.activeUnitNumber) {
+      await transitionUnit(target.unitNumber!);
+    }
+    if (target.groupId != null &&
+        target.groupId != current?.groupId &&
+        target.groupId != _state.activeGroupId) {
+      await transitionGroup(target.groupId!);
+    }
     _update(_state.copyWith(currentIndex: index));
     await _loadAudioForCurrentQuestion();
+  }
+
+  Future<bool> transitionSkill() async {
+    _debounceTimer?.cancel();
+    try {
+      final res = await repository.transitionSkill(attemptId);
+      final nextSkillId = (res['activeSkillId'] as num?)?.toInt();
+      final nextUnit = (res['activeUnitNumber'] as num?)?.toInt();
+      final nextGroup = (res['activeGroupId'] as num?)?.toInt();
+      final deadline = DateTime.tryParse(
+        (res['phaseDeadlineAt'] as String?) ?? '',
+      );
+      final isSubmitted = (res['isSubmitted'] as bool?) ?? false;
+      var targetIdx = _state.currentIndex;
+      if (nextSkillId != null) {
+        final found = _state.questions.indexWhere(
+          (q) => q.skillId == nextSkillId,
+        );
+        if (found != -1) targetIdx = found;
+      }
+      _update(
+        _state.copyWith(
+          activeSkillId: nextSkillId,
+          activeUnitNumber: nextUnit,
+          activeGroupId: nextGroup,
+          phaseDeadlineAt: deadline,
+          currentIndex: targetIdx,
+          isCompleted: isSubmitted,
+        ),
+      );
+      if (isSubmitted) {
+        onSubmitted?.call();
+      } else {
+        await _loadAudioForCurrentQuestion();
+      }
+      return true;
+    } catch (e) {
+      _update(_state.copyWith(error: e.toString()));
+      return false;
+    }
+  }
+
+  Future<bool> transitionUnit(int targetUnitNumber) async {
+    try {
+      final res = await repository.transitionUnit(attemptId, targetUnitNumber);
+      _update(
+        _state.copyWith(
+          activeUnitNumber:
+              (res['activeUnitNumber'] as num?)?.toInt() ?? targetUnitNumber,
+          activeGroupId: (res['activeGroupId'] as num?)?.toInt(),
+          phaseDeadlineAt: DateTime.tryParse(
+            (res['phaseDeadlineAt'] as String?) ?? '',
+          ),
+        ),
+      );
+      return true;
+    } catch (e) {
+      _update(_state.copyWith(error: e.toString()));
+      return false;
+    }
+  }
+
+  Future<bool> transitionGroup(int targetGroupId) async {
+    try {
+      final res = await repository.transitionGroup(attemptId, targetGroupId);
+      _update(
+        _state.copyWith(
+          activeGroupId:
+              (res['activeGroupId'] as num?)?.toInt() ?? targetGroupId,
+          phaseDeadlineAt: DateTime.tryParse(
+            (res['phaseDeadlineAt'] as String?) ?? '',
+          ),
+        ),
+      );
+      return true;
+    } catch (e) {
+      _update(_state.copyWith(error: e.toString()));
+      return false;
+    }
+  }
+
+  Future<void> startAudioReview() async {
+    if (_state.isAudioReviewActive) return;
+    try {
+      final res = await repository.startAudioReview(attemptId);
+      final remaining = (res['remainingSeconds'] as num?)?.toInt() ?? 120;
+      _audioReviewTimer?.cancel();
+      _update(
+        _state.copyWith(
+          isAudioReviewActive: true,
+          audioReviewRemainingSeconds: remaining > 0 ? remaining : 120,
+        ),
+      );
+      _audioReviewTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (_disposed || !_state.isAudioReviewActive) {
+          timer.cancel();
+          return;
+        }
+        if (_state.audioReviewRemainingSeconds > 1) {
+          _update(
+            _state.copyWith(
+              audioReviewRemainingSeconds:
+                  _state.audioReviewRemainingSeconds - 1,
+            ),
+          );
+        } else {
+          timer.cancel();
+          _update(
+            _state.copyWith(
+              isAudioReviewActive: false,
+              audioReviewRemainingSeconds: 0,
+            ),
+          );
+        }
+      });
+    } catch (e) {
+      _update(_state.copyWith(error: e.toString()));
+    }
+  }
+
+  Future<bool> saveSpeakingRecording(
+    int questionId,
+    String filePath,
+    int durationMs,
+  ) async {
+    _update(_state.copyWith(autosaveStatus: AutosaveStatus.saving));
+    try {
+      await repository.uploadSpeakingAudio(
+        attemptId,
+        questionId,
+        filePath,
+        durationMs: durationMs,
+      );
+      final idx = _state.questions.indexWhere((q) => q.questionId == questionId);
+      final q = idx != -1 ? _state.questions[idx] : null;
+      await repository.saveAttemptAnswer(
+        attemptId,
+        questionId,
+        selectedOptionId: null,
+        isFlagged: q?.isFlagged ?? false,
+        responseText: q?.responseText,
+      );
+      final nextUploaded = Set<int>.from(_state.uploadedAudioQuestionIds)
+        ..add(questionId);
+      _update(
+        _state.copyWith(
+          autosaveStatus: AutosaveStatus.saved,
+          uploadedAudioQuestionIds: nextUploaded,
+        ),
+      );
+      return true;
+    } catch (e) {
+      _update(
+        _state.copyWith(
+          autosaveStatus: AutosaveStatus.failed,
+          error: e.toString(),
+        ),
+      );
+      return false;
+    }
   }
 
   void selectMcqOption(int optionId) {
@@ -284,6 +492,7 @@ class MockExamController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _countdownTimer?.cancel();
+    _audioReviewTimer?.cancel();
     _debounceTimer?.cancel();
     super.dispose();
   }

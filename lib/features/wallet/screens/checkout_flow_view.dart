@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:forui/forui.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
@@ -242,7 +243,7 @@ class _CheckoutFlowViewState extends ConsumerState<CheckoutFlowView> {
           const SizedBox(height: 16),
         ],
         if (_isLoading && _preview == null && _order == null)
-          const Center(child: CircularProgressIndicator())
+          const Center(child: FCircularProgress())
         else if (_order != null)
           _buildOrderState(_order!)
         else if (_preview != null)

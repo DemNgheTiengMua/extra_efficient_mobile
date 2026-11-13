@@ -61,8 +61,9 @@ class SkillPracticeRepository {
   Future<void> uploadSpeakingAudio(
     int attemptId,
     int questionId,
-    String filePath,
-  ) async {
+    String filePath, {
+    int? durationMs,
+  }) async {
     final file = File(filePath);
     final multipart = file.existsSync()
         ? await MultipartFile.fromFile(filePath, filename: 'recording.m4a')
@@ -70,7 +71,10 @@ class SkillPracticeRepository {
             utf8.encode('audio-recording'),
             filename: 'recording.m4a',
           );
-    final formData = FormData.fromMap({'audio': multipart});
+    final formData = FormData.fromMap({
+      'audioFile': multipart,
+      'durationMs': ?durationMs,
+    });
     await _dio.post<void>(
       '/api/learner/speaking/attempts/$attemptId/questions/$questionId/audio',
       data: formData,

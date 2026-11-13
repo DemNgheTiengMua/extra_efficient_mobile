@@ -20,6 +20,7 @@ class PlacementExamState {
     this.autosaveStatus = AutosaveStatus.idle,
     this.isSubmitting = false,
     this.isCompleted = false,
+    this.uploadedAudioQuestionIds = const <int>{},
   });
 
   final bool isLoading;
@@ -32,6 +33,7 @@ class PlacementExamState {
   final AutosaveStatus autosaveStatus;
   final bool isSubmitting;
   final bool isCompleted;
+  final Set<int> uploadedAudioQuestionIds;
 
   PlacementQuestion? get currentQuestion =>
       (currentIndex >= 0 && currentIndex < questions.length)
@@ -50,6 +52,7 @@ class PlacementExamState {
     AutosaveStatus? autosaveStatus,
     bool? isSubmitting,
     bool? isCompleted,
+    Set<int>? uploadedAudioQuestionIds,
   }) {
     return PlacementExamState(
       isLoading: isLoading ?? this.isLoading,
@@ -62,6 +65,8 @@ class PlacementExamState {
       autosaveStatus: autosaveStatus ?? this.autosaveStatus,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       isCompleted: isCompleted ?? this.isCompleted,
+      uploadedAudioQuestionIds:
+          uploadedAudioQuestionIds ?? this.uploadedAudioQuestionIds,
     );
   }
 }
@@ -226,6 +231,39 @@ class PlacementExamController extends ChangeNotifier {
         _update(_state.copyWith(autosaveStatus: AutosaveStatus.failed));
       }
     });
+  }
+
+  Future<bool> saveSpeakingRecording(
+    int questionId,
+    String filePath,
+    int durationMs,
+  ) async {
+    _update(_state.copyWith(autosaveStatus: AutosaveStatus.saving));
+    try {
+      await repository.uploadSpeakingAudio(
+        placementId,
+        questionId,
+        filePath,
+        durationMs: durationMs,
+      );
+      final nextUploaded = Set<int>.from(_state.uploadedAudioQuestionIds)
+        ..add(questionId);
+      _update(
+        _state.copyWith(
+          autosaveStatus: AutosaveStatus.saved,
+          uploadedAudioQuestionIds: nextUploaded,
+        ),
+      );
+      return true;
+    } catch (e) {
+      _update(
+        _state.copyWith(
+          autosaveStatus: AutosaveStatus.failed,
+          error: e.toString(),
+        ),
+      );
+      return false;
+    }
   }
 
   Future<void> reportRecordingInterruption({

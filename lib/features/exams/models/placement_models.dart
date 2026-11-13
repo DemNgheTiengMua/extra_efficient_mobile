@@ -170,6 +170,9 @@ class PlacementQuestion {
     this.prepSeconds,
     this.responseSeconds,
     this.wordFloor,
+    this.skillId,
+    this.unitNumber,
+    this.groupId,
   });
 
   factory PlacementQuestion.fromJson(Map<String, dynamic> json, int fallbackIdx) {
@@ -199,6 +202,9 @@ class PlacementQuestion {
       prepSeconds: (json['prepSeconds'] as num?)?.toInt(),
       responseSeconds: (json['responseSeconds'] as num?)?.toInt(),
       wordFloor: (json['wordFloor'] as num?)?.toInt(),
+      skillId: (json['skillId'] as num?)?.toInt(),
+      unitNumber: (json['unitNumber'] as num?)?.toInt(),
+      groupId: (json['groupId'] as num?)?.toInt(),
     );
   }
 
@@ -230,6 +236,9 @@ class PlacementQuestion {
       prepSeconds: prepSeconds,
       responseSeconds: responseSeconds,
       wordFloor: wordFloor,
+      skillId: skillId,
+      unitNumber: unitNumber,
+      groupId: groupId,
     );
   }
 
@@ -255,6 +264,9 @@ class PlacementQuestion {
   final int? prepSeconds;
   final int? responseSeconds;
   final int? wordFloor;
+  final int? skillId;
+  final int? unitNumber;
+  final int? groupId;
 }
 
 class PlacementSitting {
@@ -263,6 +275,10 @@ class PlacementSitting {
     required this.expiresAt,
     required this.status,
     required this.questions,
+    this.activeSkillId,
+    this.activeUnitNumber,
+    this.activeGroupId,
+    this.phaseDeadlineAt,
   });
 
   factory PlacementSitting.fromJson(Map<String, dynamic> json) {
@@ -280,6 +296,12 @@ class PlacementSitting {
           DateTime.now().toUtc().add(const Duration(minutes: 20)),
       status: (json['status'] as String?) ?? 'in_progress',
       questions: questions,
+      activeSkillId: (json['activeSkillId'] as num?)?.toInt(),
+      activeUnitNumber: (json['activeUnitNumber'] as num?)?.toInt(),
+      activeGroupId: (json['activeGroupId'] as num?)?.toInt(),
+      phaseDeadlineAt: DateTime.tryParse(
+        (json['phaseDeadlineAt'] as String?) ?? '',
+      ),
     );
   }
 
@@ -287,6 +309,10 @@ class PlacementSitting {
   final DateTime expiresAt;
   final String status;
   final List<PlacementQuestion> questions;
+  final int? activeSkillId;
+  final int? activeUnitNumber;
+  final int? activeGroupId;
+  final DateTime? phaseDeadlineAt;
 }
 
 class PlacementSkillBreakdown {

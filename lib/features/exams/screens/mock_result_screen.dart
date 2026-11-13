@@ -94,7 +94,7 @@ class _MockResultScreenState extends ConsumerState<MockResultScreen> {
         ),
       ),
       child: resultAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: FCircularProgress()),
         error: (err, _) => Padding(
           padding: const EdgeInsets.all(16),
           child: StateBlock(
@@ -185,7 +185,7 @@ class _MockResultScreenState extends ConsumerState<MockResultScreen> {
               PlacardPanel(
                 title: 'AI EXAM INSIGHT',
                 child: insightAsync.when(
-                  loading: () => const Center(child: CircularProgressIndicator()),
+                  loading: () => const Center(child: FCircularProgress()),
                   error: (err, _) => StateBlock(
                     stamp: 'ERROR',
                     title: 'INSIGHT UNAVAILABLE',

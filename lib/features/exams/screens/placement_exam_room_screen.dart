@@ -12,6 +12,7 @@ import '../models/placement_models.dart';
 import '../providers/placement_exam_controller.dart';
 import '../providers/placement_providers.dart';
 import '../widgets/answer_navigator_sheet.dart';
+import '../widgets/exam_room_helpers.dart';
 
 /// Full-screen portrait Exam Room for a Placement attempt.
 /// Hides bottom navigation and displays server-authoritative countdown,
@@ -39,6 +40,7 @@ class _PlacementExamRoomScreenState
 
   // Speaking local timer state
   bool _isRecording = false;
+  DateTime? _recordingStartedAt;
   int _speakingElapsedSeconds = 0;
   Timer? _speakingTimer;
 
@@ -77,105 +79,41 @@ class _PlacementExamRoomScreenState
     super.dispose();
   }
 
-  String _formatClock(int totalSeconds) {
-    final hours = totalSeconds ~/ 3600;
-    final minutes = (totalSeconds % 3600) ~/ 60;
-    final seconds = totalSeconds % 60;
-    String two(int v) => v.toString().padLeft(2, '0');
-    if (hours > 0) {
-      return '${two(hours)}:${two(minutes)}:${two(seconds)}';
-    }
-    return '${two(minutes)}:${two(seconds)}';
-  }
-
-  int _wordCount(String text) {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return 0;
-    return trimmed.split(RegExp(r'\s+')).length;
-  }
-
   Future<void> _confirmSubmit() async {
     final router = GoRouter.of(context);
-    await showFDialog(
+    final confirmed = await showExamConfirmDialog(
       context: context,
-      builder: (dialogContext, style, animation) => FDialog(
-        style: style,
-        animation: animation,
-        builder: (context, _) => PlacardPanel(
-          title: 'SUBMIT PLACEMENT',
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Are you sure you want to submit this placement attempt? You cannot change answers after submitting.',
-                style: SignageTypography.body(fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              PlacardButton(
-                key: const Key('confirm-submit-btn'),
-                label: 'CONFIRM SUBMIT',
-                onPress: () async {
-                  Navigator.of(dialogContext).pop();
-                  final ok = await _controller.submit(isAutoSubmit: false);
-                  if (ok && mounted) {
-                    router.go('/placement/result/${widget.placementId}');
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-              PlacardButton(
-                label: 'CANCEL',
-                variant: PlacardButtonVariant.secondary,
-                onPress: () => Navigator.of(dialogContext).pop(),
-              ),
-            ],
-          ),
-        ),
-      ),
+      title: 'SUBMIT PLACEMENT',
+      message:
+          'Are you sure you want to submit this placement attempt? You cannot change answers after submitting.',
+      confirmLabel: 'CONFIRM SUBMIT',
+      confirmKey: const Key('confirm-submit-btn'),
     );
+    if (confirmed && mounted) {
+      final ok = await _controller.submit(isAutoSubmit: false);
+      if (ok && mounted) {
+        router.go('/placement/result/${widget.placementId}');
+      }
+    }
   }
 
   Future<void> _confirmAbandon() async {
     final router = GoRouter.of(context);
-    await showFDialog(
+    final confirmed = await showExamConfirmDialog(
       context: context,
-      builder: (dialogContext, style, animation) => FDialog(
-        style: style,
-        animation: animation,
-        builder: (context, _) => PlacardPanel(
-          title: 'ABANDON ATTEMPT',
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Abandoning will end your current placement sitting.',
-                style: SignageTypography.body(fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              PlacardButton(
-                label: 'ABANDON',
-                variant: PlacardButtonVariant.destructive,
-                onPress: () async {
-                  Navigator.of(dialogContext).pop();
-                  await _controller.abandon();
-                  if (mounted) {
-                    router.go('/exams');
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-              PlacardButton(
-                label: 'KEEP WORKING',
-                variant: PlacardButtonVariant.secondary,
-                onPress: () => Navigator.of(dialogContext).pop(),
-              ),
-            ],
-          ),
-        ),
-      ),
+      title: 'ABANDON ATTEMPT',
+      message: 'Abandoning will end your current placement attempt.',
+      confirmLabel: 'ABANDON',
+      confirmKey: const Key('confirm-abandon-btn'),
+      confirmVariant: PlacardButtonVariant.destructive,
+      cancelLabel: 'KEEP WORKING',
     );
+    if (confirmed && mounted) {
+      await _controller.abandon();
+      if (mounted) {
+        router.go('/exams');
+      }
+    }
   }
 
   Future<void> _startSpeakingRecording(PlacementQuestion q) async {
@@ -184,6 +122,7 @@ class _PlacementExamRoomScreenState
     if (!granted) return;
     await audio.startRecording('placement_${widget.placementId}_q${q.questionId}.m4a');
     _speakingTimer?.cancel();
+    _recordingStartedAt = DateTime.now();
     setState(() {
       _isRecording = true;
       _speakingElapsedSeconds = 0;
@@ -197,9 +136,18 @@ class _PlacementExamRoomScreenState
   Future<void> _stopSpeakingRecording(PlacementQuestion q) async {
     _speakingTimer?.cancel();
     final audio = ref.read(audioMediaAdapterProvider);
-    await audio.stopRecording();
+    final path = await audio.stopRecording();
+    final durationMs = _recordingStartedAt != null
+        ? DateTime.now().difference(_recordingStartedAt!).inMilliseconds
+        : _speakingElapsedSeconds * 1000;
+    _recordingStartedAt = null;
     if (!mounted) return;
     setState(() => _isRecording = false);
+    await _controller.saveSpeakingRecording(
+      q.questionId,
+      path ?? 'placement_${widget.placementId}_q${q.questionId}.m4a',
+      durationMs,
+    );
   }
 
   Widget _buildAutosaveBadge(AutosaveStatus status) {
@@ -241,7 +189,7 @@ class _PlacementExamRoomScreenState
                   border: Border.all(color: SignageColors.paper, width: 1),
                 ),
                 child: Text(
-                  _formatClock(state.remainingSeconds),
+                  formatClock(state.remainingSeconds),
                   style: SignageTypography.data(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -412,7 +360,7 @@ class _PlacementExamRoomScreenState
 
   Widget _buildWritingArea(PlacementQuestion q) {
     final text = _writingController.text;
-    final words = _wordCount(text);
+    final words = countWords(text);
 
     return PlacardPanel(
       title: 'WRITING RESPONSE',
@@ -430,23 +378,14 @@ class _PlacementExamRoomScreenState
             ),
             const SizedBox(height: 8),
           ],
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: SignageColors.paper,
-              border: Border.all(color: SignageColors.ink, width: 2),
-            ),
-            child: TextField(
-              key: const Key('writing-draft-input'),
+          FTextField.multiline(
+            key: const Key('writing-draft-input'),
+            control: FTextFieldControl.managed(
               controller: _writingController,
-              maxLines: 8,
-              onChanged: _controller.updateWritingDraft,
-              style: SignageTypography.body(fontSize: 15),
-              decoration: const InputDecoration(
-                contentPadding: EdgeInsets.all(12),
-                border: InputBorder.none,
-                hintText: 'Write your response here...',
-              ),
+              onChange: (value) => _controller.updateWritingDraft(value.text),
             ),
+            maxLines: 8,
+            hint: 'Write your response here...',
           ),
         ],
       ),
@@ -478,7 +417,7 @@ class _PlacementExamRoomScreenState
                   style: SignageTypography.data(fontSize: 13),
                 ),
               Text(
-                'CAPTURED: ${_formatClock(_speakingElapsedSeconds)}',
+                'CAPTURED: ${formatClock(_speakingElapsedSeconds)}',
                 style: SignageTypography.data(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -519,34 +458,36 @@ class _PlacementExamRoomScreenState
     final state = _controller.state;
     final question = state.currentQuestion;
 
-    return Scaffold(
-      backgroundColor: SignageColors.wall,
-      body: Column(
-        children: [
-          _buildHeader(state),
-          Expanded(
-            child: state.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : state.error != null
-                    ? ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          PlacardAlert(
-                            variant: PlacardAlertVariant.danger,
-                            title: 'Exam room error',
-                            subtitle: state.error,
-                          ),
-                        ],
-                      )
-                    : question == null
-                        ? const Center(
-                            child: StateBlock(
-                              stamp: 'EMPTY',
-                              title: 'No questions in this placement sitting',
-                              description:
-                                  'Please contact support or return to the exams hub.',
+    return FScaffold(
+      childPad: false,
+      child: ColoredBox(
+        color: SignageColors.wall,
+        child: Column(
+          children: [
+            _buildHeader(state),
+            Expanded(
+              child: state.isLoading
+                  ? const Center(child: FCircularProgress())
+                  : state.error != null
+                      ? ListView(
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            PlacardAlert(
+                              variant: PlacardAlertVariant.danger,
+                              title: 'Exam room error',
+                              subtitle: state.error,
                             ),
-                          )
+                          ],
+                        )
+                      : question == null
+                          ? const Center(
+                              child: StateBlock(
+                                stamp: 'EMPTY',
+                                title: 'No questions in this placement attempt',
+                                description:
+                                    'Please contact support or return to the exams hub.',
+                              ),
+                            )
                         : ListView(
                             padding: const EdgeInsets.all(16),
                             children: [
@@ -677,7 +618,8 @@ class _PlacementExamRoomScreenState
                 ),
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }

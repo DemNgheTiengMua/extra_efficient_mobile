@@ -13,6 +13,7 @@ import '../providers/mock_exam_controller.dart';
 import '../providers/mock_exam_providers.dart';
 import '../providers/placement_exam_controller.dart';
 import '../widgets/answer_navigator_sheet.dart';
+import '../widgets/exam_room_helpers.dart';
 
 /// Full-screen portrait Exam Room for a timed Mock Attempt.
 class MockExamRoomScreen extends ConsumerStatefulWidget {
@@ -32,6 +33,7 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
   final TextEditingController _writingController = TextEditingController();
   int? _writingQuestionId;
   bool _isRecording = false;
+  DateTime? _recordingStartedAt;
 
   @override
   void initState() {
@@ -66,106 +68,41 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
     super.dispose();
   }
 
-  String _formatClock(int totalSeconds) {
-    final hours = totalSeconds ~/ 3600;
-    final minutes = (totalSeconds % 3600) ~/ 60;
-    final seconds = totalSeconds % 60;
-    String two(int v) => v.toString().padLeft(2, '0');
-    if (hours > 0) {
-      return '${two(hours)}:${two(minutes)}:${two(seconds)}';
-    }
-    return '${two(minutes)}:${two(seconds)}';
-  }
-
-  int _wordCount(String text) {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return 0;
-    return trimmed.split(RegExp(r'\s+')).length;
-  }
-
   Future<void> _confirmSubmit() async {
     final router = GoRouter.of(context);
-    await showFDialog(
+    final confirmed = await showExamConfirmDialog(
       context: context,
-      builder: (dialogContext, style, animation) => FDialog(
-        style: style,
-        animation: animation,
-        builder: (context, _) => PlacardPanel(
-          title: 'SUBMIT MOCK ATTEMPT',
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Are you sure you want to submit this mock attempt? You cannot change answers after submitting.',
-                style: SignageTypography.body(fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              PlacardButton(
-                key: const Key('confirm-submit-btn'),
-                label: 'CONFIRM SUBMIT',
-                onPress: () async {
-                  Navigator.of(dialogContext).pop();
-                  final ok = await _controller.submit();
-                  if (ok && mounted) {
-                    router.go('/exams/attempts/${widget.attemptId}/result');
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-              PlacardButton(
-                label: 'CANCEL',
-                variant: PlacardButtonVariant.secondary,
-                onPress: () => Navigator.of(dialogContext).pop(),
-              ),
-            ],
-          ),
-        ),
-      ),
+      title: 'SUBMIT MOCK ATTEMPT',
+      message:
+          'Are you sure you want to submit this mock attempt? You cannot change answers after submitting.',
+      confirmLabel: 'CONFIRM SUBMIT',
+      confirmKey: const Key('confirm-submit-btn'),
     );
+    if (confirmed && mounted) {
+      final ok = await _controller.submit();
+      if (ok && mounted) {
+        router.go('/exams/attempts/${widget.attemptId}/result');
+      }
+    }
   }
 
   Future<void> _confirmCancel() async {
     final router = GoRouter.of(context);
-    await showFDialog(
+    final confirmed = await showExamConfirmDialog(
       context: context,
-      builder: (dialogContext, style, animation) => FDialog(
-        style: style,
-        animation: animation,
-        builder: (context, _) => PlacardPanel(
-          title: 'CANCEL ATTEMPT',
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Cancel this mock attempt and return to the Exams hub?',
-                style: SignageTypography.body(fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              PlacardButton(
-                key: const Key('confirm-cancel-btn'),
-                label: 'YES, CANCEL ATTEMPT',
-                variant: PlacardButtonVariant.destructive,
-                onPress: () async {
-                  Navigator.of(dialogContext).pop();
-                  final ok = await _controller.cancel();
-                  if (ok && mounted) {
-                    router.go('/exams');
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-              PlacardButton(
-                label: 'KEEP WORKING',
-                variant: PlacardButtonVariant.secondary,
-                onPress: () => Navigator.of(dialogContext).pop(),
-              ),
-            ],
-          ),
-        ),
-      ),
+      title: 'CANCEL ATTEMPT',
+      message: 'Cancel this mock attempt and return to the Exams hub?',
+      confirmLabel: 'YES, CANCEL ATTEMPT',
+      confirmKey: const Key('confirm-cancel-btn'),
+      confirmVariant: PlacardButtonVariant.destructive,
+      cancelLabel: 'KEEP WORKING',
     );
+    if (confirmed && mounted) {
+      final ok = await _controller.cancel();
+      if (ok && mounted) {
+        router.go('/exams');
+      }
+    }
   }
 
   void _openNavigatorSheet() {
@@ -186,14 +123,24 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
   Future<void> _toggleSpeakingRecord(PlacementQuestion q) async {
     final audio = ref.read(audioMediaAdapterProvider);
     if (_isRecording) {
-      await audio.stopRecording();
+      final path = await audio.stopRecording();
+      final durationMs = _recordingStartedAt != null
+          ? DateTime.now().difference(_recordingStartedAt!).inMilliseconds
+          : 0;
+      _recordingStartedAt = null;
       if (!mounted) return;
       setState(() => _isRecording = false);
+      await _controller.saveSpeakingRecording(
+        q.questionId,
+        path ?? 'mock_${widget.attemptId}_q${q.questionId}.m4a',
+        durationMs,
+      );
     } else {
       final granted = await audio.hasRecordPermission();
       if (!granted) return;
       await audio.startRecording('mock_${widget.attemptId}_q${q.questionId}.m4a');
       if (!mounted) return;
+      _recordingStartedAt = DateTime.now();
       setState(() => _isRecording = true);
     }
   }
@@ -244,7 +191,7 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  _formatClock(s.remainingSeconds),
+                  formatClock(s.remainingSeconds),
                   key: const Key('exam-countdown-clock'),
                   style: SignageTypography.data(
                     fontSize: 16,
@@ -327,13 +274,13 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
         ),
       ),
       child: s.isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: FCircularProgress())
           : (s.error != null && q == null)
               ? Padding(
                   padding: const EdgeInsets.all(16),
                   child: StateBlock(
                     stamp: 'ERROR',
-                    title: 'UNABLE TO LOAD MOCK SITTING',
+                    title: 'UNABLE TO LOAD MOCK ATTEMPT',
                     description: s.error!,
                     action: PlacardButton(
                       label: 'RETRY',
@@ -342,7 +289,7 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
                   ),
                 )
               : q == null
-                  ? const Center(child: Text('No questions in sitting.'))
+                  ? const Center(child: Text('No questions in attempt.'))
                   : Column(
                       children: [
                         Expanded(
@@ -388,13 +335,45 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
                               if (q.audioUrl != null && q.audioUrl!.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 12),
-                                  child: PlacardButton(
-                                    key: const Key('play-audio-btn'),
-                                    label: 'PLAY AUDIO SLICE',
-                                    variant: PlacardButtonVariant.secondary,
-                                    onPress: () => unawaited(
-                                      ref.read(audioMediaAdapterProvider).play(),
-                                    ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      PlacardButton(
+                                        key: const Key('play-audio-btn'),
+                                        label: 'PLAY AUDIO SLICE',
+                                        variant: PlacardButtonVariant.secondary,
+                                        onPress: () => unawaited(
+                                          ref
+                                              .read(audioMediaAdapterProvider)
+                                              .play(),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      PlacardButton(
+                                        key: const Key('start-audio-review-btn'),
+                                        label: s.isAudioReviewActive
+                                            ? 'POST-AUDIO REVIEW ACTIVE'
+                                            : 'COMPLETE AUDIO & REVIEW',
+                                        variant: PlacardButtonVariant.secondary,
+                                        onPress: s.isAudioReviewActive
+                                            ? null
+                                            : () => unawaited(
+                                                  _controller
+                                                      .startAudioReview(),
+                                                ),
+                                      ),
+                                      if (s.isAudioReviewActive) ...[
+                                        const SizedBox(height: 8),
+                                        PlacardAlert(
+                                          key: const Key('audio-review-banner'),
+                                          variant: PlacardAlertVariant.info,
+                                          title: 'POST-AUDIO REVIEW TIME',
+                                          subtitle:
+                                              'Remaining: ${formatClock(s.audioReviewRemainingSeconds)}',
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ),
                               if (q.passageText != null &&
@@ -478,7 +457,7 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'WORDS: ${_wordCount(_writingController.text)}${q.wordFloor != null ? ' / MIN ${q.wordFloor}' : ''}',
+                                  'WORDS: ${countWords(_writingController.text)}${q.wordFloor != null ? ' / MIN ${q.wordFloor}' : ''}',
                                   style: SignageTypography.data(fontSize: 12),
                                 ),
                               ],
@@ -527,7 +506,18 @@ class _MockExamRoomScreenState extends ConsumerState<MockExamRoomScreen> {
                                           : null,
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: PlacardButton(
+                                      key: const Key('transition-skill-btn'),
+                                      label: 'NEXT SKILL',
+                                      variant: PlacardButtonVariant.secondary,
+                                      onPress: () => unawaited(
+                                        _controller.transitionSkill(),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
                                   Expanded(
                                     child: PlacardButton(
                                       key: const Key('next-question-btn'),

@@ -142,7 +142,7 @@ class _PlacementOverviewScreenState
       child: Container(
         color: SignageColors.wall,
         child: overviewAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const Center(child: FCircularProgress()),
           error: (error, _) => ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -173,7 +173,7 @@ class _PlacementOverviewScreenState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'You have an unfinished placement sitting (#${overview.inProgressPlacementId}).',
+                          'You have an unfinished placement attempt (#${overview.inProgressPlacementId}).',
                           style: SignageTypography.body(fontSize: 14),
                         ),
                         const SizedBox(height: 12),

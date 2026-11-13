@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -138,6 +139,7 @@ void main() {
     Map<String, dynamic>? savedAnswerBody;
     Map<String, dynamic>? savedDraftBody;
     Map<String, dynamic>? submitBody;
+    bool uploadedSpeakingAudio = false;
 
     final adapter = FakeHttpClientAdapter((options, body) async {
       if (options.path == '/api/learner/placement/take/555' &&
@@ -153,6 +155,21 @@ void main() {
           options.method == 'POST') {
         savedDraftBody = body as Map<String, dynamic>?;
         return FakeHttpClientAdapter.jsonResponse({'saved': true});
+      }
+      if (options.path ==
+              '/api/learner/speaking/attempts/555/questions/4/audio' &&
+          options.method == 'POST') {
+        expect(options.data, isA<FormData>());
+        final formData = options.data as FormData;
+        expect(formData.files.any((e) => e.key == 'audioFile'), isTrue);
+        expect(
+          formData.fields.any(
+            (e) => e.key == 'durationMs' && int.tryParse(e.value) != null,
+          ),
+          isTrue,
+        );
+        uploadedSpeakingAudio = true;
+        return FakeHttpClientAdapter.jsonResponse({'uploaded': true});
       }
       if (options.path == '/api/learner/placement/take/555/submit' &&
           options.method == 'POST') {
@@ -242,6 +259,7 @@ void main() {
     await tester.tap(find.byKey(const Key('speaking-stop-btn')));
     await tester.pumpAndSettle();
     expect(audioAdapter.isRecording, isFalse);
+    expect(uploadedSpeakingAudio, isTrue);
 
     // Submit confirmation dialog
     await tester.tap(find.byKey(const Key('exam-submit-btn')));

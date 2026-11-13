@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 
 import '../models/mock_exam_models.dart';
@@ -88,7 +91,7 @@ class MockExamRepository {
     );
   }
 
-  Future<PlacementSitting> fetchAttemptSitting(int attemptId, {int? q}) async {
+  Future<PlacementSitting> fetchAttemptState(int attemptId, {int? q}) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/learner/attempts/$attemptId',
       queryParameters: q != null ? {'q': q} : null,
@@ -147,27 +150,62 @@ class MockExamRepository {
     );
   }
 
-  Future<void> transitionSkill(int attemptId) async {
-    await _dio.post<void>('/api/learner/attempts/$attemptId/transition/skill');
+  Future<Map<String, dynamic>> transitionSkill(int attemptId) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/learner/attempts/$attemptId/transition/skill',
+    );
+    return response.data ?? const <String, dynamic>{};
   }
 
-  Future<void> transitionUnit(int attemptId, int targetUnitNumber) async {
-    await _dio.post<void>(
+  Future<Map<String, dynamic>> transitionUnit(
+    int attemptId,
+    int targetUnitNumber,
+  ) async {
+    final response = await _dio.post<Map<String, dynamic>>(
       '/api/learner/attempts/$attemptId/transition/unit',
       data: {'targetUnitNumber': targetUnitNumber},
     );
+    return response.data ?? const <String, dynamic>{};
   }
 
-  Future<void> transitionGroup(int attemptId, int targetGroupId) async {
-    await _dio.post<void>(
+  Future<Map<String, dynamic>> transitionGroup(
+    int attemptId,
+    int targetGroupId,
+  ) async {
+    final response = await _dio.post<Map<String, dynamic>>(
       '/api/learner/attempts/$attemptId/transition/group',
       data: {'targetGroupId': targetGroupId},
     );
+    return response.data ?? const <String, dynamic>{};
   }
 
-  Future<void> startAudioReview(int attemptId) async {
-    await _dio.post<void>(
+  Future<Map<String, dynamic>> startAudioReview(int attemptId) async {
+    final response = await _dio.post<Map<String, dynamic>>(
       '/api/learner/attempts/$attemptId/audio-review/start',
+    );
+    return response.data ?? const <String, dynamic>{};
+  }
+
+  Future<void> uploadSpeakingAudio(
+    int attemptId,
+    int questionId,
+    String filePath, {
+    int? durationMs,
+  }) async {
+    final file = File(filePath);
+    final multipart = file.existsSync()
+        ? await MultipartFile.fromFile(filePath, filename: 'recording.m4a')
+        : MultipartFile.fromBytes(
+            utf8.encode('audio-recording'),
+            filename: 'recording.m4a',
+          );
+    final formData = FormData.fromMap({
+      'audioFile': multipart,
+      'durationMs': ?durationMs,
+    });
+    await _dio.post<void>(
+      '/api/learner/speaking/attempts/$attemptId/questions/$questionId/audio',
+      data: formData,
     );
   }
 

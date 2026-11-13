@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -200,5 +201,148 @@ void main() {
 
     expect(cancelled, isTrue);
     expect(find.text('EXAMS HUB'), findsOneWidget);
+  });
+
+  testWidgets(
+      'MockExamRoomScreen supports skill/unit/group transitions, audio-review gate, and speaking audio upload',
+      (tester) async {
+    final audio = FakeAudioMediaAdapter();
+    bool skillTransitioned = false;
+    int? unitTransitioned;
+    int? groupTransitioned;
+    bool audioReviewStarted = false;
+    bool speakingUploaded = false;
+
+    final adapter = FakeHttpClientAdapter((options, body) async {
+      switch ('${options.method} ${options.path}') {
+        case 'GET /api/learner/attempts/902':
+          return FakeHttpClientAdapter.jsonResponse({
+            'attemptId': 902,
+            'examTitle': 'TOEIC 4-Skill Mock',
+            'expiresAt': DateTime.now()
+                .toUtc()
+                .add(const Duration(minutes: 45))
+                .toIso8601String(),
+            'status': 'in_progress',
+            'activeSkillId': 1,
+            'activeUnitNumber': 1,
+            'activeGroupId': 10,
+            'questions': [
+              {
+                'questionId': 1,
+                'index': 0,
+                'skill': 'listening',
+                'skillId': 1,
+                'unitNumber': 1,
+                'groupId': 10,
+                'sectionName': 'Part 1',
+                'prompt': 'Listen to the announcement.',
+                'audioUrl': 'https://cdn.example.com/mock-master.mp3',
+                'options': [
+                  {'optionId': 11, 'label': 'A', 'text': 'Option A'},
+                ],
+              },
+              {
+                'questionId': 2,
+                'index': 1,
+                'skill': 'listening',
+                'skillId': 1,
+                'unitNumber': 2,
+                'groupId': 20,
+                'sectionName': 'Part 2',
+                'prompt': 'Listen to the conversation.',
+                'options': [
+                  {'optionId': 21, 'label': 'A', 'text': 'Option A'},
+                ],
+              },
+              {
+                'questionId': 3,
+                'index': 2,
+                'skill': 'speaking',
+                'skillId': 2,
+                'unitNumber': 3,
+                'groupId': 30,
+                'sectionName': 'Speaking Part 1',
+                'prompt': 'Introduce yourself.',
+              },
+            ],
+          });
+        case 'POST /api/learner/attempts/902/audio-review/start':
+          audioReviewStarted = true;
+          return FakeHttpClientAdapter.jsonResponse({
+            'attemptId': 902,
+            'remainingSeconds': 120,
+          });
+        case 'POST /api/learner/attempts/902/transition/unit':
+          unitTransitioned =
+              (body as Map<String, dynamic>)['targetUnitNumber'] as int?;
+          return FakeHttpClientAdapter.jsonResponse({
+            'attemptId': 902,
+            'activeUnitNumber': unitTransitioned,
+          });
+        case 'POST /api/learner/attempts/902/transition/group':
+          groupTransitioned =
+              (body as Map<String, dynamic>)['targetGroupId'] as int?;
+          return FakeHttpClientAdapter.jsonResponse({
+            'attemptId': 902,
+            'activeGroupId': groupTransitioned,
+          });
+        case 'POST /api/learner/attempts/902/transition/skill':
+          skillTransitioned = true;
+          return FakeHttpClientAdapter.jsonResponse({
+            'attemptId': 902,
+            'activeSkillId': 2,
+            'activeUnitNumber': 3,
+            'activeGroupId': 30,
+          });
+        case 'POST /api/learner/speaking/attempts/902/questions/3/audio':
+          expect(options.data, isA<FormData>());
+          final formData = options.data as FormData;
+          expect(formData.files.any((e) => e.key == 'audioFile'), isTrue);
+          expect(
+            formData.fields.any(
+              (e) => e.key == 'durationMs' && int.tryParse(e.value) != null,
+            ),
+            isTrue,
+          );
+          speakingUploaded = true;
+          return FakeHttpClientAdapter.jsonResponse({'uploaded': true});
+        case 'POST /api/learner/attempts/902/answers/3':
+          return FakeHttpClientAdapter.jsonResponse({'saved': true});
+        default:
+          return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+      }
+    });
+
+    await tester.pumpWidget(buildTestApp(adapter: adapter, audioAdapter: audio));
+    await tester.pumpAndSettle();
+
+    // Start audio review gate
+    await tester.tap(find.byKey(const Key('start-audio-review-btn')));
+    await tester.pumpAndSettle();
+    expect(audioReviewStarted, isTrue);
+    expect(find.byKey(const Key('audio-review-banner')), findsOneWidget);
+
+    // Next question triggers unit/group transition
+    await tester.tap(find.byKey(const Key('next-question-btn')));
+    await tester.pumpAndSettle();
+    expect(unitTransitioned, 2);
+    expect(groupTransitioned, 20);
+
+    // Transition to next skill (Speaking)
+    await tester.tap(find.byKey(const Key('transition-skill-btn')));
+    await tester.pumpAndSettle();
+    expect(skillTransitioned, isTrue);
+    expect(find.text('Introduce yourself.'), findsOneWidget);
+
+    // Record & upload speaking response
+    await tester.tap(find.byKey(const Key('speaking-record-btn')));
+    await tester.pumpAndSettle();
+    expect(audio.isRecording, isTrue);
+
+    await tester.tap(find.byKey(const Key('speaking-record-btn')));
+    await tester.pumpAndSettle();
+    expect(audio.isRecording, isFalse);
+    expect(speakingUploaded, isTrue);
   });
 }

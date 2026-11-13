@@ -20,9 +20,13 @@ class SavedQuestionsView extends ConsumerWidget {
         .read(practiceRepositoryProvider)
         .fetchSavedQuestionDetail(savedQuestionId);
     if (!context.mounted) return;
-    await showDialog<void>(
+    await showFDialog<void>(
       context: context,
-      builder: (ctx) => _SavedDetailDialog(detail: detail),
+      builder: (ctx, style, animation) => FDialog(
+        style: style,
+        animation: animation,
+        builder: (context, _) => _SavedDetailDialog(detail: detail),
+      ),
     );
   }
 
@@ -234,12 +238,17 @@ class _SavedDetailDialog extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Dialog(
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      backgroundColor: SignageColors.paper,
-      child: SingleChildScrollView(
-        child: PlacardPanel(
-          title: 'SAVED QUESTION REVIEW',
+    return PlacardPanel(
+      title: 'SAVED QUESTION REVIEW',
+      footer: PlacardButton(
+        key: const Key('saved-detail-close'),
+        label: 'CLOSE',
+        variant: PlacardButtonVariant.ink,
+        onPress: () => Navigator.of(context).pop(),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 260),
+        child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -324,13 +333,6 @@ class _SavedDetailDialog extends ConsumerWidget {
                   style: SignageTypography.body(fontSize: 14),
                 ),
               ],
-              const SizedBox(height: 16),
-              PlacardButton(
-                key: const Key('saved-detail-close'),
-                label: 'CLOSE',
-                variant: PlacardButtonVariant.ink,
-                onPress: () => Navigator.of(context).pop(),
-              ),
             ],
           ),
         ),

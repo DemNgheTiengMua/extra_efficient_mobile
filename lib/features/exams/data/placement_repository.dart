@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 
 import '../models/placement_models.dart';
@@ -101,6 +104,29 @@ class PlacementRepository {
         'questionId': questionId,
         'responseText': responseText,
       },
+    );
+  }
+
+  Future<void> uploadSpeakingAudio(
+    int placementId,
+    int questionId,
+    String filePath, {
+    int? durationMs,
+  }) async {
+    final file = File(filePath);
+    final multipart = file.existsSync()
+        ? await MultipartFile.fromFile(filePath, filename: 'recording.m4a')
+        : MultipartFile.fromBytes(
+            utf8.encode('audio-recording'),
+            filename: 'recording.m4a',
+          );
+    final formData = FormData.fromMap({
+      'audioFile': multipart,
+      'durationMs': ?durationMs,
+    });
+    await _dio.post<void>(
+      '/api/learner/speaking/attempts/$placementId/questions/$questionId/audio',
+      data: formData,
     );
   }
 

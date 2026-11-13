@@ -101,7 +101,7 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
         ),
       ),
       child: reviewAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: FCircularProgress()),
         error: (err, _) => Padding(
           padding: const EdgeInsets.all(16),
           child: StateBlock(

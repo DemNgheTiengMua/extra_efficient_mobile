@@ -154,7 +154,7 @@ class _CreditsAndOrdersViewState extends ConsumerState<_CreditsAndOrdersView> {
     final packagesAsync = ref.watch(creditPackagesProvider);
 
     return walletAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const Center(child: FCircularProgress()),
       error: (err, _) => Padding(
         padding: const EdgeInsets.all(16),
         child: StateBlock(

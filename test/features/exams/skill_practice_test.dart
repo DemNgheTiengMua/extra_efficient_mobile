@@ -71,6 +71,8 @@ void main() {
       'Speaking skill practice records audio, uploads multipart, submits, polls pending, retries failed grading, and shows rubric review',
       (tester) async {
     final audio = FakeAudioMediaAdapter();
+    bool instructionsFetched = false;
+    bool attemptStarted = false;
     bool uploadedAudio = false;
     bool submitted = false;
     bool retried = false;
@@ -99,7 +101,19 @@ void main() {
               },
             ],
           });
+        case 'GET /api/learner/speaking/201/instructions':
+          instructionsFetched = true;
+          return FakeHttpClientAdapter.jsonResponse({
+            'examId': 201,
+            'examName': 'Speaking Part 2 Photo',
+            'description': 'Speak clearly for each prompt after preparation.',
+            'durationMinutes': 10,
+            'questionCount': 1,
+            'creditCost': 1,
+            'creditBalance': 5,
+          });
         case 'POST /api/learner/speaking/201/start':
+          attemptStarted = true;
           return FakeHttpClientAdapter.jsonResponse({'attemptId': 401});
         case 'GET /api/learner/speaking/attempts/401':
           return FakeHttpClientAdapter.jsonResponse({
@@ -111,12 +125,34 @@ void main() {
                 'index': 0,
                 'skill': 'speaking',
                 'prompt': 'Describe the workspace in the picture.',
+                'prepSeconds': 15,
                 'responseSeconds': 45,
+              },
+              {
+                'questionId': 2,
+                'index': 1,
+                'skill': 'speaking',
+                'prompt': 'What would you improve in this workspace?',
+                'prepSeconds': 10,
+                'responseSeconds': 30,
               },
             ],
           });
         case 'POST /api/learner/speaking/attempts/401/questions/1/audio':
           expect(options.data, isA<FormData>());
+          final formData = options.data as FormData;
+          expect(
+            formData.files.any((entry) => entry.key == 'audioFile'),
+            isTrue,
+          );
+          expect(
+            formData.fields.any(
+              (entry) =>
+                  entry.key == 'durationMs' &&
+                  int.tryParse(entry.value) != null,
+            ),
+            isTrue,
+          );
           uploadedAudio = true;
           return FakeHttpClientAdapter.jsonResponse({'uploaded': true});
         case 'POST /api/learner/speaking/attempts/401/submit':
@@ -166,10 +202,31 @@ void main() {
     await tester.tap(find.byKey(const Key('start-speaking-201')));
     await tester.pumpAndSettle();
 
+    expect(instructionsFetched, isTrue);
+    expect(attemptStarted, isFalse);
+    expect(
+      find.text('Speak clearly for each prompt after preparation.'),
+      findsOneWidget,
+    );
+
+    // Mic check required before starting speaking practice
+    await tester.tap(find.byKey(const Key('skill-mic-check-btn')));
+    await tester.pumpAndSettle();
+    expect(find.text('MIC READY'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('confirm-start-speaking-201')));
+    await tester.pumpAndSettle();
+    expect(attemptStarted, isTrue);
+
     expect(
       find.text('Describe the workspace in the picture.'),
       findsOneWidget,
     );
+    expect(find.text('Q1/2'), findsOneWidget);
+    expect(find.byKey(const Key('skill-prep-timer')), findsOneWidget);
+    expect(find.text('00:15'), findsOneWidget);
+    expect(find.byKey(const Key('skill-response-timer')), findsOneWidget);
+    expect(find.text('00:45'), findsOneWidget);
 
     // Record and stop -> multipart upload
     await tester.tap(find.byKey(const Key('skill-record-btn')));
@@ -180,6 +237,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(audio.isRecording, isFalse);
     expect(uploadedAudio, isTrue);
+
+    // Navigate to Q2
+    await tester.tap(find.byKey(const Key('skill-next-btn')));
+    await tester.pumpAndSettle();
+    expect(find.text('Q2/2'), findsOneWidget);
+    expect(
+      find.text('What would you improve in this workspace?'),
+      findsOneWidget,
+    );
+    expect(find.text('00:10'), findsOneWidget);
+    expect(find.text('00:30'), findsOneWidget);
 
     // Submit
     await tester.tap(find.byKey(const Key('skill-submit-btn')));
