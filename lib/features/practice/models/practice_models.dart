@@ -529,74 +529,156 @@ class SavedQuestionDetail {
   final List<SavedQuestionOption> options;
 }
 
+/// One row of `WeaknessAnalysisDto.Sections` (`SectionAccuracyDto`).
 class WeaknessBreakdownRow {
   const WeaknessBreakdownRow({
+    required this.sectionId,
+    required this.code,
     required this.name,
-    required this.accuracyPercent,
-    required this.answeredCount,
+    required this.answered,
+    required this.correct,
+    required this.accuracyPercentage,
     this.isWeakest = false,
     this.isStrongest = false,
   });
 
   factory WeaknessBreakdownRow.fromJson(Map<String, dynamic> json) {
     return WeaknessBreakdownRow(
+      sectionId: (json['sectionId'] as num?)?.toInt() ?? 0,
+      code: json['code'] as String? ?? '',
       name: json['name'] as String? ?? '',
-      accuracyPercent: (json['accuracyPercent'] as num?)?.toInt() ?? 0,
-      answeredCount: (json['answeredCount'] as num?)?.toInt() ?? 0,
+      answered: (json['answered'] as num?)?.toInt() ?? 0,
+      correct: (json['correct'] as num?)?.toInt() ?? 0,
+      accuracyPercentage:
+          (json['accuracyPercentage'] as num?)?.toInt() ?? 0,
       isWeakest: json['isWeakest'] as bool? ?? false,
       isStrongest: json['isStrongest'] as bool? ?? false,
     );
   }
 
+  final int sectionId;
+  final String code;
   final String name;
-  final int accuracyPercent;
-  final int answeredCount;
+  final int answered;
+  final int correct;
+  final int accuracyPercentage;
   final bool isWeakest;
   final bool isStrongest;
 }
 
+/// One row of `WeaknessAnalysisDto.Topics` / `FrequentlyMissedTopics`
+/// (`TopicAccuracyDto`) — the topic axis, ranked per `(topic, level)`.
+class WeaknessTopicRow {
+  const WeaknessTopicRow({
+    required this.topicId,
+    required this.topicCode,
+    required this.topicName,
+    required this.modality,
+    required this.levelCode,
+    required this.answered,
+    required this.correct,
+    required this.accuracyPercent,
+    this.isWeakest = false,
+    required this.observationFloor,
+    this.lessonId,
+  });
+
+  factory WeaknessTopicRow.fromJson(Map<String, dynamic> json) {
+    return WeaknessTopicRow(
+      topicId: (json['topicId'] as num?)?.toInt() ?? 0,
+      topicCode: json['topicCode'] as String? ?? '',
+      topicName: json['topicName'] as String? ?? '',
+      modality: json['modality'] as String? ?? '',
+      levelCode: json['levelCode'] as String? ?? '',
+      answered: (json['answered'] as num?)?.toInt() ?? 0,
+      correct: (json['correct'] as num?)?.toInt() ?? 0,
+      accuracyPercent: (json['accuracyPercent'] as num?)?.toInt() ?? 0,
+      isWeakest: json['isWeakest'] as bool? ?? false,
+      observationFloor: (json['observationFloor'] as num?)?.toInt() ?? 0,
+      lessonId: (json['lessonId'] as num?)?.toInt(),
+    );
+  }
+
+  final int topicId;
+  final String topicCode;
+  final String topicName;
+  final String modality;
+  final String levelCode;
+  final int answered;
+  final int correct;
+  final int accuracyPercent;
+  final bool isWeakest;
+  final int observationFloor;
+  final int? lessonId;
+
+  /// A cell below PLC-68's `n_min` is listed but not yet rankable.
+  bool get isRankable => answered >= observationFloor;
+}
+
+/// `RecommendationItemDto`: the backend's own one text field plus its severity and skill.
 class WeaknessRecommendation {
   const WeaknessRecommendation({
     required this.recId,
-    required this.title,
-    this.description,
-    this.resolved = false,
+    required this.text,
+    required this.severity,
+    this.targetBandCode,
+    this.skillName,
+    required this.createdAt,
+    this.isResolved = false,
   });
 
   factory WeaknessRecommendation.fromJson(Map<String, dynamic> json) {
     return WeaknessRecommendation(
       recId: (json['recId'] as num?)?.toInt() ?? 0,
-      title: json['title'] as String? ?? '',
-      description: json['description'] as String?,
-      resolved: json['resolved'] as bool? ?? false,
+      text: json['text'] as String? ?? '',
+      severity: json['severity'] as String? ?? '',
+      targetBandCode: json['targetBandCode'] as String?,
+      skillName: json['skillName'] as String?,
+      createdAt: json['createdAt'] as String? ?? '',
+      isResolved: json['isResolved'] as bool? ?? false,
     );
   }
 
   final int recId;
-  final String title;
-  final String? description;
-  final bool resolved;
+  final String text;
+  final String severity;
+  final String? targetBandCode;
+  final String? skillName;
+  final String createdAt;
+  final bool isResolved;
 }
 
 class WeaknessAnalysisData {
   const WeaknessAnalysisData({
+    required this.hasData,
     required this.sections,
-    required this.categories,
+    required this.topics,
     required this.recommendations,
+    this.sectionNoun = 'Section',
+    this.overallAccuracyPercentage = 0,
+    this.totalAnswered = 0,
   });
 
   factory WeaknessAnalysisData.fromJson(Map<String, dynamic> json) {
+    final cert = json['certificate'];
     final secRaw = json['sections'] as List<dynamic>? ?? const [];
-    final catRaw = json['categories'] as List<dynamic>? ?? const [];
+    final topicRaw = json['topics'] as List<dynamic>? ?? const [];
     final recRaw = json['recommendations'] as List<dynamic>? ?? const [];
     return WeaknessAnalysisData(
+      hasData: json['hasData'] as bool? ?? false,
+      sectionNoun: cert is Map<String, dynamic>
+          ? (cert['sectionNoun'] as String? ?? 'Section')
+          : 'Section',
+      overallAccuracyPercentage:
+          (json['overallAccuracyPercentage'] as num?)?.toInt() ?? 0,
+      totalAnswered: (json['totalAnswered'] as num?)?.toInt() ?? 0,
       sections: secRaw
           .whereType<Map<String, dynamic>>()
           .map(WeaknessBreakdownRow.fromJson)
           .toList(),
-      categories: catRaw
+      topics: topicRaw
           .whereType<Map<String, dynamic>>()
-          .map(WeaknessBreakdownRow.fromJson)
+          .map(WeaknessTopicRow.fromJson)
           .toList(),
       recommendations: recRaw
           .whereType<Map<String, dynamic>>()
@@ -605,7 +687,11 @@ class WeaknessAnalysisData {
     );
   }
 
+  final bool hasData;
+  final String sectionNoun;
+  final int overallAccuracyPercentage;
+  final int totalAnswered;
   final List<WeaknessBreakdownRow> sections;
-  final List<WeaknessBreakdownRow> categories;
+  final List<WeaknessTopicRow> topics;
   final List<WeaknessRecommendation> recommendations;
 }

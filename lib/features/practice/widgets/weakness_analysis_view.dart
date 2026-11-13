@@ -4,19 +4,58 @@ import 'package:forui/forui.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../models/practice_models.dart';
 import '../providers/practice_providers.dart';
 
-class WeaknessAnalysisView extends ConsumerWidget {
+class WeaknessAnalysisView extends ConsumerStatefulWidget {
   const WeaknessAnalysisView({super.key});
 
-  Future<void> _resolve(WidgetRef ref, int recId) async {
-    await ref.read(practiceRepositoryProvider).resolveRecommendation(recId);
-    ref.invalidate(weaknessAnalysisProvider);
+  @override
+  ConsumerState<WeaknessAnalysisView> createState() =>
+      _WeaknessAnalysisViewState();
+}
+
+class _WeaknessAnalysisViewState extends ConsumerState<WeaknessAnalysisView> {
+  final Set<int> _resolvedIds = {};
+  int? _resolvingRecId;
+  String? _resolveFailure;
+  int? _failedRecId;
+
+  Future<void> _resolve(int recId) async {
+    setState(() {
+      _resolvingRecId = recId;
+      _resolveFailure = null;
+      _failedRecId = null;
+    });
+    try {
+      final resolved =
+          await ref.read(practiceRepositoryProvider).resolveRecommendation(recId);
+      if (!mounted) return;
+      if (!resolved) {
+        setState(() {
+          _failedRecId = recId;
+          _resolveFailure = 'Recommendation was not resolved.';
+        });
+        return;
+      }
+      // The panel changes in place; the server holds the durable state, so re-opening the tab
+      // (which refetches) keeps it resolved.
+      setState(() => _resolvedIds.add(recId));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _failedRecId = recId;
+        _resolveFailure =
+            extractApiError(e, fallback: 'Could not resolve recommendation');
+      });
+    } finally {
+      if (mounted) setState(() => _resolvingRecId = null);
+    }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final weaknessAsync = ref.watch(weaknessAnalysisProvider);
 
     return weaknessAsync.when(
@@ -26,7 +65,7 @@ class WeaknessAnalysisView extends ConsumerWidget {
         child: StateBlock(
           stamp: 'ERROR',
           title: 'Could not load weakness analysis',
-          description: '$err',
+          description: extractApiError(err, fallback: '$err'),
           action: PlacardButton(
             label: 'RETRY',
             onPress: () => ref.invalidate(weaknessAnalysisProvider),
@@ -34,16 +73,14 @@ class WeaknessAnalysisView extends ConsumerWidget {
         ),
       ),
       data: (data) {
-        if (data.sections.isEmpty &&
-            data.categories.isEmpty &&
-            data.recommendations.isEmpty) {
+        if (!data.hasData && data.recommendations.isEmpty) {
           return const Padding(
             padding: EdgeInsets.all(16),
             child: StateBlock(
               stamp: 'EMPTY',
-              title: 'No weakness data yet',
+              title: 'No practice history yet',
               description:
-                  'Complete practice sessions or mock attempts to see accuracy breakdowns.',
+                  'Complete a practice session or a mock attempt to see your accuracy breakdown and recommendations.',
             ),
           );
         }
@@ -52,17 +89,13 @@ class WeaknessAnalysisView extends ConsumerWidget {
           padding: const EdgeInsets.all(16),
           children: [
             if (data.sections.isNotEmpty) ...[
-              _BreakdownTable(
-                title: 'SECTION ACCURACY',
-                rows: data.sections,
-              ),
+              _SectionTable(title: '${data.sectionNoun.toUpperCase()} ACCURACY', rows: data.sections),
               const SizedBox(height: 16),
             ],
-            if (data.categories.isNotEmpty) ...[
-              _BreakdownTable(
-                title: 'CATEGORY ACCURACY',
-                rows: data.categories,
-              ),
+            // `frequentlyMissedTopics` is the same cell list as `topics`, only reordered, so one
+            // table carries the topic axis rather than two identical ones.
+            if (data.topics.isNotEmpty) ...[
+              _TopicTable(rows: data.topics),
               const SizedBox(height: 16),
             ],
             if (data.recommendations.isNotEmpty) ...[
@@ -72,45 +105,12 @@ class WeaknessAnalysisView extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               for (final rec in data.recommendations) ...[
-                PlacardPanel(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              rec.title,
-                              style: SignageTypography.condensedSentence(
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                          if (rec.resolved)
-                            const PlacardBadge.success('RESOLVED'),
-                        ],
-                      ),
-                      if (rec.description != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          rec.description!,
-                          style: SignageTypography.body(
-                            fontSize: 14,
-                            color: SignageColors.inkMuted,
-                          ),
-                        ),
-                      ],
-                      if (!rec.resolved) ...[
-                        const SizedBox(height: 12),
-                        PlacardButton(
-                          key: Key('resolve-rec-${rec.recId}'),
-                          label: 'RESOLVE',
-                          variant: PlacardButtonVariant.secondary,
-                          onPress: () => _resolve(ref, rec.recId),
-                        ),
-                      ],
-                    ],
-                  ),
+                _RecommendationTile(
+                  rec: rec,
+                  resolved: _resolvedIds.contains(rec.recId),
+                  isResolving: _resolvingRecId == rec.recId,
+                  failure: _failedRecId == rec.recId ? _resolveFailure : null,
+                  onResolve: () => _resolve(rec.recId),
                 ),
                 const SizedBox(height: 12),
               ],
@@ -122,8 +122,87 @@ class WeaknessAnalysisView extends ConsumerWidget {
   }
 }
 
-class _BreakdownTable extends StatelessWidget {
-  const _BreakdownTable({required this.title, required this.rows});
+class _RecommendationTile extends StatelessWidget {
+  const _RecommendationTile({
+    required this.rec,
+    required this.resolved,
+    required this.isResolving,
+    required this.failure,
+    required this.onResolve,
+  });
+
+  final WeaknessRecommendation rec;
+  final bool resolved;
+  final bool isResolving;
+  final String? failure;
+  final VoidCallback onResolve;
+
+  @override
+  Widget build(BuildContext context) {
+    return PlacardPanel(
+      title: 'RECOMMENDATION',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            rec.text,
+            style: SignageTypography.condensedSentence(fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              if (rec.severity.isNotEmpty) _SeverityBadge(severity: rec.severity),
+              if (rec.skillName != null && rec.skillName!.isNotEmpty)
+                PlacardBadge.muted(rec.skillName!),
+              if (rec.targetBandCode != null && rec.targetBandCode!.isNotEmpty)
+                PlacardBadge.info('TARGET ${rec.targetBandCode!}'),
+              if (resolved) const PlacardBadge.success('RESOLVED'),
+            ],
+          ),
+          if (failure != null) ...[
+            const SizedBox(height: 12),
+            PlacardAlert(
+              key: const Key('resolve-error'),
+              title: failure!,
+              variant: PlacardAlertVariant.danger,
+            ),
+          ],
+          if (!resolved) ...[
+            const SizedBox(height: 12),
+            PlacardButton(
+              key: Key('resolve-rec-${rec.recId}'),
+              label: 'RESOLVE',
+              variant: PlacardButtonVariant.secondary,
+              isLoading: isResolving,
+              onPress: onResolve,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SeverityBadge extends StatelessWidget {
+  const _SeverityBadge({required this.severity});
+
+  final String severity;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = severity.toUpperCase();
+    return switch (severity.toLowerCase()) {
+      'major' => PlacardBadge.danger(label),
+      'minor' => PlacardBadge.warning(label),
+      _ => PlacardBadge.info(label),
+    };
+  }
+}
+
+class _SectionTable extends StatelessWidget {
+  const _SectionTable({required this.title, required this.rows});
 
   final String title;
   final List<WeaknessBreakdownRow> rows;
@@ -136,8 +215,12 @@ class _BreakdownTable extends StatelessWidget {
       child: Column(
         children: [
           for (int i = 0; i < rows.length; i++)
-            _BreakdownRowTile(
-              row: rows[i],
+            _AccuracyRowTile(
+              name: rows[i].name,
+              answered: rows[i].answered,
+              accuracyPercent: rows[i].accuracyPercentage,
+              isWeakest: rows[i].isWeakest,
+              isStrongest: rows[i].isStrongest,
               showDivider: i < rows.length - 1,
             ),
         ],
@@ -146,33 +229,77 @@ class _BreakdownTable extends StatelessWidget {
   }
 }
 
-class _BreakdownRowTile extends StatelessWidget {
-  const _BreakdownRowTile({
-    required this.row,
+class _TopicTable extends StatelessWidget {
+  const _TopicTable({required this.rows});
+
+  final List<WeaknessTopicRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return PlacardPanel(
+      title: 'TOPIC ACCURACY',
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          for (int i = 0; i < rows.length; i++)
+            _AccuracyRowTile(
+              name: rows[i].topicName,
+              levelCode: rows[i].levelCode,
+              answered: rows[i].answered,
+              accuracyPercent: rows[i].accuracyPercent,
+              isWeakest: rows[i].isWeakest,
+              isStrongest: false,
+              // Below n_min the cell is listed but not yet ranked, and says so.
+              footer: rows[i].isRankable
+                  ? null
+                  : '${rows[i].answered} of ${rows[i].observationFloor} answers needed to rank',
+              showDivider: i < rows.length - 1,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AccuracyRowTile extends StatelessWidget {
+  const _AccuracyRowTile({
+    required this.name,
+    required this.answered,
+    required this.accuracyPercent,
+    required this.isWeakest,
+    required this.isStrongest,
     required this.showDivider,
+    this.levelCode,
+    this.footer,
   });
 
-  final WeaknessBreakdownRow row;
+  final String name;
+  final String? levelCode;
+  final int answered;
+  final int accuracyPercent;
+  final bool isWeakest;
+  final bool isStrongest;
   final bool showDivider;
+  final String? footer;
 
   @override
   Widget build(BuildContext context) {
     final Color barColor;
-    if (row.isWeakest) {
+    if (isWeakest) {
       barColor = SignageColors.signGold;
-    } else if (row.isStrongest) {
+    } else if (isStrongest) {
       barColor = SignageColors.signGreen;
     } else {
       barColor = SignageColors.signBlue;
     }
 
-    final fraction = (row.accuracyPercent.clamp(0, 100)) / 100.0;
+    final fraction = (accuracyPercent.clamp(0, 100)) / 100.0;
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: row.isWeakest
+        color: isWeakest
             ? SignageColors.goldWash
-            : (row.isStrongest ? SignageColors.greenWash : SignageColors.paper),
+            : (isStrongest ? SignageColors.greenWash : SignageColors.paper),
         border: showDivider
             ? const Border(
                 bottom: BorderSide(color: SignageColors.lineSoft, width: 1),
@@ -187,23 +314,32 @@ class _BreakdownRowTile extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    row.name,
-                    style: SignageTypography.body(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        name,
+                        style: SignageTypography.body(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (levelCode != null && levelCode!.isNotEmpty)
+                        PlacardBadge.muted(levelCode!),
+                    ],
                   ),
                 ),
-                if (row.isWeakest) ...[
+                if (isWeakest) ...[
                   const PlacardBadge.warning('WEAKEST'),
                   const SizedBox(width: 8),
-                ] else if (row.isStrongest) ...[
+                ] else if (isStrongest) ...[
                   const PlacardBadge.success('STRONGEST'),
                   const SizedBox(width: 8),
                 ],
                 Text(
-                  '${row.accuracyPercent}%',
+                  '$accuracyPercent%',
                   style: SignageTypography.data(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -231,12 +367,22 @@ class _BreakdownRowTile extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              '${row.answeredCount} ITEMS ANSWERED',
+              '$answered ANSWERED',
               style: SignageTypography.data(
                 fontSize: 11,
                 color: SignageColors.inkMuted,
               ),
             ),
+            if (footer != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                footer!,
+                style: SignageTypography.data(
+                  fontSize: 11,
+                  color: SignageColors.inkMuted,
+                ),
+              ),
+            ],
           ],
         ),
       ),
