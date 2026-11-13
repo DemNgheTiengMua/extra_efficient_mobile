@@ -1,0 +1,437 @@
+{
+  "session": {
+    "sessionId": 17,
+    "sectionId": 2,
+    "sectionCode": "P2",
+    "sectionName": "Question-Response",
+    "modality": "listening",
+    "questionCount": 5,
+    "status": "in_progress",
+    "correctCount": 0,
+    "questionSource": "all",
+    "startedAt": "2026-11-13T18:03:28.8871271+00:00",
+    "finishedAt": null,
+    "topicId": null,
+    "cefrLevelCode": null,
+    "isShort": false
+  },
+  "question": {
+    "sessionId": 17,
+    "sectionName": "Question-Response",
+    "questionId": null,
+    "displayOrder": 1,
+    "totalQuestions": 5,
+    "stem": "Where did you leave the project folders?",
+    "categoryName": null,
+    "hint": null,
+    "hintUsed": false,
+    "options": [
+      {
+        "optionId": 41,
+        "label": "A",
+        "text": "Yes, I folded them neatly."
+      },
+      {
+        "optionId": 42,
+        "label": "B",
+        "text": "On the conference room table."
+      },
+      {
+        "optionId": 43,
+        "label": "C",
+        "text": "No later than five o'clock."
+      },
+      {
+        "optionId": 44,
+        "label": "D",
+        "text": ""
+      }
+    ],
+    "selectedOptionId": null,
+    "isCorrect": null,
+    "correctOptionId": null,
+    "explanation": null,
+    "transcript": null,
+    "passage": null,
+    "audioPath": "/audio/toeic/test1-p2.mp3",
+    "imagePath": null,
+    "imageAlt": null,
+    "isSaved": false,
+    "audioStartMs": null,
+    "audioEndMs": null,
+    "questionType": "mcq",
+    "maxSelections": null,
+    "allowNumber": true,
+    "acceptedAnswersJson": null,
+    "requiredKeywords": null,
+    "minWords": null,
+    "maxWords": null,
+    "responseText": null,
+    "selectedOptionIds": [],
+    "selectedOptionIdsJson": null,
+    "correctOptionIds": [],
+    "itemVersionId": 4,
+    "savedQuestionId": null,
+    "cefrLevelCode": null,
+    "address": 4
+  },
+  "questions": [
+    {
+      "sessionId": 17,
+      "sectionName": "Question-Response",
+      "questionId": null,
+      "displayOrder": 1,
+      "totalQuestions": 5,
+      "stem": "Where did you leave the project folders?",
+      "categoryName": null,
+      "hint": null,
+      "hintUsed": false,
+      "options": [
+        {
+          "optionId": 41,
+          "label": "A",
+          "text": "Yes, I folded them neatly."
+        },
+        {
+          "optionId": 42,
+          "label": "B",
+          "text": "On the conference room table."
+        },
+        {
+          "optionId": 43,
+          "label": "C",
+          "text": "No later than five o'clock."
+        },
+        {
+          "optionId": 44,
+          "label": "D",
+          "text": ""
+        }
+      ],
+      "selectedOptionId": null,
+      "isCorrect": null,
+      "correctOptionId": null,
+      "explanation": null,
+      "transcript": null,
+      "passage": null,
+      "audioPath": "/audio/toeic/test1-p2.mp3",
+      "imagePath": null,
+      "imageAlt": null,
+      "isSaved": false,
+      "audioStartMs": null,
+      "audioEndMs": null,
+      "questionType": "mcq",
+      "maxSelections": null,
+      "allowNumber": true,
+      "acceptedAnswersJson": null,
+      "requiredKeywords": null,
+      "minWords": null,
+      "maxWords": null,
+      "responseText": null,
+      "selectedOptionIds": [],
+      "selectedOptionIdsJson": null,
+      "correctOptionIds": [],
+      "itemVersionId": 4,
+      "savedQuestionId": null,
+      "cefrLevelCode": null,
+      "address": 4
+    },
+    {
+      "sessionId": 17,
+      "sectionName": "Question-Response",
+      "questionId": null,
+      "displayOrder": 2,
+      "totalQuestions": 5,
+      "stem": "Where did you leave the project folders?",
+      "categoryName": null,
+      "hint": null,
+      "hintUsed": false,
+      "options": [
+        {
+          "optionId": 141,
+          "label": "A",
+          "text": "Yes, I folded them neatly."
+        },
+        {
+          "optionId": 142,
+          "label": "B",
+          "text": "On the conference room table."
+        },
+        {
+          "optionId": 143,
+          "label": "C",
+          "text": "No later than five o'clock."
+        },
+        {
+          "optionId": 144,
+          "label": "D",
+          "text": ""
+        }
+      ],
+      "selectedOptionId": null,
+      "isCorrect": null,
+      "correctOptionId": null,
+      "explanation": null,
+      "transcript": null,
+      "passage": null,
+      "audioPath": "/audio/toeic/placement-p2.mp3",
+      "imagePath": null,
+      "imageAlt": null,
+      "isSaved": false,
+      "audioStartMs": null,
+      "audioEndMs": null,
+      "questionType": "mcq",
+      "maxSelections": null,
+      "allowNumber": true,
+      "acceptedAnswersJson": null,
+      "requiredKeywords": null,
+      "minWords": null,
+      "maxWords": null,
+      "responseText": null,
+      "selectedOptionIds": [],
+      "selectedOptionIdsJson": null,
+      "correctOptionIds": [],
+      "itemVersionId": 14,
+      "savedQuestionId": null,
+      "cefrLevelCode": null,
+      "address": 14
+    },
+    {
+      "sessionId": 17,
+      "sectionName": "Question-Response",
+      "questionId": null,
+      "displayOrder": 3,
+      "totalQuestions": 5,
+      "stem": "Why was the shipment delayed?",
+      "categoryName": null,
+      "hint": null,
+      "hintUsed": false,
+      "options": [
+        {
+          "optionId": 151,
+          "label": "A",
+          "text": "In the loading bay."
+        },
+        {
+          "optionId": 152,
+          "label": "B",
+          "text": "It arrived on Tuesday."
+        },
+        {
+          "optionId": 153,
+          "label": "C",
+          "text": "Because the courier misread the postcode."
+        },
+        {
+          "optionId": 154,
+          "label": "D",
+          "text": ""
+        }
+      ],
+      "selectedOptionId": null,
+      "isCorrect": null,
+      "correctOptionId": null,
+      "explanation": null,
+      "transcript": null,
+      "passage": null,
+      "audioPath": "/audio/toeic/placement-p2.mp3",
+      "imagePath": null,
+      "imageAlt": null,
+      "isSaved": false,
+      "audioStartMs": null,
+      "audioEndMs": null,
+      "questionType": "mcq",
+      "maxSelections": null,
+      "allowNumber": true,
+      "acceptedAnswersJson": null,
+      "requiredKeywords": null,
+      "minWords": null,
+      "maxWords": null,
+      "responseText": null,
+      "selectedOptionIds": [],
+      "selectedOptionIdsJson": null,
+      "correctOptionIds": [],
+      "itemVersionId": 15,
+      "savedQuestionId": null,
+      "cefrLevelCode": null,
+      "address": 15
+    },
+    {
+      "sessionId": 17,
+      "sectionName": "Question-Response",
+      "questionId": null,
+      "displayOrder": 4,
+      "totalQuestions": 5,
+      "stem": "Should we book the larger room for the workshop?",
+      "categoryName": null,
+      "hint": null,
+      "hintUsed": false,
+      "options": [
+        {
+          "optionId": 161,
+          "label": "A",
+          "text": "That would be a good idea."
+        },
+        {
+          "optionId": 162,
+          "label": "B",
+          "text": "About twenty people."
+        },
+        {
+          "optionId": 163,
+          "label": "C",
+          "text": "It finished early."
+        },
+        {
+          "optionId": 164,
+          "label": "D",
+          "text": ""
+        }
+      ],
+      "selectedOptionId": null,
+      "isCorrect": null,
+      "correctOptionId": null,
+      "explanation": null,
+      "transcript": null,
+      "passage": null,
+      "audioPath": "/audio/toeic/placement-p2.mp3",
+      "imagePath": null,
+      "imageAlt": null,
+      "isSaved": false,
+      "audioStartMs": null,
+      "audioEndMs": null,
+      "questionType": "mcq",
+      "maxSelections": null,
+      "allowNumber": true,
+      "acceptedAnswersJson": null,
+      "requiredKeywords": null,
+      "minWords": null,
+      "maxWords": null,
+      "responseText": null,
+      "selectedOptionIds": [],
+      "selectedOptionIdsJson": null,
+      "correctOptionIds": [],
+      "itemVersionId": 16,
+      "savedQuestionId": null,
+      "cefrLevelCode": null,
+      "address": 16
+    },
+    {
+      "sessionId": 17,
+      "sectionName": "Question-Response",
+      "questionId": null,
+      "displayOrder": 5,
+      "totalQuestions": 5,
+      "stem": "How long has the client been with the firm?",
+      "categoryName": null,
+      "hint": null,
+      "hintUsed": false,
+      "options": [
+        {
+          "optionId": 171,
+          "label": "A",
+          "text": "At the downtown office."
+        },
+        {
+          "optionId": 172,
+          "label": "B",
+          "text": "Since 2019."
+        },
+        {
+          "optionId": 173,
+          "label": "C",
+          "text": "Yes, she renewed last month."
+        },
+        {
+          "optionId": 174,
+          "label": "D",
+          "text": ""
+        }
+      ],
+      "selectedOptionId": null,
+      "isCorrect": null,
+      "correctOptionId": null,
+      "explanation": null,
+      "transcript": null,
+      "passage": null,
+      "audioPath": "/audio/toeic/placement-p2.mp3",
+      "imagePath": null,
+      "imageAlt": null,
+      "isSaved": false,
+      "audioStartMs": null,
+      "audioEndMs": null,
+      "questionType": "mcq",
+      "maxSelections": null,
+      "allowNumber": true,
+      "acceptedAnswersJson": null,
+      "requiredKeywords": null,
+      "minWords": null,
+      "maxWords": null,
+      "responseText": null,
+      "selectedOptionIds": [],
+      "selectedOptionIdsJson": null,
+      "correctOptionIds": [],
+      "itemVersionId": 17,
+      "savedQuestionId": null,
+      "cefrLevelCode": null,
+      "address": 17
+    }
+  ],
+  "navigator": [
+    {
+      "questionId": null,
+      "displayOrder": 1,
+      "isAnswered": false,
+      "isCorrect": null,
+      "isSaved": false,
+      "isCurrent": true,
+      "itemVersionId": 4,
+      "savedQuestionId": null,
+      "address": 4
+    },
+    {
+      "questionId": null,
+      "displayOrder": 2,
+      "isAnswered": false,
+      "isCorrect": null,
+      "isSaved": false,
+      "isCurrent": false,
+      "itemVersionId": 14,
+      "savedQuestionId": null,
+      "address": 14
+    },
+    {
+      "questionId": null,
+      "displayOrder": 3,
+      "isAnswered": false,
+      "isCorrect": null,
+      "isSaved": false,
+      "isCurrent": false,
+      "itemVersionId": 15,
+      "savedQuestionId": null,
+      "address": 15
+    },
+    {
+      "questionId": null,
+      "displayOrder": 4,
+      "isAnswered": false,
+      "isCorrect": null,
+      "isSaved": false,
+      "isCurrent": false,
+      "itemVersionId": 16,
+      "savedQuestionId": null,
+      "address": 16
+    },
+    {
+      "questionId": null,
+      "displayOrder": 5,
+      "isAnswered": false,
+      "isCorrect": null,
+      "isSaved": false,
+      "isCurrent": false,
+      "itemVersionId": 17,
+      "savedQuestionId": null,
+      "address": 17
+    }
+  ]
+}
