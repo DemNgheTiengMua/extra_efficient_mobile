@@ -1,297 +1,78 @@
-/// Recorded wire payloads for the PATH surfaces, copied verbatim from the
-/// contract notes (`17-path.md`), which were captured from the running backend.
-/// Tests parse these instead of hand-shaped client payloads.
+/// Insets for the PATH surfaces from the recorded backend payloads in
+/// `test/contract/fixtures/`, so a test asserts against real bytes rather than
+/// a client-shaped guess.
 library;
 
+import '../../contract/fixture_loader.dart';
+
 /// `GET /api/learner/dashboard` for the measured demo learner.
-Map<String, dynamic> dashboardMeasuredPayload() => {
-  'certificate': {
-    'code': 'TOEIC',
-    'name': 'TOEIC Listening & Reading',
-    'sectionNoun': 'Part',
-  },
-  'nextAction': {
-    'eyebrow': 'PICK UP WHERE YOU LEFT OFF',
-    'title': 'Finish ETS 2024 - Test 1',
-    'description': 'An unfinished mock exam on TOEIC is still open. Its answers are kept, so continuing costs nothing.',
-    'actionLabel': 'Resume',
-    'actionUrl': '/exams/take/1005',
-    'severity': 'warning',
-    'cascadeStep': 'resume_in_progress',
-    'metaLabel': 'IN PROGRESS',
-  },
-  'goal': {
-    'currentBandCode': 'below_A1',
-    'currentBandName': 'Below A1',
-    'currentScore': 10,
-    'currentSource': 'mock',
-    'targetBandCode': null,
-    'targetBandName': null,
-    'targetMinScore': null,
-    'targetDate': null,
-    'weeklyStudyHours': null,
-    'status': null,
-    'completedPathSteps': 0,
-    'totalPathSteps': 0,
-    'currentWeekNumber': null,
-    'weekPlannedMinutes': 0,
-    'weekCompletedMinutes': 0,
-    'scoreDisplayFactor': 1,
-    'requiredTotalHours': null,
-    'overallLevelCode': 'A2',
-    'limitingSkillCode': 'LIST',
-    'limitingSkillName': 'Listening',
-    'hasNoMeasurement': false,
-  },
-  'skills': [
-    {
-      'skillId': 1,
-      'code': 'LIST',
-      'name': 'Listening',
-      'modality': 'listening',
-      'latestScaledScore': 5,
-      'maxScaledScore': 495,
-      'weakestTopics': <Map<String, dynamic>>[],
-      'scoreDisplayFactor': 1,
-      'levelCode': 'A2',
-      'positionInBand': 13,
-      'measuredAt': '2026-11-13T16:00:07.6205851+00:00',
-      'isStale': false,
-    },
-    {
-      'skillId': 2,
-      'code': 'READ',
-      'name': 'Reading',
-      'modality': 'reading',
-      'latestScaledScore': 5,
-      'maxScaledScore': 495,
-      'weakestTopics': [
-        {
-          'code': 'R-DET',
-          'name': 'Local factual retrieval and paraphrase matching',
-          'accuracyPercent': 100,
-          'answered': 1,
-          'levelCode': 'B2',
-        },
-      ],
-      'scoreDisplayFactor': 1,
-      'levelCode': 'A2',
-      'positionInBand': 61,
-      'measuredAt': '2026-11-13T16:00:07.7244689+00:00',
-      'isStale': false,
-    },
-    {
-      'skillId': 3,
-      'code': 'SPEA',
-      'name': 'Speaking',
-      'modality': 'speaking',
-      'latestScaledScore': null,
-      'maxScaledScore': null,
-      'weakestTopics': <Map<String, dynamic>>[],
-      'scoreDisplayFactor': 1,
-      'levelCode': null,
-      'positionInBand': null,
-      'measuredAt': null,
-      'isStale': false,
-    },
-  ],
-  'attemptCount': 5,
-  'practiceCount': 2,
-  'unfinishedAttempt': {
-    'attemptId': 1005,
-    'examName': 'ETS 2024 - Test 1',
-    'purpose': 'mock',
-    'status': 'in_progress',
-    'startedAt': '2026-11-13T16:03:15.8731758+00:00',
-    'totalScore': null,
-    'bandCode': null,
-  },
-  'unfinishedPractice': {
-    'sessionId': 4,
-    'sectionName': 'Incomplete Sentences',
-    'status': 'in_progress',
-    'correctCount': 0,
-    'questionCount': 9,
-    'startedAt': '2026-11-13T16:03:52.0485095+00:00',
-  },
-};
+Map<String, dynamic> dashboardMeasuredPayload() =>
+    _asMap(loadFixture('learner_dashboard'));
 
-/// `GET /api/learner/dashboard` for `learner.fresh@demo.local` as it actually
-/// answers: nothing measured, and a placement already open. The backend's own
-/// next action is therefore the resume, not a fresh start.
-Map<String, dynamic> dashboardUnmeasuredWithOpenPlacementPayload() => {
-  ...dashboardUnmeasuredPayload(),
-  'nextAction': {
-    'eyebrow': 'PICK UP WHERE YOU LEFT OFF',
-    'title': 'Finish TOEIC Placement Test - Diagnostic',
-    'description': 'An unfinished placement test on TOEIC is still open. Its answers are kept, so continuing costs nothing.',
-    'actionLabel': 'Resume',
-    'actionUrl': '/placement/take/2',
-    'severity': 'warning',
-    'cascadeStep': 'resume_in_progress',
-    'metaLabel': 'IN PROGRESS',
-  },
-  'attemptCount': 1,
-  'practiceCount': 1,
-  'unfinishedAttempt': {
-    'attemptId': 1003,
-    'examName': 'TOEIC Placement Test - Diagnostic',
-    'purpose': 'placement',
-    'status': 'in_progress',
-    'startedAt': '2026-11-13T15:25:44.1338593+00:00',
-    'totalScore': null,
-    'bandCode': null,
-  },
-  'unfinishedPractice': {
-    'sessionId': 1,
-    'sectionName': 'Incomplete Sentences',
-    'status': 'in_progress',
-    'correctCount': 0,
-    'questionCount': 9,
-    'startedAt': '2026-11-13T15:33:59.8267295+00:00',
-  },
-};
+/// `GET /api/learner/dashboard` for `learner.fresh@demo.local`: nothing measured,
+/// and a placement already open, so the cascade offers to resume it.
+Map<String, dynamic> dashboardUnmeasuredWithOpenPlacementPayload() =>
+    _asMap(loadFixture('learner_dashboard_unmeasured'));
 
-/// `GET /api/learner/dashboard` for `learner.fresh@demo.local`: nothing measured.
-Map<String, dynamic> dashboardUnmeasuredPayload() => {
-  'certificate': {
-    'code': 'TOEIC',
-    'name': 'TOEIC Listening & Reading',
-    'sectionNoun': 'Part',
-  },
-  'nextAction': {
-    'eyebrow': 'START HERE',
-    'title': 'Find your TOEIC level',
-    'description': 'A free placement test sets your starting band, then your practice and your learning path are chosen from it. No credit is spent. It takes about 45 minutes.',
-    'actionLabel': 'Take the free placement test',
-    'actionUrl': '/placement',
-    'severity': 'info',
-    'cascadeStep': 'retry_unmeasured_skill',
-    'metaLabel': 'FREE',
-  },
-  'goal': {
-    'currentBandCode': null,
-    'currentBandName': null,
-    'currentScore': null,
-    'currentSource': null,
-    'targetBandCode': null,
-    'targetBandName': null,
-    'targetMinScore': null,
-    'targetDate': null,
-    'weeklyStudyHours': null,
-    'status': null,
-    'completedPathSteps': 0,
-    'totalPathSteps': 0,
-    'currentWeekNumber': null,
-    'weekPlannedMinutes': 0,
-    'weekCompletedMinutes': 0,
-    'scoreDisplayFactor': 1,
-    'requiredTotalHours': null,
-    'overallLevelCode': null,
-    'limitingSkillCode': null,
-    'limitingSkillName': null,
-    'hasNoMeasurement': true,
-  },
-  'skills': [
-    {
-      'skillId': 1,
-      'code': 'LIST',
-      'name': 'Listening',
-      'modality': 'listening',
-      'latestScaledScore': null,
-      'maxScaledScore': 495,
-      'weakestTopics': <Map<String, dynamic>>[],
-      'scoreDisplayFactor': 1,
-      'levelCode': null,
-      'positionInBand': null,
-      'measuredAt': null,
-      'isStale': false,
+/// A never-measured learner with nothing open.
+///
+/// Not in the seed, so it is derived from the recorded unmeasured payload by
+/// clearing the unfinished rows and using step 2 of the backend's own cascade
+/// (`LearnerService.NextAction.cs`), whose wording this copies verbatim.
+Map<String, dynamic> dashboardUnmeasuredNoSittingPayload() {
+  final payload = dashboardUnmeasuredWithOpenPlacementPayload();
+  return {
+    ...payload,
+    'nextAction': {
+      'eyebrow': 'START HERE',
+      'title': 'Find your TOEIC level',
+      'description':
+          'A free placement test sets your starting band, then your practice and '
+          'your learning path are chosen from it. No credit is spent. It takes '
+          'about 45 minutes.',
+      'actionLabel': 'Take the free placement test',
+      'actionUrl': '/placement',
+      'severity': 'info',
+      'cascadeStep': 'retry_unmeasured_skill',
+      'metaLabel': 'FREE',
     },
-  ],
-  'attemptCount': 0,
-  'practiceCount': 0,
-  'unfinishedAttempt': null,
-  'unfinishedPractice': null,
-};
+    'attemptCount': 0,
+    'practiceCount': 0,
+    'unfinishedAttempt': null,
+    'unfinishedPractice': null,
+  };
+}
 
-/// `GET /api/learner/insights/dashboard` — the normal in-progress shape.
-Map<String, dynamic> dashboardInsightPendingPayload() => {
-  'insightId': 1006,
-  'userId': 2,
-  'certId': 1,
-  'scope': 'dashboard',
-  'practiceSessionId': null,
-  'attemptId': null,
-  'narrative': null,
-  'trend': null,
-  'status': 'pending',
-  'failureReason': null,
-  'model': null,
-  'promptTokens': null,
-  'completionTokens': null,
-  'sourceFingerprint':
-      'c015b75362bd7b140f0f0f746494da8180d00829286f3963acdc7d78dda33764',
-  'createdAt': '2026-11-13T16:42:59.1992458+00:00',
-  'completedAt': null,
-  'recommendations': <Map<String, dynamic>>[],
-  'learnerPathId': null,
-  'formattedNarrative': null,
-};
+/// `GET /api/learner/insights/dashboard`, recorded while `status` is `done`.
+Map<String, dynamic> dashboardInsightDonePayload() =>
+    _asMap(loadFixture('learner_insight_dashboard'));
 
-/// `GET /api/learner/insights/path` — the 404 body: a designed empty state.
-Map<String, dynamic> pathInsightNotFoundPayload() => {
-  'type': 'https://tools.ietf.org/html/rfc9110#section-15.5.5',
-  'title': 'Active learning path not found',
-  'status': 404,
-  'detail': 'Active learning path not found.',
-  'code': 'LEARNING_PATH_NOT_FOUND',
-};
+/// The same shape while `status` is `pending`, which is the normal state right
+/// after a page first asks for one.
+Map<String, dynamic> dashboardInsightPendingPayload() {
+  final payload = dashboardInsightDonePayload();
+  return {
+    ...payload,
+    'narrative': null,
+    'trend': null,
+    'status': 'pending',
+    'model': null,
+    'promptTokens': null,
+    'completionTokens': null,
+    'completedAt': null,
+    'recommendations': <Map<String, dynamic>>[],
+    'formattedNarrative': null,
+  };
+}
+
+/// The recorded `GET /api/learner/insights/path` 404 body: a designed empty
+/// state, not a broken request.
+Map<String, dynamic> pathInsightNotFoundPayload() =>
+    _asMap(loadFixture('learner_insight_path_not_found'));
 
 /// `GET /api/learner/learning-path` with no active path.
-Map<String, dynamic> learningPathSummaryEmptyPayload() => {
-  'hasActivePath': false,
-  'activeCert': {
-    'code': 'TOEIC',
-    'name': 'TOEIC Listening & Reading',
-    'sectionNoun': 'Part',
-  },
-  'learnerPathId': null,
-  'fromBandCode': null,
-  'toBandCode': null,
-  'fromBandName': null,
-  'toBandName': null,
-  'currentBandCode': null,
-  'currentScore': null,
-  'targetBandCode': null,
-  'targetScore': null,
-  'status': null,
-  'startedAt': null,
-  'totalSteps': 0,
-  'completedSteps': 0,
-  'totalEstimatedMinutes': 0,
-  'remainingMinutes': 0,
-  'cefrBands': [
-    {
-      'code': 'below_A1',
-      'name': 'Below A1',
-      'minTotal': 10,
-      'maxTotal': 119,
-      'isReached': false,
-      'isCurrent': false,
-      'isTarget': false,
-    },
-    {
-      'code': 'A1',
-      'name': 'Beginner',
-      'minTotal': 120,
-      'maxTotal': 220,
-      'isReached': false,
-      'isCurrent': false,
-      'isTarget': false,
-    },
-  ],
-  'openSteps': <Map<String, dynamic>>[],
-  'nextStepId': null,
-  'weeks': <Map<String, dynamic>>[],
-  'skillLevels': <String, String>{},
-};
+Map<String, dynamic> learningPathSummaryEmptyPayload() =>
+    _asMap(loadFixture('learner_learning_path_empty'));
+
+Map<String, dynamic> _asMap(dynamic json) =>
+    Map<String, dynamic>.from(json as Map);
