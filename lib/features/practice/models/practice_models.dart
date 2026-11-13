@@ -1,50 +1,44 @@
-/// Question source filter for starting a free Practice session.
-enum PracticeQuestionSource {
-  all('all', 'ALL'),
-  wrong('wrong', 'WRONG ONLY'),
-  unseen('unseen', 'UNSEEN');
+import 'dart:convert';
 
-  const PracticeQuestionSource(this.apiValue, this.label);
-  final String apiValue;
-  final String label;
-}
-
-/// Feedback timing mode for a Practice session.
-enum PracticeFeedbackMode {
-  immediate('immediate', 'IMMEDIATE'),
-  end('end', 'END OF SESSION');
-
-  const PracticeFeedbackMode(this.apiValue, this.label);
-  final String apiValue;
-  final String label;
-}
-
-/// `PracticeCatalogDto.UnfinishedSession` (`PracticeSessionDto`).
+/// `PracticeSessionDto`: the catalog's `unfinishedSession`, the answer to a
+/// start request, and the `session` inside the take composite.
 ///
-/// There is no answered count on this DTO: the room reads its own progress from
-/// the take payload. The banner can only honestly state the section and size.
-class UnfinishedPracticeSession {
-  const UnfinishedPracticeSession({
+/// `sectionId` is null for a pool drill (drawn from a topic and level); the
+/// section code and name label the scope either way.
+class PracticeSession {
+  const PracticeSession({
     required this.sessionId,
     required this.sectionCode,
     required this.sectionName,
     required this.modality,
     required this.questionCount,
     required this.correctCount,
+    this.sectionId,
+    this.status = '',
+    this.questionSource = '',
+    this.startedAt,
+    this.finishedAt,
     this.topicId,
     this.cefrLevelCode,
+    this.isShort = false,
   });
 
-  factory UnfinishedPracticeSession.fromJson(Map<String, dynamic> json) {
-    return UnfinishedPracticeSession(
+  factory PracticeSession.fromJson(Map<String, dynamic> json) {
+    return PracticeSession(
       sessionId: (json['sessionId'] as num?)?.toInt() ?? 0,
+      sectionId: (json['sectionId'] as num?)?.toInt(),
       sectionCode: json['sectionCode'] as String? ?? '',
       sectionName: json['sectionName'] as String? ?? '',
       modality: json['modality'] as String? ?? '',
       questionCount: (json['questionCount'] as num?)?.toInt() ?? 0,
       correctCount: (json['correctCount'] as num?)?.toInt() ?? 0,
+      status: json['status'] as String? ?? '',
+      questionSource: json['questionSource'] as String? ?? '',
+      startedAt: DateTime.tryParse(json['startedAt'] as String? ?? ''),
+      finishedAt: DateTime.tryParse(json['finishedAt'] as String? ?? ''),
       topicId: (json['topicId'] as num?)?.toInt(),
       cefrLevelCode: json['cefrLevelCode'] as String?,
+      isShort: json['isShort'] as bool? ?? false,
     );
   }
 
@@ -54,8 +48,24 @@ class UnfinishedPracticeSession {
   final String modality;
   final int questionCount;
   final int correctCount;
+
+  /// Null for a pool drill.
+  final int? sectionId;
+
+  /// `in_progress`, `finished`, `abandoned`.
+  final String status;
+
+  /// Always `all` in practice: the source is mastery state, not a choice.
+  final String questionSource;
+  final DateTime? startedAt;
+  final DateTime? finishedAt;
   final int? topicId;
   final String? cefrLevelCode;
+
+  /// A pool drill holding fewer items than a session asks for.
+  final bool isShort;
+
+  bool get isFinished => status == 'finished';
 }
 
 /// `PracticeSectionDto`: one drillable section with its real availability.
@@ -195,7 +205,7 @@ class PracticeCatalog {
       weakestSection:
           weakest is Map<String, dynamic> ? PracticeSection.fromJson(weakest) : null,
       unfinishedSession: unfinished is Map<String, dynamic>
-          ? UnfinishedPracticeSession.fromJson(unfinished)
+          ? PracticeSession.fromJson(unfinished)
           : null,
       speakingPracticeExamId: (json['speakingPracticeExamId'] as num?)?.toInt(),
     );
@@ -207,7 +217,7 @@ class PracticeCatalog {
   final List<PracticeSection> otherSections;
   final List<PracticeSection> speakingSections;
   final PracticeSection? weakestSection;
-  final UnfinishedPracticeSession? unfinishedSession;
+  final PracticeSession? unfinishedSession;
   final int? speakingPracticeExamId;
 
   /// The certificate's own section noun, never the app's invention.
@@ -414,12 +424,13 @@ class PracticeFreeDrillState {
   String get reason => lockNotice ?? 'This drill is not open right now.';
 }
 
+/// `PracticeOptionDto` on the take payload: **no** `isCorrect` here, because the
+/// answer key is not in the manifest.
 class PracticeOption {
   const PracticeOption({
     required this.optionId,
     required this.label,
     required this.text,
-    this.rationale,
   });
 
   factory PracticeOption.fromJson(Map<String, dynamic> json) {
@@ -427,181 +438,418 @@ class PracticeOption {
       optionId: (json['optionId'] as num?)?.toInt() ?? 0,
       label: json['label'] as String? ?? '',
       text: json['text'] as String? ?? '',
-      rationale: json['rationale'] as String?,
     );
   }
 
   final int optionId;
   final String label;
   final String text;
-  final String? rationale;
 }
 
+/// `PracticeQuestionDto`. The passage, the audio path, the audio slice bounds
+/// and the word bounds carry the backend's own names.
 class PracticeQuestion {
   const PracticeQuestion({
-    required this.questionId,
     required this.displayOrder,
-    required this.questionType,
-    required this.stem,
-    this.passageText,
-    this.audioUrl,
-    this.clipStartMs,
-    this.clipEndMs,
-    this.options = const [],
-    this.wordFloor,
-    this.requiredKeywords = const [],
-    this.savedQuestionId,
+    this.questionId,
     this.itemVersionId,
+    this.wireAddress,
+    this.sessionId = 0,
+    this.sectionName = '',
+    this.totalQuestions = 0,
+    this.questionType = 'mcq',
+    this.stem = '',
+    this.categoryName,
+    this.hint,
+    this.hintUsed = false,
+    this.options = const [],
+    this.selectedOptionId,
+    this.isCorrect,
+    this.correctOptionId,
+    this.explanation,
+    this.transcript,
+    this.passage,
+    this.audioPath,
+    this.imagePath,
+    this.imageAlt,
+    this.isSaved = false,
+    this.audioStartMs,
+    this.audioEndMs,
+    this.maxSelections,
+    this.allowNumber = true,
+    this.acceptedAnswersJson,
+    this.requiredKeywords = const [],
+    this.minWords,
+    this.maxWords,
+    this.responseText,
+    this.selectedOptionIds = const [],
+    this.correctOptionIds = const [],
+    this.savedQuestionId,
+    this.cefrLevelCode,
   });
 
   factory PracticeQuestion.fromJson(Map<String, dynamic> json) {
     final optionsRaw = json['options'] as List<dynamic>? ?? const [];
-    final kwRaw = json['requiredKeywords'] as List<dynamic>? ?? const [];
     return PracticeQuestion(
-      questionId: (json['questionId'] as num?)?.toInt(),
       displayOrder: (json['displayOrder'] as num?)?.toInt() ?? 0,
+      questionId: (json['questionId'] as num?)?.toInt(),
+      itemVersionId: (json['itemVersionId'] as num?)?.toInt(),
+      wireAddress: (json['address'] as num?)?.toInt(),
+      sessionId: (json['sessionId'] as num?)?.toInt() ?? 0,
+      sectionName: json['sectionName'] as String? ?? '',
+      totalQuestions: (json['totalQuestions'] as num?)?.toInt() ?? 0,
       questionType: (json['questionType'] as String? ?? 'mcq').toLowerCase(),
       stem: json['stem'] as String? ?? '',
-      passageText: json['passageText'] as String?,
-      audioUrl: json['audioUrl'] as String?,
-      clipStartMs: (json['clipStartMs'] as num?)?.toInt(),
-      clipEndMs: (json['clipEndMs'] as num?)?.toInt(),
+      categoryName: json['categoryName'] as String?,
+      hint: json['hint'] as String?,
+      hintUsed: json['hintUsed'] as bool? ?? false,
       options: optionsRaw
           .whereType<Map<String, dynamic>>()
           .map(PracticeOption.fromJson)
           .toList(),
-      wordFloor: (json['wordFloor'] as num?)?.toInt(),
-      requiredKeywords: kwRaw.whereType<String>().toList(),
+      selectedOptionId: (json['selectedOptionId'] as num?)?.toInt(),
+      isCorrect: json['isCorrect'] as bool?,
+      correctOptionId: (json['correctOptionId'] as num?)?.toInt(),
+      explanation: json['explanation'] as String?,
+      transcript: json['transcript'] as String?,
+      passage: json['passage'] as String?,
+      audioPath: json['audioPath'] as String?,
+      imagePath: json['imagePath'] as String?,
+      imageAlt: json['imageAlt'] as String?,
+      isSaved: json['isSaved'] as bool? ?? false,
+      audioStartMs: (json['audioStartMs'] as num?)?.toInt(),
+      audioEndMs: (json['audioEndMs'] as num?)?.toInt(),
+      maxSelections: (json['maxSelections'] as num?)?.toInt(),
+      allowNumber: json['allowNumber'] as bool? ?? true,
+      acceptedAnswersJson: json['acceptedAnswersJson'] as String?,
+      requiredKeywords: _parseKeywords(json['requiredKeywords']),
+      minWords: (json['minWords'] as num?)?.toInt(),
+      maxWords: (json['maxWords'] as num?)?.toInt(),
+      responseText: json['responseText'] as String?,
+      selectedOptionIds: _parseIds(json['selectedOptionIds']),
+      correctOptionIds: _parseIds(json['correctOptionIds']),
       savedQuestionId: (json['savedQuestionId'] as num?)?.toInt(),
-      itemVersionId: (json['itemVersionId'] as num?)?.toInt(),
+      cefrLevelCode: json['cefrLevelCode'] as String?,
     );
   }
 
-  /// Null for a pool item, which is addressed by [itemVersionId].
+  /// Null for a pool item, which has no question row.
   final int? questionId;
-  final int displayOrder;
-  final String questionType;
-  final String stem;
-  final String? passageText;
-  final String? audioUrl;
-  final int? clipStartMs;
-  final int? clipEndMs;
-  final List<PracticeOption> options;
-  final int? wordFloor;
-  final List<String> requiredKeywords;
-  final int? savedQuestionId;
+
+  /// The pinned pool-item version; the address for a pool item.
   final int? itemVersionId;
 
-  /// The backend's own handle: the row id when there is one, else the pinned
-  /// item version. Use this to name a question in any request.
-  int? get address => questionId ?? itemVersionId;
+  /// The address the backend computed (`questionId ?? itemVersionId`). Taken
+  /// from the wire when present so the app and the server agree even if the
+  /// precedence rule ever changes.
+  final int? wireAddress;
 
-  bool get isWriting => questionType == 'writing' || wordFloor != null;
+  final int sessionId;
+  final String sectionName;
+  final int displayOrder;
+  final int totalQuestions;
+  final String questionType;
+  final String stem;
+  final String? categoryName;
+  final String? hint;
+  final bool hintUsed;
+  final List<PracticeOption> options;
+  final int? selectedOptionId;
+
+  /// Null while unanswered: an unanswered question is not a wrong one.
+  final bool? isCorrect;
+  final int? correctOptionId;
+  final String? explanation;
+  final String? transcript;
+  final String? passage;
+  final String? audioPath;
+  final String? imagePath;
+  final String? imageAlt;
+  final bool isSaved;
+  final int? audioStartMs;
+  final int? audioEndMs;
+  final int? maxSelections;
+  final bool allowNumber;
+  final String? acceptedAnswersJson;
+  final List<String> requiredKeywords;
+  final int? minWords;
+  final int? maxWords;
+  final String? responseText;
+  final List<int> selectedOptionIds;
+  final List<int> correctOptionIds;
+  final int? savedQuestionId;
+  final String? cefrLevelCode;
+
+  /// The handle every question-naming request uses: the wire address when the
+  /// backend sent one, else the row id, else the pinned item version.
+  int get address => wireAddress ?? questionId ?? itemVersionId ?? 0;
+
+  bool get isAnswered => selectedOptionId != null ||
+      responseText != null ||
+      selectedOptionIds.isNotEmpty;
+
+  bool get isWriting => questionType == 'free_response' || minWords != null;
 }
 
+/// `PracticeNavigatorItemDto`: one row of the answer navigator.
+class PracticeNavigatorItem {
+  const PracticeNavigatorItem({
+    required this.displayOrder,
+    this.questionId,
+    this.itemVersionId,
+    this.wireAddress,
+    this.isAnswered = false,
+    this.isCorrect,
+    this.isSaved = false,
+    this.isCurrent = false,
+    this.savedQuestionId,
+  });
+
+  factory PracticeNavigatorItem.fromJson(Map<String, dynamic> json) {
+    return PracticeNavigatorItem(
+      displayOrder: (json['displayOrder'] as num?)?.toInt() ?? 0,
+      questionId: (json['questionId'] as num?)?.toInt(),
+      itemVersionId: (json['itemVersionId'] as num?)?.toInt(),
+      wireAddress: (json['address'] as num?)?.toInt(),
+      isAnswered: json['isAnswered'] as bool? ?? false,
+      isCorrect: json['isCorrect'] as bool?,
+      isSaved: json['isSaved'] as bool? ?? false,
+      isCurrent: json['isCurrent'] as bool? ?? false,
+      savedQuestionId: (json['savedQuestionId'] as num?)?.toInt(),
+    );
+  }
+
+  final int displayOrder;
+  final int? questionId;
+  final int? itemVersionId;
+  final int? wireAddress;
+  final bool isAnswered;
+  final bool? isCorrect;
+  final bool isSaved;
+  final bool isCurrent;
+  final int? savedQuestionId;
+
+  int get address => wireAddress ?? questionId ?? itemVersionId ?? 0;
+}
+
+/// `PracticeSessionTakeDto`: a composite of the session, the current question,
+/// every question and the navigator. They arrive together, so the room opens on
+/// its first question.
 class PracticeSessionTake {
   const PracticeSessionTake({
-    required this.sessionId,
-    required this.title,
-    required this.feedbackMode,
-    required this.questions,
+    required this.session,
+    this.question,
+    this.questions = const [],
+    this.navigator = const [],
   });
 
   factory PracticeSessionTake.fromJson(Map<String, dynamic> json) {
-    final qRaw = json['questions'] as List<dynamic>? ?? const [];
-    final modeStr =
-        (json['feedbackMode'] as String? ?? 'immediate').toLowerCase();
+    final sessionRaw = json['session'];
+    final questionRaw = json['question'];
+    final questionsRaw = json['questions'] as List<dynamic>? ?? const [];
+    final navigatorRaw = json['navigator'] as List<dynamic>? ?? const [];
     return PracticeSessionTake(
-      sessionId: (json['sessionId'] as num?)?.toInt() ?? 0,
-      title: json['title'] as String? ?? 'Practice Session',
-      feedbackMode: modeStr == 'end'
-          ? PracticeFeedbackMode.end
-          : PracticeFeedbackMode.immediate,
-      questions: qRaw
+      session: sessionRaw is Map<String, dynamic>
+          ? PracticeSession.fromJson(sessionRaw)
+          : const PracticeSession(
+              sessionId: 0,
+              sectionCode: '',
+              sectionName: '',
+              modality: '',
+              questionCount: 0,
+              correctCount: 0,
+            ),
+      question: questionRaw is Map<String, dynamic>
+          ? PracticeQuestion.fromJson(questionRaw)
+          : null,
+      questions: questionsRaw
           .whereType<Map<String, dynamic>>()
           .map(PracticeQuestion.fromJson)
+          .toList(),
+      navigator: navigatorRaw
+          .whereType<Map<String, dynamic>>()
+          .map(PracticeNavigatorItem.fromJson)
           .toList(),
     );
   }
 
-  final int sessionId;
-  final String title;
-  final PracticeFeedbackMode feedbackMode;
+  final PracticeSession session;
+  final PracticeQuestion? question;
   final List<PracticeQuestion> questions;
+  final List<PracticeNavigatorItem> navigator;
+
+  /// The question the room opens on: the server's current question, else the
+  /// first one.
+  PracticeQuestion? get openingQuestion {
+    final current = question;
+    if (current != null) {
+      final index = questions.indexWhere(
+        (q) => q.address == current.address,
+      );
+      if (index >= 0) return questions[index];
+    }
+    return questions.isEmpty ? null : questions.first;
+  }
 }
 
+/// `GradedAnswerDto`.
 class PracticeAnswerResult {
   const PracticeAnswerResult({
-    required this.isCorrect,
+    this.isCorrect,
+    this.selectedOptionId,
     this.correctOptionId,
-    this.generalExplanation,
-    this.selectedOptionRationale,
-    this.wordCount,
-    this.missingKeywords = const [],
+    this.explanation,
+    this.transcript,
+    this.isSessionFinished = false,
+    this.nextQuestionDisplayOrder,
+    this.isSaved = false,
+    this.correctOptionIds = const [],
+    this.responseText,
+    this.savedQuestionId,
+    this.cefrLevelCode,
   });
 
   factory PracticeAnswerResult.fromJson(Map<String, dynamic> json) {
-    final missingRaw = json['missingKeywords'] as List<dynamic>? ?? const [];
     return PracticeAnswerResult(
-      isCorrect: json['isCorrect'] as bool? ?? false,
+      isCorrect: json['isCorrect'] as bool?,
+      selectedOptionId: (json['selectedOptionId'] as num?)?.toInt(),
       correctOptionId: (json['correctOptionId'] as num?)?.toInt(),
-      generalExplanation: json['generalExplanation'] as String?,
-      selectedOptionRationale: json['selectedOptionRationale'] as String?,
-      wordCount: (json['wordCount'] as num?)?.toInt(),
-      missingKeywords: missingRaw.whereType<String>().toList(),
+      explanation: json['explanation'] as String?,
+      transcript: json['transcript'] as String?,
+      isSessionFinished: json['isSessionFinished'] as bool? ?? false,
+      nextQuestionDisplayOrder:
+          (json['nextQuestionDisplayOrder'] as num?)?.toInt(),
+      isSaved: json['isSaved'] as bool? ?? false,
+      correctOptionIds: _parseIds(json['correctOptionIds']),
+      responseText: json['responseText'] as String?,
+      savedQuestionId: (json['savedQuestionId'] as num?)?.toInt(),
+      cefrLevelCode: json['cefrLevelCode'] as String?,
     );
   }
 
-  final bool isCorrect;
+  /// Null for a free-response answer that was not graded (yet).
+  final bool? isCorrect;
+  final int? selectedOptionId;
   final int? correctOptionId;
-  final String? generalExplanation;
-  final String? selectedOptionRationale;
-  final int? wordCount;
-  final List<String> missingKeywords;
+  final String? explanation;
+  final String? transcript;
+  final bool isSessionFinished;
+
+  /// Null when the session just finished.
+  final int? nextQuestionDisplayOrder;
+  final bool isSaved;
+  final List<int> correctOptionIds;
+  final String? responseText;
+  final int? savedQuestionId;
+  final String? cefrLevelCode;
 }
 
+/// One row of `PracticeSummaryDto.Questions` (`QuestionOutcomeDto`).
 class PracticeSummaryItem {
   const PracticeSummaryItem({
-    required this.questionId,
+    required this.displayOrder,
     required this.stem,
-    required this.isCorrect,
-    this.generalExplanation,
+    this.questionId,
+    this.itemVersionId,
+    this.categoryName,
+    this.selectedOptionLabel,
+    this.selectedOptionText,
+    this.correctOptionLabel,
+    this.correctOptionText,
+    this.isCorrect,
+    this.hintUsed = false,
+    this.explanation,
+    this.audioPath,
+    this.audioStartMs,
+    this.audioEndMs,
+    this.transcript,
+    this.questionType = 'mcq',
+    this.responseText,
   });
 
   factory PracticeSummaryItem.fromJson(Map<String, dynamic> json) {
     return PracticeSummaryItem(
-      questionId: (json['questionId'] as num?)?.toInt() ?? 0,
+      displayOrder: (json['displayOrder'] as num?)?.toInt() ?? 0,
       stem: json['stem'] as String? ?? '',
-      isCorrect: json['isCorrect'] as bool? ?? false,
-      generalExplanation: json['generalExplanation'] as String?,
+      questionId: (json['questionId'] as num?)?.toInt(),
+      itemVersionId: (json['itemVersionId'] as num?)?.toInt(),
+      categoryName: json['categoryName'] as String?,
+      selectedOptionLabel: json['selectedOptionLabel'] as String?,
+      selectedOptionText: json['selectedOptionText'] as String?,
+      correctOptionLabel: json['correctOptionLabel'] as String?,
+      correctOptionText: json['correctOptionText'] as String?,
+      isCorrect: json['isCorrect'] as bool?,
+      hintUsed: json['hintUsed'] as bool? ?? false,
+      explanation: json['explanation'] as String?,
+      audioPath: json['audioPath'] as String?,
+      audioStartMs: (json['audioStartMs'] as num?)?.toInt(),
+      audioEndMs: (json['audioEndMs'] as num?)?.toInt(),
+      transcript: json['transcript'] as String?,
+      questionType: (json['questionType'] as String? ?? 'mcq').toLowerCase(),
+      responseText: json['responseText'] as String?,
     );
   }
 
-  final int questionId;
+  final int displayOrder;
   final String stem;
-  final bool isCorrect;
-  final String? generalExplanation;
+  final int? questionId;
+  final int? itemVersionId;
+  final String? categoryName;
+  final String? selectedOptionLabel;
+  final String? selectedOptionText;
+  final String? correctOptionLabel;
+  final String? correctOptionText;
+
+  /// Null means "not answered", not "wrong": the key ships either way.
+  final bool? isCorrect;
+  final bool hintUsed;
+  final String? explanation;
+  final String? audioPath;
+  final int? audioStartMs;
+  final int? audioEndMs;
+  final String? transcript;
+  final String questionType;
+  final String? responseText;
+
+  bool get isAnswered => isCorrect != null;
 }
 
+/// `PracticeSummaryDto`.
 class PracticeSummary {
   const PracticeSummary({
     required this.sessionId,
-    required this.title,
-    required this.correctCount,
-    required this.totalCount,
-    required this.accuracyPercent,
-    required this.items,
+    required this.sectionCode,
+    required this.sectionName,
+    this.modality = '',
+    this.startedAt,
+    this.finishedAt,
+    this.totalQuestions = 0,
+    this.answeredCount = 0,
+    this.correctCount = 0,
+    this.incorrectCount = 0,
+    this.skippedCount = 0,
+    this.accuracyPercentage = 0,
+    this.hintUsedCount = 0,
+    this.questions = const [],
   });
 
   factory PracticeSummary.fromJson(Map<String, dynamic> json) {
-    final itemsRaw = json['items'] as List<dynamic>? ?? const [];
+    final questionsRaw = json['questions'] as List<dynamic>? ?? const [];
     return PracticeSummary(
       sessionId: (json['sessionId'] as num?)?.toInt() ?? 0,
-      title: json['title'] as String? ?? 'Practice Summary',
+      sectionCode: json['sectionCode'] as String? ?? '',
+      sectionName: json['sectionName'] as String? ?? '',
+      modality: json['modality'] as String? ?? '',
+      startedAt: DateTime.tryParse(json['startedAt'] as String? ?? ''),
+      finishedAt: DateTime.tryParse(json['finishedAt'] as String? ?? ''),
+      totalQuestions: (json['totalQuestions'] as num?)?.toInt() ?? 0,
+      answeredCount: (json['answeredCount'] as num?)?.toInt() ?? 0,
       correctCount: (json['correctCount'] as num?)?.toInt() ?? 0,
-      totalCount: (json['totalCount'] as num?)?.toInt() ?? 0,
-      accuracyPercent: (json['accuracyPercent'] as num?)?.toInt() ?? 0,
-      items: itemsRaw
+      incorrectCount: (json['incorrectCount'] as num?)?.toInt() ?? 0,
+      skippedCount: (json['skippedCount'] as num?)?.toInt() ?? 0,
+      accuracyPercentage: (json['accuracyPercentage'] as num?)?.toInt() ?? 0,
+      hintUsedCount: (json['hintUsedCount'] as num?)?.toInt() ?? 0,
+      questions: questionsRaw
           .whereType<Map<String, dynamic>>()
           .map(PracticeSummaryItem.fromJson)
           .toList(),
@@ -609,11 +857,50 @@ class PracticeSummary {
   }
 
   final int sessionId;
-  final String title;
+  final String sectionCode;
+  final String sectionName;
+  final String modality;
+  final DateTime? startedAt;
+  final DateTime? finishedAt;
+  final int totalQuestions;
+  final int answeredCount;
   final int correctCount;
-  final int totalCount;
-  final int accuracyPercent;
-  final List<PracticeSummaryItem> items;
+  final int incorrectCount;
+  final int skippedCount;
+  final int accuracyPercentage;
+  final int hintUsedCount;
+  final List<PracticeSummaryItem> questions;
+
+  bool get isFinished => finishedAt != null;
+}
+
+/// `requiredKeywords` is a JSON array string on the wire (`["a","b"]`); the
+/// scorer also tolerates a comma list, so accept both.
+List<String> _parseKeywords(Object? raw) {
+  if (raw is List) return raw.whereType<String>().toList();
+  if (raw is! String || raw.trim().isEmpty) return const [];
+  final text = raw.trim();
+  if (text.startsWith('[')) {
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is List) return decoded.whereType<String>().toList();
+    } catch (_) {
+      // Fall through to the comma list below.
+    }
+  }
+  return text
+      .split(RegExp('[,;]'))
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
+}
+
+List<int> _parseIds(Object? raw) {
+  if (raw is! List) return const [];
+  return raw
+      .whereType<num>()
+      .map((e) => e.toInt())
+      .toList();
 }
 
 class PracticeInsight {
@@ -1023,3 +1310,5 @@ class WeaknessAnalysisData {
   final List<WeaknessTopicRow> topics;
   final List<WeaknessRecommendation> recommendations;
 }
+
+

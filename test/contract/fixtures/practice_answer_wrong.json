@@ -1,0 +1,18 @@
+{
+  "isCorrect": false,
+  "selectedOptionId": 41,
+  "correctOptionId": 42,
+  "explanation": "Option B directly answers where the folders are placed.",
+  "transcript": null,
+  "isSessionFinished": false,
+  "nextQuestionDisplayOrder": 2,
+  "isSaved": true,
+  "acceptedAnswersJson": null,
+  "correctOptionIds": [
+    42
+  ],
+  "responseText": null,
+  "selectedOptionIdsJson": null,
+  "savedQuestionId": 8,
+  "cefrLevelCode": null
+}
