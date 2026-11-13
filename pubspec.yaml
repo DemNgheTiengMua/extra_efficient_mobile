@@ -35,6 +35,12 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   forui: ^0.27.7
+  flutter_riverpod: ^3.5.0
+  dio: ^5.11.1
+  go_router: ^18.1.4
+  flutter_secure_storage: ^11.2.0
+  just_audio: ^0.10.6
+  record: ^7.2.0
 
 dev_dependencies:
   flutter_test:
@@ -63,6 +69,16 @@ flutter:
         - asset: assets/fonts/IBM_Plex_Sans/IBMPlexSans.ttf
         - asset: assets/fonts/IBM_Plex_Sans/IBMPlexSans-Italic.ttf
           style: italic
+    - family: IBM Plex Sans Condensed
+      fonts:
+        - asset: assets/fonts/IBM_Plex_Sans_Condensed/IBMPlexSansCondensed-Regular.ttf
+        - asset: assets/fonts/IBM_Plex_Sans_Condensed/IBMPlexSansCondensed-Bold.ttf
+          weight: 700
+    - family: IBM Plex Mono
+      fonts:
+        - asset: assets/fonts/IBM_Plex_Mono/IBMPlexMono-Regular.ttf
+        - asset: assets/fonts/IBM_Plex_Mono/IBMPlexMono-Bold.ttf
+          weight: 700
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
