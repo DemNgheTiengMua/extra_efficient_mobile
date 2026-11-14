@@ -24,6 +24,20 @@ int countWords(String text) {
   return trimmed.split(RegExp(r'\s+')).length;
 }
 
+/// A learner-readable explanation of why a clip would not load.
+///
+/// `just_audio` reports a bare `Source error` with a code that means nothing to
+/// a learner, and on Android the common cause is the platform refusing cleartext
+/// HTTP for the media URL rather than anything the exam did.
+String describeAudioFailure(Object error) {
+  final raw = error.toString();
+  if (raw.contains('Source error')) {
+    return 'This question\'s audio could not be loaded. The question is still '
+        'answerable — you can play it again, or continue.';
+  }
+  return 'Audio unavailable. The question is still answerable.';
+}
+
 /// Shows a signage-styled confirmation [FDialog] and returns `true` if the
 /// primary action was pressed.
 Future<bool> showExamConfirmDialog({

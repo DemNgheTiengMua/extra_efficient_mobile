@@ -339,6 +339,34 @@ class _PlacementExamRoomScreenState
     final sliceText = hasSlice
         ? '${((q.audioStartMs ?? 0) / 1000).toStringAsFixed(1)}s – ${q.audioEndMs != null ? (q.audioEndMs! / 1000).toStringAsFixed(1) : 'END'}s'
         : 'FULL TRACK';
+    final audioError = _controller.state.audioError;
+
+    if (audioError != null) {
+      // A clip that will not load must not cost the learner the sitting. The
+      // question stays answerable and the audio can be retried.
+      return PlacardPanel(
+        title: 'LISTENING AUDIO',
+        trailing: const PlacardBadge.danger('UNAVAILABLE'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            PlacardAlert(
+              key: const Key('exam-audio-error'),
+              variant: PlacardAlertVariant.warning,
+              title: 'AUDIO UNAVAILABLE',
+              subtitle: audioError,
+            ),
+            const SizedBox(height: 10),
+            PlacardButton(
+              key: const Key('exam-audio-retry-btn'),
+              label: 'RETRY AUDIO',
+              variant: PlacardButtonVariant.secondary,
+              onPress: () => unawaited(_controller.retryAudio()),
+            ),
+          ],
+        ),
+      );
+    }
 
     return PlacardPanel(
       title: 'LISTENING AUDIO',

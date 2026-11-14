@@ -6,6 +6,7 @@ import '../../../core/media/audio_media_adapter.dart';
 import '../data/placement_repository.dart';
 import '../models/exam_room_stop.dart';
 import '../models/placement_models.dart';
+import '../widgets/exam_room_helpers.dart';
 
 enum AutosaveStatus { idle, saving, saved, failed }
 
@@ -25,10 +26,15 @@ class PlacementExamState {
     this.answeredCount = 0,
     this.stop,
     this.needsPreflight = false,
+    this.audioError,
   });
 
   final bool isLoading;
   final String? error;
+
+  /// Set when the current question's audio could not be loaded. The room stays
+  /// usable: the learner can still answer, and can retry the audio.
+  final String? audioError;
   final int placementId;
   final DateTime? expiresAt;
   final int remainingSeconds;
@@ -71,6 +77,8 @@ class PlacementExamState {
     int? answeredCount,
     ExamRoomStop? stop,
     bool? needsPreflight,
+    String? audioError,
+    bool clearAudioError = false,
   }) {
     return PlacementExamState(
       isLoading: isLoading ?? this.isLoading,
@@ -88,6 +96,7 @@ class PlacementExamState {
       answeredCount: answeredCount ?? this.answeredCount,
       stop: stop ?? this.stop,
       needsPreflight: needsPreflight ?? this.needsPreflight,
+      audioError: clearAudioError ? null : (audioError ?? this.audioError),
     );
   }
 }
@@ -187,31 +196,54 @@ class PlacementExamController extends ChangeNotifier {
     });
   }
 
+  /// Preloads the current question's audio.
+  ///
+  /// A failure here must never abort the sitting: the question is still
+  /// answerable, and on this stack a missing clip is far more likely than a
+  /// broken exam. The room reports audio trouble separately and lets the learner
+  /// retry, rather than replacing the whole room with an error.
   Future<void> _loadAudioForCurrentQuestion() async {
     final q = _state.currentQuestion;
     if (q == null || q.audioPath == null || q.audioPath!.isEmpty) {
       if (_loadedAudioQuestionId != null) {
-        await audioAdapter.stop();
+        try {
+          await audioAdapter.stop();
+        } catch (_) {
+          // Nothing to do: the clip is being replaced anyway.
+        }
         _loadedAudioQuestionId = null;
       }
       return;
     }
     if (_loadedAudioQuestionId == q.questionId) return;
     _loadedAudioQuestionId = q.questionId;
-    await audioAdapter.setAudioUrl(
-      q.audioPath!,
-      clipStart: q.audioStartMs != null
-          ? Duration(milliseconds: q.audioStartMs!)
-          : null,
-      clipEnd: q.audioEndMs != null
-          ? Duration(milliseconds: q.audioEndMs!)
-          : null,
-    );
+    try {
+      await audioAdapter.setAudioUrl(
+        q.audioPath!,
+        clipStart: q.audioStartMs != null
+            ? Duration(milliseconds: q.audioStartMs!)
+            : null,
+        clipEnd: q.audioEndMs != null
+            ? Duration(milliseconds: q.audioEndMs!)
+            : null,
+      );
+      _update(_state.copyWith(clearAudioError: true));
+    } catch (e) {
+      // Keep the room usable and tell the learner the audio is unavailable.
+      _update(_state.copyWith(audioError: describeAudioFailure(e)));
+    }
   }
 
   Future<void> jumpToQuestion(int index) async {
     if (index < 0 || index >= _state.questions.length) return;
     _update(_state.copyWith(currentIndex: index));
+    await _loadAudioForCurrentQuestion();
+  }
+
+  /// Re-attempts the current question's audio after a load failure.
+  Future<void> retryAudio() async {
+    _loadedAudioQuestionId = null;
+    _update(_state.copyWith(clearAudioError: true));
     await _loadAudioForCurrentQuestion();
   }
 
