@@ -42,6 +42,23 @@ class LearnerContextNotifier extends AsyncNotifier<LearnerContext?> {
     state = await AsyncValue.guard(_fetchContext);
   }
 
+  /// Re-reads the context without ever flashing a loading state.
+  ///
+  /// Used when the server may have changed the balance behind the learner's
+  /// back - an administrator granting a make-good credit, a refund settling -
+  /// so the header pill and every credit figure update in place instead of
+  /// waiting for a sign-out.
+  Future<void> refreshContextQuietly() async {
+    if (!ref.read(authNotifierProvider).isAuthenticated) return;
+    try {
+      final fresh = await _fetchContext();
+      state = AsyncData(fresh);
+    } catch (_) {
+      // A failed background refresh must not replace good data with an error;
+      // the displayed balance simply stays as it was.
+    }
+  }
+
   Future<void> switchActiveCertificate(String code) async {
     final dio = ref.read(dioProvider);
     await dio.put<void>(

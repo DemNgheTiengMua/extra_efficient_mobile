@@ -29,6 +29,18 @@ class WalletSummaryNotifier extends AsyncNotifier<WalletSummary?> {
       () => ref.read(walletRepositoryProvider).getWallet(),
     );
   }
+
+  /// Re-reads the wallet without a loading flash, for a background refresh.
+  Future<void> refreshQuietly() async {
+    if (!ref.read(authNotifierProvider).isAuthenticated) return;
+    try {
+      final fresh = await ref.read(walletRepositoryProvider).getWallet();
+      state = AsyncData(fresh);
+    } catch (_) {
+      // Keep the figures already on screen rather than replacing them with an
+      // error the learner did not ask for.
+    }
+  }
 }
 
 final walletSummaryProvider =

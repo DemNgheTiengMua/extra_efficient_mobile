@@ -5,6 +5,7 @@ import 'package:forui/forui.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
 import '../../auth/auth_provider.dart';
+import '../../context/learner_context_provider.dart';
 import '../wallet_models.dart';
 import '../wallet_providers.dart';
 import 'checkout_flow_view.dart';
@@ -137,6 +138,20 @@ class _CreditsAndOrdersView extends ConsumerStatefulWidget {
 class _CreditsAndOrdersViewState extends ConsumerState<_CreditsAndOrdersView> {
   int? _checkoutPackageId;
   WalletOrder? _inspectOrder;
+
+  @override
+  void initState() {
+    super.initState();
+    // Opening WALLET is the moment a credit change matters - an administrator
+    // grant or a refund settles while the learner is elsewhere, so re-read both
+    // the ledger and the header pill instead of showing whatever was cached at
+    // sign-in.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(walletSummaryProvider.notifier).refreshQuietly();
+      ref.read(learnerContextProvider.notifier).refreshContextQuietly();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
