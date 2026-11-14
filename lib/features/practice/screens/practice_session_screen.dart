@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/media/audio_media_adapter.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
@@ -444,6 +445,15 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // P1/P2 photographs and similar items carry an image the learner
+              // must look at. It was parsed but never rendered, so a photo
+              // question showed only its stem.
+              if (q.imagePath != null && q.imagePath!.isNotEmpty) ...[
+                _QuestionImage(path: q.imagePath!, altText: q.imageAlt),
+                const SizedBox(height: 12),
+                const Divider(color: SignageColors.lineSoft, height: 1),
+                const SizedBox(height: 12),
+              ],
               if (q.passage != null && q.passage!.isNotEmpty) ...[
                 Text(q.passage!, style: SignageTypography.body()),
                 const SizedBox(height: 12),
@@ -616,6 +626,62 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
       }
     }
     return 'Option $optionId';
+  }
+}
+
+class _QuestionImage extends ConsumerWidget {
+  const _QuestionImage({required this.path, this.altText});
+
+  /// The server's `imagePath`. It is either absolute or root-relative; the
+  /// latter is resolved against the API base so the emulator's tunnel works.
+  final String path;
+  final String? altText;
+
+  String get _url {
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    final base = AppConfig.baseUrl.endsWith('/')
+        ? AppConfig.baseUrl.substring(0, AppConfig.baseUrl.length - 1)
+        : AppConfig.baseUrl;
+    return path.startsWith('/') ? '$base$path' : '$base/$path';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: SignageColors.paper,
+        border: Border.all(color: SignageColors.ink, width: 2),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 240),
+        child: Image.network(
+          _url,
+          key: const Key('practice-question-image'),
+          fit: BoxFit.contain,
+          semanticLabel: altText,
+          loadingBuilder: (context, child, progress) => progress == null
+              ? child
+              : const SizedBox(
+                  height: 120,
+                  child: Center(child: FCircularProgress()),
+                ),
+          // A missing image must not break the drill: say so and keep the
+          // question answerable.
+          errorBuilder: (context, error, stack) => Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              altText == null || altText!.isEmpty
+                  ? 'The image for this question could not be loaded.'
+                  : 'Image unavailable — $altText',
+              style: SignageTypography.body(
+                fontSize: 13,
+                color: SignageColors.inkMuted,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
