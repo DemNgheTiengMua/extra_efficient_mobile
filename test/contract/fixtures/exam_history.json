@@ -1,0 +1,119 @@
+{
+  "certificate": {
+    "code": "TOEIC",
+    "name": "TOEIC Listening & Reading",
+    "sectionNoun": "Part"
+  },
+  "totalAttempts": 3,
+  "bestScore": 720,
+  "averageScore": 460,
+  "bestScoreBandCode": "B1",
+  "bestScoreBandName": "Intermediate",
+  "cefrBands": [
+    {
+      "code": "below_A1",
+      "name": "Below A1",
+      "minTotal": 10,
+      "maxTotal": 119,
+      "displayOrder": 0
+    },
+    {
+      "code": "A1",
+      "name": "Beginner",
+      "minTotal": 120,
+      "maxTotal": 220,
+      "displayOrder": 1
+    },
+    {
+      "code": "A2",
+      "name": "Elementary",
+      "minTotal": 225,
+      "maxTotal": 545,
+      "displayOrder": 2
+    },
+    {
+      "code": "B1",
+      "name": "Intermediate",
+      "minTotal": 550,
+      "maxTotal": 780,
+      "displayOrder": 3
+    },
+    {
+      "code": "B2",
+      "name": "Upper intermediate",
+      "minTotal": 785,
+      "maxTotal": 940,
+      "displayOrder": 4
+    },
+    {
+      "code": "C1",
+      "name": "Advanced",
+      "minTotal": 945,
+      "maxTotal": 990,
+      "displayOrder": 5
+    }
+  ],
+  "attempts": [
+    {
+      "attemptId": 1004,
+      "examId": 1,
+      "examName": "ETS 2024 — Test 1",
+      "certId": 1,
+      "certCode": "TOEIC",
+      "startedAt": "2026-11-13T15:44:31.4420798+00:00",
+      "submittedAt": "2026-11-13T16:00:07.8694473+00:00",
+      "totalScore": 10,
+      "bandCode": "below_A1",
+      "bandName": "Below A1",
+      "skillScores": [
+        {
+          "skillId": 1,
+          "skillCode": "LIST",
+          "skillName": "Listening",
+          "modality": "listening",
+          "rawScore": 0,
+          "scaledScore": 5,
+          "totalQuestions": 4
+        },
+        {
+          "skillId": 2,
+          "skillCode": "READ",
+          "skillName": "Reading",
+          "modality": "reading",
+          "rawScore": 0,
+          "scaledScore": 5,
+          "totalQuestions": 5
+        }
+      ],
+      "status": "graded"
+    },
+    {
+      "attemptId": 2,
+      "examId": 1,
+      "examName": "ETS 2024 — Test 1",
+      "certId": 1,
+      "certCode": "TOEIC",
+      "startedAt": "2026-11-08T01:44:01.797746+07:00",
+      "submittedAt": "2026-11-08T03:29:01.797746+07:00",
+      "totalScore": 720,
+      "bandCode": "B1",
+      "bandName": "Intermediate",
+      "skillScores": [],
+      "status": "graded"
+    },
+    {
+      "attemptId": 1,
+      "examId": 2,
+      "examName": "TOEIC Placement Test — Diagnostic",
+      "certId": 1,
+      "certCode": "TOEIC",
+      "startedAt": "2026-10-20T01:44:01.542588+07:00",
+      "submittedAt": "2026-10-20T02:22:01.542588+07:00",
+      "totalScore": 650,
+      "bandCode": "B1",
+      "bandName": "Intermediate",
+      "skillScores": [],
+      "status": "graded"
+    }
+  ]
+}

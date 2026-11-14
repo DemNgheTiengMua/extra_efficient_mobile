@@ -4,6 +4,8 @@ import 'package:forui/forui.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
+import '../../context/learner_context_provider.dart';
 import '../wallet_models.dart';
 import '../wallet_providers.dart';
 import 'checkout_flow_view.dart';
@@ -138,6 +140,20 @@ class _CreditsAndOrdersViewState extends ConsumerState<_CreditsAndOrdersView> {
   WalletOrder? _inspectOrder;
 
   @override
+  void initState() {
+    super.initState();
+    // Opening WALLET is the moment a credit change matters - an administrator
+    // grant or a refund settles while the learner is elsewhere, so re-read both
+    // the ledger and the header pill instead of showing whatever was cached at
+    // sign-in.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(walletSummaryProvider.notifier).refreshQuietly();
+      ref.read(learnerContextProvider.notifier).refreshContextQuietly();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     if (_checkoutPackageId != null || _inspectOrder != null) {
       return CheckoutFlowView(
@@ -160,7 +176,7 @@ class _CreditsAndOrdersViewState extends ConsumerState<_CreditsAndOrdersView> {
         child: StateBlock(
           stamp: 'ERROR',
           title: 'Could not load wallet',
-          description: err.toString(),
+          description: extractApiError(err, fallback: 'The wallet could not be loaded.'),
           action: PlacardButton(
             label: 'RETRY',
             onPress: () => ref.read(walletSummaryProvider.notifier).refresh(),
@@ -178,8 +194,8 @@ class _CreditsAndOrdersViewState extends ConsumerState<_CreditsAndOrdersView> {
           padding: const EdgeInsets.all(16),
           children: [
             ScorePlacard(
-              totalScore: '${wallet.derivedBalance}',
-              caption: 'LEDGER BALANCE (PURCHASED − USED)',
+              totalScore: '${wallet.balance}',
+              caption: 'LEDGER BALANCE (INCLUDING ADMIN GRANTS)',
               splits: [
                 ScoreSplit(
                   label: 'PURCHASED',
@@ -191,7 +207,7 @@ class _CreditsAndOrdersViewState extends ConsumerState<_CreditsAndOrdersView> {
                 ),
                 ScoreSplit(
                   label: 'BALANCE',
-                  value: '${wallet.derivedBalance}',
+                  value: '${wallet.balance}',
                 ),
               ],
             ),
@@ -312,10 +328,10 @@ class _PackageRow extends StatelessWidget {
                       ],
                     ],
                   ),
-                  if (package.description.isNotEmpty) ...[
+                  if (package.features.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
-                      package.description,
+                      package.features,
                       style: SignageTypography.body(
                         fontSize: 13,
                         color: SignageColors.inkMuted,
@@ -387,7 +403,7 @@ class _LedgerSection extends StatelessWidget {
                         Expanded(
                           flex: 3,
                           child: Text(
-                            'REASON / PROVENANCE',
+                            'REASON / NOTE',
                             style: SignageTypography.label(
                               fontSize: 11,
                               color: SignageColors.paper,
@@ -431,9 +447,17 @@ class _LedgerSection extends StatelessWidget {
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              if (entries[i].provenance.isNotEmpty)
+                              if (entries[i].note.isNotEmpty)
                                 Text(
-                                  entries[i].provenance,
+                                  entries[i].note,
+                                  style: SignageTypography.data(
+                                    fontSize: 12,
+                                    color: SignageColors.inkMuted,
+                                  ),
+                                ),
+                              if (entries[i].orderCode != null)
+                                Text(
+                                  entries[i].orderCode!,
                                   style: SignageTypography.data(
                                     fontSize: 12,
                                     color: SignageColors.inkMuted,

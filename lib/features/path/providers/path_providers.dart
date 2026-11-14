@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/provider_retry.dart';
 import '../../auth/auth_provider.dart';
 import '../../context/learner_context_provider.dart';
 import '../data/path_repository.dart';
@@ -15,7 +16,7 @@ final dashboardProvider = FutureProvider<LearnerDashboard?>((ref) async {
   ref.watch(certificateScopeVersionProvider);
   if (!auth.isAuthenticated) return null;
   return ref.watch(pathRepositoryProvider).fetchDashboard();
-});
+}, retry: noProviderRetry);
 
 class DashboardInsightNotifier extends AsyncNotifier<AiInsight?> {
   @override
@@ -36,8 +37,9 @@ class DashboardInsightNotifier extends AsyncNotifier<AiInsight?> {
 
 final dashboardInsightProvider =
     AsyncNotifierProvider<DashboardInsightNotifier, AiInsight?>(
-  DashboardInsightNotifier.new,
-);
+      DashboardInsightNotifier.new,
+      retry: noProviderRetry,
+    );
 
 class TargetBandGoalNotifier extends AsyncNotifier<TargetBandGoal?> {
   @override
@@ -49,11 +51,13 @@ class TargetBandGoalNotifier extends AsyncNotifier<TargetBandGoal?> {
   }
 
   Future<void> updateTargetBand(String targetBandCode) async {
-    final updated = await ref
-        .read(pathRepositoryProvider)
-        .updateTargetBand(targetBandCode);
-    state = AsyncData(updated);
+    final repo = ref.read(pathRepositoryProvider);
+    await repo.updateTargetBand(targetBandCode);
+    state = AsyncData(await repo.fetchTargetBand());
     ref.invalidate(dashboardProvider);
+    // A target band is what a path is generated towards, so the path screen's
+    // gate is now open.
+    ref.invalidate(learningPathProvider);
   }
 
   Future<void> saveGoal({
@@ -62,21 +66,24 @@ class TargetBandGoalNotifier extends AsyncNotifier<TargetBandGoal?> {
     String? targetDate,
     num? weeklyStudyHours,
   }) async {
-    final updated = await ref.read(pathRepositoryProvider).saveGoal(
-          currentBandCode: currentBandCode,
-          targetBandCode: targetBandCode,
-          targetDate: targetDate,
-          weeklyStudyHours: weeklyStudyHours,
-        );
-    state = AsyncData(updated);
+    final repo = ref.read(pathRepositoryProvider);
+    await repo.saveGoal(
+      currentBandCode: currentBandCode,
+      targetBandCode: targetBandCode,
+      targetDate: targetDate,
+      weeklyStudyHours: weeklyStudyHours,
+    );
+    state = AsyncData(await repo.fetchTargetBand());
     ref.invalidate(dashboardProvider);
+    ref.invalidate(learningPathProvider);
   }
 }
 
 final targetBandGoalProvider =
     AsyncNotifierProvider<TargetBandGoalNotifier, TargetBandGoal?>(
-  TargetBandGoalNotifier.new,
-);
+      TargetBandGoalNotifier.new,
+      retry: noProviderRetry,
+    );
 
 class CalibrationNotifier extends AsyncNotifier<CalibrationStatus?> {
   @override
@@ -99,8 +106,9 @@ class CalibrationNotifier extends AsyncNotifier<CalibrationStatus?> {
 
 final calibrationProvider =
     AsyncNotifierProvider<CalibrationNotifier, CalibrationStatus?>(
-  CalibrationNotifier.new,
-);
+      CalibrationNotifier.new,
+      retry: noProviderRetry,
+    );
 
 class LearningPathNotifier extends AsyncNotifier<LearningPathOverview?> {
   @override
@@ -111,14 +119,15 @@ class LearningPathNotifier extends AsyncNotifier<LearningPathOverview?> {
     return ref.watch(pathRepositoryProvider).fetchLearningPath();
   }
 
-  Future<void> generate({String? targetBandCode}) async {
+  /// Generation needs a target band; the screen only offers this once one is
+  /// set, so the 422 "no goal to build a path from" is not reachable from here.
+  Future<void> generate() async {
     state = const AsyncLoading();
-    await ref
-        .read(pathRepositoryProvider)
-        .generateLearningPath(targetBandCode: targetBandCode);
-    state = await AsyncValue.guard(
-      () => ref.read(pathRepositoryProvider).fetchLearningPath(),
-    );
+    final repo = ref.read(pathRepositoryProvider);
+    state = await AsyncValue.guard(() async {
+      await repo.generateLearningPath();
+      return repo.fetchLearningPath();
+    });
     ref.invalidate(pathInsightProvider);
     ref.invalidate(dashboardProvider);
   }
@@ -126,23 +135,16 @@ class LearningPathNotifier extends AsyncNotifier<LearningPathOverview?> {
   Future<void> reset() async {
     state = const AsyncLoading();
     await ref.read(pathRepositoryProvider).resetLearningPath();
-    state = const AsyncData(null);
     ref.invalidate(dashboardProvider);
-  }
-
-  Future<PathModuleItem> startStep(int stepId) async {
-    final repo = ref.read(pathRepositoryProvider);
-    await repo.fetchStep(stepId);
-    final started = await repo.startStep(stepId);
     ref.invalidateSelf();
-    return started;
   }
 }
 
 final learningPathProvider =
     AsyncNotifierProvider<LearningPathNotifier, LearningPathOverview?>(
-  LearningPathNotifier.new,
-);
+      LearningPathNotifier.new,
+      retry: noProviderRetry,
+    );
 
 class PathInsightNotifier extends AsyncNotifier<AiInsight?> {
   @override
@@ -150,6 +152,8 @@ class PathInsightNotifier extends AsyncNotifier<AiInsight?> {
     final auth = ref.watch(authNotifierProvider);
     ref.watch(certificateScopeVersionProvider);
     if (!auth.isAuthenticated) return null;
+    // The screen only watches this provider once an active path exists, because
+    // `GET /insights/path` answers 404 LEARNING_PATH_NOT_FOUND without one.
     return ref.watch(pathRepositoryProvider).fetchPathInsight();
   }
 
@@ -163,21 +167,26 @@ class PathInsightNotifier extends AsyncNotifier<AiInsight?> {
 
 final pathInsightProvider =
     AsyncNotifierProvider<PathInsightNotifier, AiInsight?>(
-  PathInsightNotifier.new,
-);
+      PathInsightNotifier.new,
+      retry: noProviderRetry,
+    );
 
-final lessonDetailProvider =
-    FutureProvider.family<LessonDetail?, int>((ref, lessonId) async {
+final lessonDetailProvider = FutureProvider.family<LessonDetail?, int>((
+  ref,
+  lessonId,
+) async {
   final auth = ref.watch(authNotifierProvider);
   ref.watch(certificateScopeVersionProvider);
   if (!auth.isAuthenticated) return null;
   return ref.watch(pathRepositoryProvider).fetchLesson(lessonId);
-});
+}, retry: noProviderRetry);
 
-final lessonProgressProvider =
-    FutureProvider.family<LessonProgress?, int>((ref, lessonId) async {
+final lessonProgressProvider = FutureProvider.family<LessonProgress?, int>((
+  ref,
+  lessonId,
+) async {
   final auth = ref.watch(authNotifierProvider);
   ref.watch(certificateScopeVersionProvider);
   if (!auth.isAuthenticated) return null;
   return ref.watch(pathRepositoryProvider).fetchLessonProgress(lessonId);
-});
+}, retry: noProviderRetry);

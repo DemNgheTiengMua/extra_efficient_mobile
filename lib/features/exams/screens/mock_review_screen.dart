@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/media/audio_media_adapter.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../models/mock_exam_models.dart';
 import '../providers/mock_exam_providers.dart';
 
@@ -27,26 +28,41 @@ class MockReviewScreen extends ConsumerStatefulWidget {
 class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
   _ReviewFilter _filter = _ReviewFilter.all;
   final Set<int> _savedQuestionIds = {};
+  String? _saveError;
 
   Future<void> _playSlice(MockReviewQuestion q) async {
-    if (q.audioUrl == null || q.audioUrl!.isEmpty) return;
+    final path = q.audioPath;
+    if (path == null || path.isEmpty) return;
     final audio = ref.read(audioMediaAdapterProvider);
     await audio.setAudioUrl(
-      q.audioUrl!,
-      clipStart:
-          q.audioStartMs != null ? Duration(milliseconds: q.audioStartMs!) : null,
-      clipEnd:
-          q.audioEndMs != null ? Duration(milliseconds: q.audioEndMs!) : null,
+      path,
+      clipStart: q.audioStartMs != null
+          ? Duration(milliseconds: q.audioStartMs!)
+          : null,
+      clipEnd: q.audioEndMs != null
+          ? Duration(milliseconds: q.audioEndMs!)
+          : null,
     );
     await audio.play();
   }
 
   Future<void> _saveQuestion(int questionId) async {
-    await ref.read(mockExamRepositoryProvider).saveQuestion(questionId);
-    if (!mounted) return;
-    setState(() {
-      _savedQuestionIds.add(questionId);
-    });
+    try {
+      await ref.read(mockExamRepositoryProvider).saveQuestion(questionId);
+      if (!mounted) return;
+      setState(() {
+        _savedQuestionIds.add(questionId);
+        _saveError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saveError = extractApiError(
+          e,
+          fallback: 'Could not save this question.',
+        );
+      });
+    }
   }
 
   @override
@@ -107,7 +123,7 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
           child: StateBlock(
             stamp: 'ERROR',
             title: 'UNABLE TO LOAD REVIEW',
-            description: err.toString(),
+            description: extractApiError(err, fallback: 'The answer review could not be loaded.'),
             action: PlacardButton(
               label: 'RETRY',
               onPress: () =>
@@ -118,8 +134,9 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
         data: (review) {
           final filtered = review.questions.where((q) {
             return switch (_filter) {
+              // A blank answer has no verdict, so it is not "wrong".
               _ReviewFilter.all => true,
-              _ReviewFilter.wrong => !q.isCorrect,
+              _ReviewFilter.wrong => q.isCorrect == false,
               _ReviewFilter.flagged => q.isFlagged,
             };
           }).toList();
@@ -149,6 +166,16 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
                   ],
                 ),
               ),
+              if (_saveError != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: PlacardAlert(
+                    key: const Key('review-save-error'),
+                    title: 'COULD NOT SAVE QUESTION',
+                    subtitle: _saveError!,
+                    variant: PlacardAlertVariant.danger,
+                  ),
+                ),
               Expanded(
                 child: filtered.isEmpty
                     ? const Padding(
@@ -166,17 +193,20 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
                         separatorBuilder: (_, _) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final q = filtered[index];
-                          final isSaved =
-                              _savedQuestionIds.contains(q.questionId);
+                          final isSaved = _savedQuestionIds.contains(
+                            q.questionId,
+                          );
                           return PlacardPanel(
-                            title: 'Q${q.index + 1} · ${q.skill}',
-                            trailing: q.isCorrect
-                                ? const PlacardBadge.success('CORRECT')
-                                : const PlacardBadge.danger('WRONG'),
+                            title: 'Q${q.displayOrder} · ${q.skillName}',
+                            trailing: switch (q.isCorrect) {
+                              true => const PlacardBadge.success('CORRECT'),
+                              false => const PlacardBadge.danger('WRONG'),
+                              null => const PlacardBadge.muted('NOT ANSWERED'),
+                            },
                             footer: Row(
                               children: [
-                                if (q.audioUrl != null &&
-                                    q.audioUrl!.isNotEmpty) ...[
+                                if (q.audioPath != null &&
+                                    q.audioPath!.isNotEmpty) ...[
                                   Expanded(
                                     child: PlacardButton(
                                       key: Key(
@@ -198,8 +228,8 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
                                     onPress: isSaved
                                         ? null
                                         : () => unawaited(
-                                              _saveQuestion(q.questionId),
-                                            ),
+                                            _saveQuestion(q.questionId),
+                                          ),
                                   ),
                                 ),
                               ],
@@ -208,17 +238,37 @@ class _MockReviewScreenState extends ConsumerState<MockReviewScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  q.prompt,
+                                  q.stem,
                                   style: SignageTypography.body(fontSize: 15),
                                 ),
+                                if (q.passage != null &&
+                                    q.passage!.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    q.passage!,
+                                    style: SignageTypography.body(
+                                      fontSize: 13,
+                                      color: SignageColors.inkMuted,
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 8),
                                 Text(
-                                  'YOURS: ${q.selectedOptionLabel ?? '-'} · CORRECT: ${q.correctOptionLabel ?? '-'}',
+                                  'YOURS: ${q.selectedOptionLabel ?? '—'} · '
+                                  'CORRECT: ${q.correctOptionLabel ?? '—'}',
                                   style: SignageTypography.data(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
+                                if (q.correctOptionText != null &&
+                                    q.correctOptionText!.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'CORRECT ANSWER: ${q.correctOptionText}',
+                                    style: SignageTypography.body(fontSize: 14),
+                                  ),
+                                ],
                                 if (q.wrongOptionRationale != null &&
                                     q.wrongOptionRationale!.isNotEmpty) ...[
                                   const SizedBox(height: 8),

@@ -51,6 +51,14 @@ links to its recorded, AI-graded speaking practice instead. Bounded to a FIFO re
 historical question data for weakness analysis and AI mentor insights.
 _Avoid_: Practice (unqualified), quiz
 
+**Question address**:
+The single handle a practice question is named by in every request that acts on it - submit an
+answer, ask for a hint, save it. A section question is addressed by its own row identifier; a pool
+item has no such row, so it is addressed by its pinned item version instead. The server computes the
+handle once and resolves either kind, so callers never choose. The row identifier alone is not the
+address: treating it as such addresses every pool question as zero.
+_Avoid_: Question id (when a pool item is meant), item version id (when the address is meant)
+
 **Attempt**:
 One learner's sitting of an exam, with a server-owned deadline, of any purpose.
 _Avoid_: Session, sitting

@@ -1,0 +1,612 @@
+{
+  "attemptId": 1004,
+  "examId": 1,
+  "examName": "ETS 2024 — Test 1",
+  "certId": 1,
+  "certCode": "TOEIC",
+  "certName": "TOEIC Listening & Reading",
+  "status": "graded",
+  "startedAt": "2026-11-13T15:44:31.4420798+00:00",
+  "submittedAt": "2026-11-13T16:00:07.8694473+00:00",
+  "durationSeconds": 936,
+  "totalScore": 10,
+  "bandCode": "below_A1",
+  "bandName": "Below A1",
+  "skillScores": [
+    {
+      "skillId": 1,
+      "skillCode": "LIST",
+      "skillName": "Listening",
+      "modality": "listening",
+      "rawScore": 0,
+      "scaledScore": 5,
+      "totalQuestions": 4
+    },
+    {
+      "skillId": 2,
+      "skillCode": "READ",
+      "skillName": "Reading",
+      "modality": "reading",
+      "rawScore": 0,
+      "scaledScore": 5,
+      "totalQuestions": 5
+    }
+  ],
+  "totalQuestions": 9,
+  "answeredCount": 0,
+  "correctCount": 0,
+  "incorrectCount": 0,
+  "blankCount": 9,
+  "flaggedCount": 0,
+  "questions": [
+    {
+      "questionId": 3,
+      "displayOrder": 1,
+      "totalQuestions": 9,
+      "sectionId": 1,
+      "sectionCode": "P1",
+      "sectionName": "Photographs",
+      "skillCode": "LIST",
+      "skillName": "Listening",
+      "modality": "listening",
+      "stem": "Look at the photograph and choose the statement that best describes what you see in the image.",
+      "imagePath": "/img/part1-sample.svg",
+      "imageAlt": "Office workers gathered around a whiteboard",
+      "audioPath": "/audio/toeic/test1-p1.mp3",
+      "audioStartMs": null,
+      "audioEndMs": null,
+      "transcript": null,
+      "passage": null,
+      "explanation": "Option C correctly describes the action: the woman is writing notes on the whiteboard.",
+      "options": [
+        {
+          "optionId": 31,
+          "label": "A",
+          "text": "They are leaving the meeting room.",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 32,
+          "label": "B",
+          "text": "A laptop is being repaired on the desk.",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 33,
+          "label": "C",
+          "text": "A woman is writing on a whiteboard.",
+          "isCorrect": true,
+          "rationale": null
+        },
+        {
+          "optionId": 34,
+          "label": "D",
+          "text": "Some chairs are stacked against the wall.",
+          "isCorrect": false,
+          "rationale": null
+        }
+      ],
+      "selectedOptionId": null,
+      "isCorrect": null,
+      "isFlagged": false
+    },
+    {
+      "questionId": 4,
+      "displayOrder": 2,
+      "totalQuestions": 9,
+      "sectionId": 2,
+      "sectionCode": "P2",
+      "sectionName": "Question-Response",
+      "skillCode": "LIST",
+      "skillName": "Listening",
+      "modality": "listening",
+      "stem": "Where did you leave the project folders?",
+      "imagePath": null,
+      "imageAlt": null,
+      "audioPath": "/audio/toeic/test1-p2.mp3",
+      "audioStartMs": null,
+      "audioEndMs": null,
+      "transcript": null,
+      "passage": null,
+      "explanation": "Option B directly answers where the folders are placed.",
+      "options": [
+        {
+          "optionId": 41,
+          "label": "A",
+          "text": "Yes, I folded them neatly.",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 42,
+          "label": "B",
+          "text": "On the conference room table.",
+          "isCorrect": true,
+          "rationale": null
+        },
+        {
+          "optionId": 43,
+          "label": "C",
+          "text": "No later than five o'clock.",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 44,
+          "label": "D",
+          "text": "",
+          "isCorrect": false,
+          "rationale": null
+        }
+      ],
+      "selectedOptionId": null,
+      "isCorrect": null,
+      "isFlagged": false
+    },
+    {
+      "questionId": 5,
+      "displayOrder": 3,
+      "totalQuestions": 9,
+      "sectionId": 3,
+      "sectionCode": "P3",
+      "sectionName": "Conversations",
+      "skillCode": "LIST",
+      "skillName": "Listening",
+      "modality": "listening",
+      "stem": "What deadline does the catering team have for the banquet?",
+      "imagePath": null,
+      "imageAlt": null,
+      "audioPath": "/audio/toeic/test1-p3.mp3",
+      "audioStartMs": null,
+      "audioEndMs": null,
+      "transcript": "Woman: Good morning, Mr. Evans. Did the catering team confirm the order for Friday's banquet?\nMan: Yes, they did, but they said they need our final head count by tomorrow noon.\nWoman: I will email the department heads right away to get their RSVPs.",
+      "passage": null,
+      "explanation": "The man says they need the final head count by tomorrow noon.",
+      "options": [
+        {
+          "optionId": 51,
+          "label": "A",
+          "text": "By the end of today",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 52,
+          "label": "B",
+          "text": "By tomorrow noon",
+          "isCorrect": true,
+          "rationale": null
+        },
+        {
+          "optionId": 53,
+          "label": "C",
+          "text": "On Friday morning",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 54,
+          "label": "D",
+          "text": "Next Monday afternoon",
+          "isCorrect": false,
+          "rationale": null
+        }
+      ],
+      "selectedOptionId": null,
+      "isCorrect": null,
+      "isFlagged": false
+    },
+    {
+      "questionId": 6,
+      "displayOrder": 4,
+      "totalQuestions": 9,
+      "sectionId": 4,
+      "sectionCode": "P4",
+      "sectionName": "Talks",
+      "skillCode": "LIST",
+      "skillName": "Listening",
+      "modality": "listening",
+      "stem": "What is the reason for the flight delay?",
+      "imagePath": null,
+      "imageAlt": null,
+      "audioPath": "/audio/toeic/test1-p4.mp3",
+      "audioStartMs": null,
+      "audioEndMs": null,
+      "transcript": "Attention all passengers on flight VN 214 to Tokyo. Due to routine aircraft inspection, boarding will be delayed by approximately twenty minutes. Please remain seated near Gate 12 until boarding begins.",
+      "passage": null,
+      "explanation": "The speaker explicitly announces that the delay is due to routine aircraft inspection.",
+      "options": [
+        {
+          "optionId": 61,
+          "label": "A",
+          "text": "Adverse weather conditions",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 62,
+          "label": "B",
+          "text": "Routine aircraft inspection",
+          "isCorrect": true,
+          "rationale": null
+        },
+        {
+          "optionId": 63,
+          "label": "C",
+          "text": "A gate reassignment",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 64,
+          "label": "D",
+          "text": "Crew scheduling changes",
+          "isCorrect": false,
+          "rationale": null
+        }
+      ],
+      "selectedOptionId": null,
+      "isCorrect": null,
+      "isFlagged": false
+    },
+    {
+      "questionId": 7,
+      "displayOrder": 5,
+      "totalQuestions": 9,
+      "sectionId": 5,
+      "sectionCode": "P5",
+      "sectionName": "Incomplete Sentences",
+      "skillCode": "READ",
+      "skillName": "Reading",
+      "modality": "reading",
+      "stem": "The regional manager ------- the quarterly figures before the board meeting.",
+      "imagePath": "/img/part1-sample.svg",
+      "imageAlt": "Office workers in a team meeting",
+      "audioPath": null,
+      "audioStartMs": null,
+      "audioEndMs": null,
+      "transcript": null,
+      "passage": null,
+      "explanation": "The sentence lacks a main verb. \"will review\" expresses future scheduled action.",
+      "options": [
+        {
+          "optionId": 71,
+          "label": "A",
+          "text": "review",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 72,
+          "label": "B",
+          "text": "reviewing",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 73,
+          "label": "C",
+          "text": "will review",
+          "isCorrect": true,
+          "rationale": null
+        },
+        {
+          "optionId": 74,
+          "label": "D",
+          "text": "to review",
+          "isCorrect": false,
+          "rationale": null
+        }
+      ],
+      "selectedOptionId": null,
+      "isCorrect": null,
+      "isFlagged": false
+    },
+    {
+      "questionId": 8,
+      "displayOrder": 6,
+      "totalQuestions": 9,
+      "sectionId": 5,
+      "sectionCode": "P5",
+      "sectionName": "Incomplete Sentences",
+      "skillCode": "READ",
+      "skillName": "Reading",
+      "modality": "reading",
+      "stem": "All client inquiries must be resolved ------- forty-eight hours of submission.",
+      "imagePath": "/img/part1-sample.svg",
+      "imageAlt": "Office workers in a team meeting",
+      "audioPath": null,
+      "audioStartMs": null,
+      "audioEndMs": null,
+      "transcript": null,
+      "passage": null,
+      "explanation": "\"within\" + time duration indicates action must take place before that span elapses.",
+      "options": [
+        {
+          "optionId": 81,
+          "label": "A",
+          "text": "in",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 82,
+          "label": "B",
+          "text": "during",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 83,
+          "label": "C",
+          "text": "along",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 84,
+          "label": "D",
+          "text": "within",
+          "isCorrect": true,
+          "rationale": null
+        }
+      ],
+      "selectedOptionId": null,
+      "isCorrect": null,
+      "isFlagged": false
+    },
+    {
+      "questionId": 9,
+      "displayOrder": 7,
+      "totalQuestions": 9,
+      "sectionId": 5,
+      "sectionCode": "P5",
+      "sectionName": "Incomplete Sentences",
+      "skillCode": "READ",
+      "skillName": "Reading",
+      "modality": "reading",
+      "stem": "The design studio provides ------- solutions for modern office spaces.",
+      "imagePath": "/img/part1-sample.svg",
+      "imageAlt": "Office workers in a team meeting",
+      "audioPath": null,
+      "audioStartMs": null,
+      "audioEndMs": null,
+      "transcript": null,
+      "passage": null,
+      "explanation": "\"innovative\" is the adjective modifying \"solutions\".",
+      "options": [
+        {
+          "optionId": 91,
+          "label": "A",
+          "text": "innovation",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 92,
+          "label": "B",
+          "text": "innovative",
+          "isCorrect": true,
+          "rationale": null
+        },
+        {
+          "optionId": 93,
+          "label": "C",
+          "text": "innovatively",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 94,
+          "label": "D",
+          "text": "innovate",
+          "isCorrect": false,
+          "rationale": null
+        }
+      ],
+      "selectedOptionId": null,
+      "isCorrect": null,
+      "isFlagged": false
+    },
+    {
+      "questionId": 10,
+      "displayOrder": 8,
+      "totalQuestions": 9,
+      "sectionId": 6,
+      "sectionCode": "P6",
+      "sectionName": "Text Completion",
+      "skillCode": "READ",
+      "skillName": "Reading",
+      "modality": "reading",
+      "stem": "Choose the word or phrase that best completes the sentence in the customer letter.",
+      "imagePath": null,
+      "imageAlt": null,
+      "audioPath": null,
+      "audioStartMs": null,
+      "audioEndMs": null,
+      "transcript": null,
+      "passage": "Dear Valued Customer, We ------- your recent order and your package is being prepared for shipment.",
+      "explanation": "The present perfect \"have received\" describes an action that occurred recently with present impact.",
+      "options": [
+        {
+          "optionId": 101,
+          "label": "A",
+          "text": "have received",
+          "isCorrect": true,
+          "rationale": null
+        },
+        {
+          "optionId": 102,
+          "label": "B",
+          "text": "will receive",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 103,
+          "label": "C",
+          "text": "are receiving",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 104,
+          "label": "D",
+          "text": "to receive",
+          "isCorrect": false,
+          "rationale": null
+        }
+      ],
+      "selectedOptionId": null,
+      "isCorrect": null,
+      "isFlagged": false
+    },
+    {
+      "questionId": 11,
+      "displayOrder": 9,
+      "totalQuestions": 9,
+      "sectionId": 7,
+      "sectionCode": "P7",
+      "sectionName": "Reading Comprehension",
+      "skillCode": "READ",
+      "skillName": "Reading",
+      "modality": "reading",
+      "stem": "What is the primary purpose of the memorandum?",
+      "imagePath": null,
+      "imageAlt": null,
+      "audioPath": null,
+      "audioStartMs": null,
+      "audioEndMs": null,
+      "transcript": null,
+      "passage": "MEMORANDUM\nTo: All Branch Employees\nFrom: Facilities Management\nDate: October 14\nSubject: Elevator Maintenance\nPlease note that the main elevators will undergo safety upgrades this Saturday between 8:00 A.M. and 2:00 P.M. The service elevator near the loading dock will remain accessible throughout this period.",
+      "explanation": "The memo announces temporary elevator upgrades and directs staff to an alternate service elevator.",
+      "options": [
+        {
+          "optionId": 111,
+          "label": "A",
+          "text": "To announce staff promotions",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 112,
+          "label": "B",
+          "text": "To notify employees of maintenance work",
+          "isCorrect": true,
+          "rationale": null
+        },
+        {
+          "optionId": 113,
+          "label": "C",
+          "text": "To schedule an annual fire drill",
+          "isCorrect": false,
+          "rationale": null
+        },
+        {
+          "optionId": 114,
+          "label": "D",
+          "text": "To request feedback on office amenities",
+          "isCorrect": false,
+          "rationale": null
+        }
+      ],
+      "selectedOptionId": null,
+      "isCorrect": null,
+      "isFlagged": false
+    }
+  ],
+  "navigator": [
+    {
+      "questionId": 3,
+      "displayOrder": 1,
+      "sectionId": 1,
+      "sectionCode": "P1",
+      "modality": "listening",
+      "isAnswered": false,
+      "isFlagged": false,
+      "isCorrect": null
+    },
+    {
+      "questionId": 4,
+      "displayOrder": 2,
+      "sectionId": 2,
+      "sectionCode": "P2",
+      "modality": "listening",
+      "isAnswered": false,
+      "isFlagged": false,
+      "isCorrect": null
+    },
+    {
+      "questionId": 5,
+      "displayOrder": 3,
+      "sectionId": 3,
+      "sectionCode": "P3",
+      "modality": "listening",
+      "isAnswered": false,
+      "isFlagged": false,
+      "isCorrect": null
+    },
+    {
+      "questionId": 6,
+      "displayOrder": 4,
+      "sectionId": 4,
+      "sectionCode": "P4",
+      "modality": "listening",
+      "isAnswered": false,
+      "isFlagged": false,
+      "isCorrect": null
+    },
+    {
+      "questionId": 7,
+      "displayOrder": 5,
+      "sectionId": 5,
+      "sectionCode": "P5",
+      "modality": "reading",
+      "isAnswered": false,
+      "isFlagged": false,
+      "isCorrect": null
+    },
+    {
+      "questionId": 8,
+      "displayOrder": 6,
+      "sectionId": 5,
+      "sectionCode": "P5",
+      "modality": "reading",
+      "isAnswered": false,
+      "isFlagged": false,
+      "isCorrect": null
+    },
+    {
+      "questionId": 9,
+      "displayOrder": 7,
+      "sectionId": 5,
+      "sectionCode": "P5",
+      "modality": "reading",
+      "isAnswered": false,
+      "isFlagged": false,
+      "isCorrect": null
+    },
+    {
+      "questionId": 10,
+      "displayOrder": 8,
+      "sectionId": 6,
+      "sectionCode": "P6",
+      "modality": "reading",
+      "isAnswered": false,
+      "isFlagged": false,
+      "isCorrect": null
+    },
+    {
+      "questionId": 11,
+      "displayOrder": 9,
+      "sectionId": 7,
+      "sectionCode": "P7",
+      "modality": "reading",
+      "isAnswered": false,
+      "isFlagged": false,
+      "isCorrect": null
+    }
+  ]
+}

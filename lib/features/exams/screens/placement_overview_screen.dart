@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/media/audio_media_adapter.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../../context/learner_context_provider.dart';
 import '../models/placement_models.dart';
 import '../providers/placement_providers.dart';
@@ -31,27 +32,14 @@ class _PlacementOverviewScreenState
   bool _starting = false;
   String? _errorMessage;
 
-  Future<void> _runAudioCheck(String sampleUrl) async {
-    final audio = ref.read(audioMediaAdapterProvider);
-    final url = sampleUrl.isNotEmpty
-        ? sampleUrl
-        : '/media/placement-listening-placeholder.wav';
-    try {
-      await audio.setAudioUrl(url);
-      await audio.play();
-      await audio.stop();
-      if (!mounted) return;
-      setState(() {
-        _audioChecked = true;
-        _errorMessage = null;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _audioChecked = false;
-        _errorMessage = 'Audio check failed: $e';
-      });
-    }
+  /// The pre-start sheet has no per-sitting sample URL, so this is the explicit
+  /// UI-only confirmation. It never touches a path that would 404 and never
+  /// blocks the start control on playback.
+  void _runAudioCheck() {
+    setState(() {
+      _audioChecked = true;
+      _errorMessage = null;
+    });
   }
 
   Future<void> _runMicCheck() async {
@@ -77,41 +65,61 @@ class _PlacementOverviewScreenState
     }
   }
 
-  Future<void> _startPlacement(PlacementOverview overview) async {
+  Future<void> _startPlacement(PlacementCatalog catalog) async {
+    final examId = catalog.startableExamId;
+    if (examId == null) return;
     setState(() {
       _starting = true;
       _errorMessage = null;
     });
     try {
-      final scope = overview.isFirstPlacement ? 'all_skills' : _selectedScope;
-      final placementId =
-          await ref.read(placementRepositoryProvider).startPlacement(
-                examId: overview.examId,
-                scope: scope,
-                reuseValidSkills: _reuseValidSkills,
-                idempotencyKey:
-                    'placement-${overview.examId}-${DateTime.now().millisecondsSinceEpoch}',
-              );
+      final scope = catalog.isRetake ? _selectedScope : 'all_skills';
+      final placementId = await ref
+          .read(placementRepositoryProvider)
+          .startPlacement(
+            examId: examId,
+            scope: scope,
+            reuseValidSkills: _reuseValidSkills,
+            idempotencyKey:
+                'placement-$examId-${DateTime.now().millisecondsSinceEpoch}',
+          );
       ref.invalidate(learnerContextProvider);
       if (!mounted) return;
-      context.go('/placement/take/$placementId');
+      // A freshly started sitting must pass the same device gate as a resumed
+      // one - the sitting itself answers `preflight_required` until it does.
+      context.go('/placement/take/$placementId/preflight');
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = extractApiError(
+          e,
+          fallback: 'The placement test could not be started.',
+        );
         _starting = false;
       });
     }
   }
 
   Future<void> _abandonInProgress(int placementId) async {
-    await ref.read(placementRepositoryProvider).abandon(placementId);
-    ref.invalidate(placementOverviewProvider);
+    try {
+      await ref.read(placementRepositoryProvider).abandon(placementId);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = extractApiError(
+          e,
+          fallback: 'The unfinished placement could not be cancelled.',
+        );
+      });
+      return;
+    }
+    if (!mounted) return;
+    ref.invalidate(placementCatalogProvider);
   }
 
   @override
   Widget build(BuildContext context) {
-    final overviewAsync = ref.watch(placementOverviewProvider);
+    final catalogAsync = ref.watch(placementCatalogProvider);
     final preflightAsync = ref.watch(placementPreflightProvider);
 
     return FScaffold(
@@ -161,20 +169,26 @@ class _PlacementOverviewScreenState
       ),
       child: Container(
         color: SignageColors.wall,
-        child: overviewAsync.when(
+        child: catalogAsync.when(
           loading: () => const Center(child: FCircularProgress()),
           error: (error, _) => ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              PlacardAlert(
-                variant: PlacardAlertVariant.danger,
-                title: 'Unable to load placement overview',
-                subtitle: error.toString(),
+              StateBlock(
+                stamp: 'ERROR',
+                title: 'UNABLE TO LOAD PLACEMENT',
+                description: extractApiError(error, fallback: 'The placement catalogue could not be loaded.'),
+                action: PlacardButton(
+                  label: 'RETRY',
+                  onPress: () => ref.invalidate(placementCatalogProvider),
+                ),
               ),
             ],
           ),
-          data: (overview) {
+          data: (catalog) {
             final preflight = preflightAsync.value;
+            final exam = catalog.exams.isEmpty ? null : catalog.exams.first;
+            final isFirstPlacement = !catalog.isRetake;
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -186,14 +200,16 @@ class _PlacementOverviewScreenState
                   ),
                   const SizedBox(height: 16),
                 ],
-                if (overview.inProgressPlacementId != null) ...[
+                if (catalog.activePlacementId != null) ...[
                   PlacardPanel(
                     title: 'IN-PROGRESS ATTEMPT',
+                    trailing: PlacardBadge.warning('UNFINISHED'),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'You have an unfinished placement attempt (#${overview.inProgressPlacementId}).',
+                          'You have an unfinished placement attempt '
+                          '(#${catalog.activePlacementId}).',
                           style: SignageTypography.body(fontSize: 14),
                         ),
                         const SizedBox(height: 12),
@@ -204,7 +220,7 @@ class _PlacementOverviewScreenState
                                 key: const Key('resume-placement-btn'),
                                 label: 'RESUME',
                                 onPress: () => context.go(
-                                  '/placement/take/${overview.inProgressPlacementId}?resume=1',
+                                  '/placement/take/${catalog.activePlacementId}/preflight',
                                 ),
                               ),
                             ),
@@ -215,7 +231,7 @@ class _PlacementOverviewScreenState
                                 label: 'ABANDON',
                                 variant: PlacardButtonVariant.destructive,
                                 onPress: () => _abandonInProgress(
-                                  overview.inProgressPlacementId!,
+                                  catalog.activePlacementId!,
                                 ),
                               ),
                             ),
@@ -227,50 +243,72 @@ class _PlacementOverviewScreenState
                   const SizedBox(height: 16),
                 ],
                 PlacardPanel(
-                  title: overview.certificateCode.isEmpty
+                  title: catalog.certificateCode.isEmpty
                       ? 'PLACEMENT OVERVIEW'
-                      : '${overview.certificateCode} PLACEMENT',
-                  trailing: overview.isFirstPlacement
+                      : '${catalog.certificateCode} PLACEMENT',
+                  trailing: isFirstPlacement
                       ? const PlacardBadge.success('FREE FIRST PLACEMENT')
                       : const PlacardBadge.warning('PAID RETAKE'),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        overview.examTitle,
-                        style: SignageTypography.condensedSentence(fontSize: 20),
+                        exam?.name ?? 'NO PLACEMENT EXAM AVAILABLE',
+                        style: SignageTypography.condensedSentence(
+                          fontSize: 20,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        overview.isFirstPlacement
+                        isFirstPlacement
                             ? '0 CREDITS — First diagnostic placement per certificate is free.'
-                            : 'Select a retake scope below. Available balance: ${overview.creditBalance} CREDITS.',
+                            : 'Select a retake scope below.',
                         style: SignageTypography.body(
                           fontSize: 14,
                           color: SignageColors.inkMuted,
                         ),
                       ),
-                      if (overview.latestPlacementId != null) ...[
+                      if (catalog.currentTotalScore != null) ...[
                         const SizedBox(height: 12),
-                        PlacardButton(
-                          label:
-                              'VIEW LATEST RESULT (${overview.latestBand ?? '-'})',
-                          variant: PlacardButtonVariant.secondary,
-                          onPress: () => context.push(
-                            '/placement/result/${overview.latestPlacementId}',
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'CURRENT BAND ${catalog.currentBandCode ?? '-'}',
+                                style: SignageTypography.label(fontSize: 12),
+                              ),
+                            ),
+                            Text(
+                              '${catalog.currentTotalScore}',
+                              style: SignageTypography.data(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ],
                   ),
                 ),
-                if (!overview.isFirstPlacement) ...[
+                if (!isFirstPlacement) ...[
                   const SizedBox(height: 16),
                   PlacardPanel(
                     title: 'RETAKE SCOPE',
                     child: Column(
                       children: [
-                        for (final option in overview.scopes) ...[
+                        for (final option in [
+                          PlacementScopeOption(
+                            scope: 'all_skills',
+                            label: 'All 4 Skills',
+                            credits: catalog.allSkillsRetakeCredits,
+                          ),
+                          PlacementScopeOption(
+                            scope: 'listening_and_reading',
+                            label: 'Listening & Reading',
+                            credits: catalog.listeningAndReadingRetakeCredits,
+                          ),
+                        ]) ...[
                           FTappable(
                             key: Key('scope-option-${option.scope}'),
                             onPress: () =>
@@ -335,11 +373,13 @@ class _PlacementOverviewScreenState
                               children: [
                                 Expanded(
                                   child: Text(
-                                    item.skill.toUpperCase(),
-                                    style: SignageTypography.label(fontSize: 12),
+                                    item.skillName.toUpperCase(),
+                                    style: SignageTypography.label(
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ),
-                                PlacardBadge.info(item.band),
+                                PlacardBadge.info(item.levelCode!),
                               ],
                             ),
                           ),
@@ -383,13 +423,14 @@ class _PlacementOverviewScreenState
                       const SizedBox(height: 8),
                       PlacardButton(
                         key: const Key('preflight-audio-check-btn'),
-                        label: 'TEST AUDIO OUTPUT',
+                        label: _audioChecked
+                            ? 'CONFIRMED'
+                            : 'CONFIRM AUDIO OUTPUT WORKS',
                         variant: PlacardButtonVariant.secondary,
-                        onPress: () =>
-                            _runAudioCheck(preflight?.audioSampleUrl ?? ''),
+                        onPress: _runAudioCheck,
                       ),
                       if ((preflight?.requiresMicrophone ?? true) &&
-                          (overview.isFirstPlacement ||
+                          (isFirstPlacement ||
                               _selectedScope == 'all_skills')) ...[
                         const Divider(
                           height: 24,
@@ -407,13 +448,13 @@ class _PlacementOverviewScreenState
                               label: _micChecked
                                   ? 'READY'
                                   : (_micGranted == false
-                                      ? 'DENIED'
-                                      : 'NOT TESTED'),
+                                        ? 'DENIED'
+                                        : 'NOT TESTED'),
                               variant: _micChecked
                                   ? PlacardBadgeVariant.success
                                   : (_micGranted == false
-                                      ? PlacardBadgeVariant.danger
-                                      : PlacardBadgeVariant.muted),
+                                        ? PlacardBadgeVariant.danger
+                                        : PlacardBadgeVariant.muted),
                             ),
                           ],
                         ),
@@ -429,23 +470,22 @@ class _PlacementOverviewScreenState
                   ),
                 ),
                 const SizedBox(height: 20),
-                if (overview.examId <= 0) ...[
+                if (exam == null) ...[
                   PlacardAlert(
                     variant: PlacardAlertVariant.warning,
                     title: 'NO PLACEMENT EXAM AVAILABLE',
                     subtitle:
-                        'No placement exam is currently configured for ${overview.certificateCode.isEmpty ? 'this certificate' : overview.certificateCode}. Switch certificate in ACCOUNT to take a placement test.',
+                        'No placement exam is currently published for ${catalog.certificateCode.isEmpty ? 'this certificate' : catalog.certificateCode}. Switch certificate in ACCOUNT to take a placement test.',
                   ),
                   const SizedBox(height: 12),
                 ],
                 PlacardButton(
                   key: const Key('start-placement-btn'),
-                  label: overview.isFirstPlacement
+                  label: isFirstPlacement
                       ? 'START FREE PLACEMENT'
                       : 'START PLACEMENT RETAKE',
                   isLoading: _starting,
-                  onPress:
-                      overview.examId > 0 ? () => _startPlacement(overview) : null,
+                  onPress: exam != null ? () => _startPlacement(catalog) : null,
                 ),
               ],
             );

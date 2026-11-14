@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 
 import '../models/placement_models.dart';
+import '../models/preflight_models.dart';
 
 /// Repository for `/api/learner/placement*` endpoints.
 class PlacementRepository {
@@ -11,27 +12,45 @@ class PlacementRepository {
 
   final Dio _dio;
 
-  Future<PlacementOverview> fetchOverview() async {
-    final response =
-        await _dio.get<Map<String, dynamic>>('/api/learner/placement');
-    return PlacementOverview.fromJson(
+  Future<PlacementCatalog> fetchCatalog() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/learner/placement',
+    );
+    return PlacementCatalog.fromJson(
       response.data ?? const <String, dynamic>{},
     );
   }
 
   Future<PlacementPreflight> fetchPreflight() async {
-    final response = await _dio
-        .get<Map<String, dynamic>>('/api/learner/placement/preflight');
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/learner/placement/preflight',
+    );
     return PlacementPreflight.fromJson(
       response.data ?? const <String, dynamic>{},
     );
   }
 
-  Future<PlacementPreflight> fetchAttemptPreflight(int placementId) async {
+  /// `GET /api/learner/placement/take/{id}/preflight` — the device gate's facts.
+  ///
+  /// Distinct from [fetchPreflight]: that one is the pre-start capability view.
+  Future<PreflightStatus> fetchPreflightStatus(int placementId) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/learner/placement/take/$placementId/preflight',
     );
-    return PlacementPreflight.fromJson(
+    return PreflightStatus.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
+  }
+
+  /// `POST /api/learner/attempts/{attemptId}/preflight/verify`.
+  ///
+  /// A placement has no verify route of its own; the sitting it adapts does, so
+  /// the status payload's own `attemptId` is what this is called with.
+  Future<PreflightStatus> verifyPreflight(int attemptId) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/learner/attempts/$attemptId/preflight/verify',
+    );
+    return PreflightStatus.fromJson(
       response.data ?? const <String, dynamic>{},
     );
   }
@@ -65,15 +84,6 @@ class PlacementRepository {
     );
   }
 
-  Future<PlacementSitting> resumeSitting(int placementId) async {
-    final response = await _dio.get<Map<String, dynamic>>(
-      '/api/learner/placement/take/$placementId/resume',
-    );
-    return PlacementSitting.fromJson(
-      response.data ?? const <String, dynamic>{},
-    );
-  }
-
   Future<void> saveAnswer(
     int placementId,
     int questionId, {
@@ -100,10 +110,7 @@ class PlacementRepository {
   }) async {
     await _dio.post<void>(
       '/api/learner/placement/take/$placementId/draft',
-      data: {
-        'questionId': questionId,
-        'responseText': responseText,
-      },
+      data: {'questionId': questionId, 'responseText': responseText},
     );
   }
 
@@ -150,10 +157,7 @@ class PlacementRepository {
     await _dio.post<void>('/api/learner/placement/take/$placementId/abandon');
   }
 
-  Future<void> submit(
-    int placementId, {
-    bool isAutoSubmit = false,
-  }) async {
+  Future<void> submit(int placementId, {bool isAutoSubmit = false}) async {
     await _dio.post<void>(
       '/api/learner/placement/take/$placementId/submit',
       data: {'isAutoSubmit': isAutoSubmit},
@@ -164,18 +168,14 @@ class PlacementRepository {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/learner/placement/result/$placementId',
     );
-    return PlacementResult.fromJson(
-      response.data ?? const <String, dynamic>{},
-    );
+    return PlacementResult.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   Future<PlacementResult> fetchResultStatus(int placementId) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/learner/placement/result/$placementId/status',
     );
-    return PlacementResult.fromJson(
-      response.data ?? const <String, dynamic>{},
-    );
+    return PlacementResult.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   Future<void> retryGrading(int placementId) async {

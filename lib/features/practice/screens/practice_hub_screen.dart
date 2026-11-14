@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../models/practice_models.dart';
 import '../providers/practice_providers.dart';
 import '../widgets/saved_questions_view.dart';
@@ -23,23 +24,35 @@ class _PracticeHubScreenState extends ConsumerState<PracticeHubScreen> {
   _PracticeSubTab _subTab = _PracticeSubTab.drills;
   bool _starting = false;
 
+  /// The backend's own refusal for the last start attempt.
+  String? _startError;
+
   Future<void> _startSession({int? sectionId, int? topicId, String? cefrLevelCode}) async {
     if (_starting) return;
-    setState(() => _starting = true);
+    setState(() {
+      _starting = true;
+      _startError = null;
+    });
     try {
-      final source = ref.read(practiceQuestionSourceProvider);
-      final feedback = ref.read(practiceFeedbackModeProvider);
       final sessionId = await ref.read(practiceRepositoryProvider).startSession(
             sectionId: sectionId,
             topicId: topicId,
             cefrLevelCode: cefrLevelCode,
-            questionSource: source,
-            feedbackMode: feedback,
           );
       if (!mounted) return;
       if (sessionId > 0) {
         await context.push('/practice/sessions/$sessionId');
       }
+    } catch (e) {
+      if (!mounted) return;
+      // `extractApiError` prefers the backend's `detail`, which is where the
+      // actionable sentence lives; `title` is only a short label.
+      setState(() {
+        _startError = extractApiError(
+          e,
+          fallback: 'This drill could not be started.',
+        );
+      });
     } finally {
       if (mounted) {
         setState(() => _starting = false);
@@ -60,6 +73,8 @@ class _PracticeHubScreenState extends ConsumerState<PracticeHubScreen> {
           child: switch (_subTab) {
             _PracticeSubTab.drills => _DrillsView(
                 starting: _starting,
+                startError: _startError,
+                onDismissError: () => setState(() => _startError = null),
                 onStartSection: (id) => _startSession(sectionId: id),
                 onStartCell: (topicId, level) =>
                     _startSession(topicId: topicId, cefrLevelCode: level),
@@ -135,6 +150,8 @@ class _SubTabBar extends StatelessWidget {
 class _DrillsView extends ConsumerWidget {
   const _DrillsView({
     required this.starting,
+    required this.startError,
+    required this.onDismissError,
     required this.onStartSection,
     required this.onStartCell,
     required this.onResumeSession,
@@ -142,6 +159,8 @@ class _DrillsView extends ConsumerWidget {
   });
 
   final bool starting;
+  final String? startError;
+  final VoidCallback onDismissError;
   final ValueChanged<int> onStartSection;
   final void Function(int topicId, String cefrLevelCode) onStartCell;
   final ValueChanged<int> onResumeSession;
@@ -150,9 +169,6 @@ class _DrillsView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final catalogAsync = ref.watch(practiceCatalogProvider);
-    final matrixAsync = ref.watch(practiceMatrixProvider);
-    final selectedSource = ref.watch(practiceQuestionSourceProvider);
-    final selectedFeedback = ref.watch(practiceFeedbackModeProvider);
 
     return catalogAsync.when(
       loading: () => const Center(child: FCircularProgress()),
@@ -161,7 +177,10 @@ class _DrillsView extends ConsumerWidget {
         child: StateBlock(
           stamp: 'ERROR',
           title: 'Could not load practice catalog',
-          description: '$err',
+          description: extractApiError(
+            err,
+            fallback: 'The practice catalogue could not be loaded.',
+          ),
           action: PlacardButton(
             label: 'RETRY',
             onPress: () => ref.invalidate(practiceCatalogProvider),
@@ -180,92 +199,115 @@ class _DrillsView extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
             ],
-            PlacardPanel(
-              title: 'SESSION CONFIGURATION',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('QUESTION SOURCE', style: SignageTypography.label()),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      for (final src in PracticeQuestionSource.values) ...[
-                        Expanded(
-                          child: _SelectionChip(
-                            label: src.label,
-                            selected: selectedSource == src,
-                            onPress: () => ref
-                                .read(practiceQuestionSourceProvider.notifier)
-                                .select(src),
-                          ),
-                        ),
-                        if (src != PracticeQuestionSource.values.last)
-                          const SizedBox(width: 8),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text('FEEDBACK MODE', style: SignageTypography.label()),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      for (final mode in PracticeFeedbackMode.values) ...[
-                        Expanded(
-                          child: _SelectionChip(
-                            label: mode.label,
-                            selected: selectedFeedback == mode,
-                            onPress: () => ref
-                                .read(practiceFeedbackModeProvider.notifier)
-                                .select(mode),
-                          ),
-                        ),
-                        if (mode != PracticeFeedbackMode.values.last)
-                          const SizedBox(width: 8),
-                      ],
-                    ],
-                  ),
-                ],
+            if (startError != null) ...[
+              PlacardAlert(
+                title: 'Drill not started',
+                subtitle: startError!,
+                variant: PlacardAlertVariant.danger,
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 8),
+              PlacardButton(
+                label: 'DISMISS',
+                variant: PlacardButtonVariant.secondary,
+                onPress: onDismissError,
+              ),
+              const SizedBox(height: 16),
+            ],
             Text(
               '${catalog.sectionNoun.toUpperCase()} CATALOG',
               style: SignageTypography.title().copyWith(fontSize: 18),
             ),
             const SizedBox(height: 8),
-            for (final section in catalog.sections) ...[
-              _SectionCard(
-                section: section,
-                starting: starting,
-                onStart: () => onStartSection(section.sectionId),
-                onOpenSpeaking: onOpenSpeaking,
-              ),
-              const SizedBox(height: 12),
-            ],
+            if (catalog.skillGroups.isEmpty)
+              const StateBlock(
+                stamp: 'EMPTY',
+                title: 'No sections for this certificate',
+                description:
+                    'This certificate has no drillable sections yet.',
+              )
+            else
+              for (final group in catalog.skillGroups) ...[
+                _SkillGroupHeader(
+                  skillName: group.skillName,
+                  sectionNoun: catalog.sectionNoun,
+                  sectionCount: group.sections.length,
+                ),
+                const SizedBox(height: 8),
+                for (final section in group.sections) ...[
+                  _SectionCard(
+                    section: section,
+                    starting: starting,
+                    onStart: () => onStartSection(section.sectionId),
+                    onOpenSpeaking: onOpenSpeaking,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                const SizedBox(height: 4),
+              ],
             const SizedBox(height: 8),
             Text(
-              'TOPIC × CEFR MATRIX',
+              'TOPIC × LEVEL MATRIX',
               style: SignageTypography.title().copyWith(fontSize: 18),
             ),
             const SizedBox(height: 8),
-            matrixAsync.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.all(16),
-                child: Center(child: FCircularProgress()),
-              ),
-              error: (err, _) => PlacardAlert(
-                title: 'Matrix unavailable',
-                subtitle: '$err',
-                variant: PlacardAlertVariant.warning,
-              ),
-              data: (matrix) => _MatrixTable(
-                matrix: matrix,
-                onSelectCell: onStartCell,
-              ),
-            ),
+            ref.watch(practiceGridProvider).when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: FCircularProgress()),
+                  ),
+                  error: (err, _) => StateBlock(
+                    stamp: 'ERROR',
+                    title: 'Could not load the practice grid',
+                    description: extractApiError(
+                      err,
+                      fallback: 'The topic and level grid could not be loaded.',
+                    ),
+                    action: PlacardButton(
+                      label: 'RETRY',
+                      onPress: () => ref.invalidate(practiceGridProvider),
+                    ),
+                  ),
+                  data: (grid) => _MatrixTable(
+                    grid: grid,
+                    starting: starting,
+                    onSelectCell: onStartCell,
+                  ),
+                ),
           ],
         );
       },
+    );
+  }
+}
+
+class _SkillGroupHeader extends StatelessWidget {
+  const _SkillGroupHeader({
+    required this.skillName,
+    required this.sectionNoun,
+    required this.sectionCount,
+  });
+
+  final String skillName;
+  final String sectionNoun;
+  final int sectionCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          skillName.toUpperCase(),
+          style: SignageTypography.label(fontSize: 13),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$sectionCount ${sectionNoun.toUpperCase()}${sectionCount == 1 ? '' : 'S'}',
+          style: SignageTypography.data(
+            fontSize: 12,
+            color: SignageColors.inkMuted,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -276,7 +318,7 @@ class _UnfinishedSessionBanner extends StatelessWidget {
     required this.onResume,
   });
 
-  final UnfinishedPracticeSession session;
+  final PracticeSession session;
   final VoidCallback onResume;
 
   @override
@@ -288,12 +330,13 @@ class _UnfinishedSessionBanner extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            session.title,
+            session.sectionName,
             style: SignageTypography.condensedSentence(fontSize: 16),
           ),
           const SizedBox(height: 4),
           Text(
-            '${session.answeredCount}/${session.totalCount} ANSWERED',
+            '${session.sectionCode} · ${session.questionCount} QUESTIONS'
+            '${session.correctCount > 0 ? ' · ${session.correctCount} CORRECT' : ''}',
             style: SignageTypography.data(
               fontSize: 13,
               color: SignageColors.inkMuted,
@@ -311,44 +354,6 @@ class _UnfinishedSessionBanner extends StatelessWidget {
   }
 }
 
-class _SelectionChip extends StatelessWidget {
-  const _SelectionChip({
-    required this.label,
-    required this.selected,
-    required this.onPress,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onPress;
-
-  @override
-  Widget build(BuildContext context) {
-    return FTappable(
-      onPress: onPress,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: selected ? SignageColors.ink : SignageColors.paper,
-          border: Border.all(color: SignageColors.ink, width: 2),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-          child: Center(
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: SignageTypography.label(
-                fontSize: 11,
-                color: selected ? SignageColors.paper : SignageColors.ink,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _SectionCard extends StatelessWidget {
   const _SectionCard({
     required this.section,
@@ -357,13 +362,14 @@ class _SectionCard extends StatelessWidget {
     required this.onOpenSpeaking,
   });
 
-  final PracticeSectionItem section;
+  final PracticeSection section;
   final bool starting;
   final VoidCallback onStart;
   final VoidCallback onOpenSpeaking;
 
   @override
   Widget build(BuildContext context) {
+    final cooldown = section.categoriesInCooldown > 0;
     return PlacardPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,7 +382,7 @@ class _SectionCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      section.title,
+                      '${section.code} · ${section.name}',
                       style: SignageTypography.condensedSentence(fontSize: 16),
                     ),
                     const SizedBox(height: 4),
@@ -384,17 +390,24 @@ class _SectionCard extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 4,
                       children: [
-                        PlacardBadge.muted(section.skill.toUpperCase()),
-                        if (section.cooldownActive)
-                          const PlacardBadge.warning('COOLDOWN'),
+                        PlacardBadge.muted(
+                          '${section.availableQuestionCount}/'
+                          '${section.expectedQuestionCount} QUESTIONS',
+                        ),
+                        if (cooldown)
+                          PlacardBadge.warning(
+                            '${section.categoriesInCooldown} RESTING',
+                          ),
+                        if (!section.isSpeaking && !section.isAvailable)
+                          const PlacardBadge.muted('NO QUESTIONS'),
                       ],
                     ),
                   ],
                 ),
               ),
-              if (section.accuracyPercent != null)
+              if (section.accuracyPercentage != null)
                 Text(
-                  '${section.accuracyPercent}%',
+                  '${section.accuracyPercentage}%',
                   style: SignageTypography.data(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -414,9 +427,9 @@ class _SectionCard extends StatelessWidget {
           else
             PlacardButton(
               key: Key('start-section-${section.sectionId}'),
-              label: 'START DRILL',
+              label: section.isAvailable ? 'START DRILL' : 'NO QUESTIONS',
               isLoading: starting,
-              onPress: onStart,
+              onPress: section.isAvailable ? onStart : null,
             ),
         ],
       ),
@@ -426,20 +439,23 @@ class _SectionCard extends StatelessWidget {
 
 class _MatrixTable extends StatelessWidget {
   const _MatrixTable({
-    required this.matrix,
+    required this.grid,
+    required this.starting,
     required this.onSelectCell,
   });
 
-  final PracticeMatrix matrix;
+  final PracticeGrid grid;
+  final bool starting;
   final void Function(int topicId, String cefrLevelCode) onSelectCell;
 
   @override
   Widget build(BuildContext context) {
-    if (matrix.topics.isEmpty || matrix.levels.isEmpty) {
+    final matrix = grid.matrix;
+    if (matrix.isEmpty) {
       return const StateBlock(
         stamp: 'EMPTY',
         title: 'No matrix cells available',
-        description: 'No topic and CEFR level cells for this certificate.',
+        description: 'No topic and level cells for this certificate.',
       );
     }
 
@@ -500,10 +516,9 @@ class _MatrixTable extends StatelessWidget {
                   for (final level in matrix.levels)
                     Expanded(
                       child: _MatrixCellTile(
-                        cell: topic.cells.cast<PracticeMatrixCell?>().firstWhere(
-                              (c) => c?.cefrLevelCode == level,
-                              orElse: () => null,
-                            ),
+                        cell: topic.cellAt(level),
+                        lock: grid.lockFor(topic.topicId, level),
+                        starting: starting,
                         onTap: () => onSelectCell(topic.topicId, level),
                       ),
                     ),
@@ -517,36 +532,67 @@ class _MatrixTable extends StatelessWidget {
 }
 
 class _MatrixCellTile extends StatelessWidget {
-  const _MatrixCellTile({required this.cell, required this.onTap});
+  const _MatrixCellTile({
+    required this.cell,
+    required this.lock,
+    required this.starting,
+    required this.onTap,
+  });
 
   final PracticeMatrixCell? cell;
+  final PracticeFreeDrillState? lock;
+  final bool starting;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final available = cell != null && cell!.questionCount > 0;
+    final locked = lock != null && !lock!.isUnlocked;
+    final available = cell != null && !cell!.isRestingNow && !locked;
+    final label = switch (cell?.mastery) {
+      null => '—',
+      PracticeMastery.untested => 'NEW',
+      PracticeMastery.learning => 'LEARN',
+      PracticeMastery.reviewing => 'REVIEW',
+      PracticeMastery.mastered => 'MSTR',
+    };
+
     return FTappable(
+      key: cell == null ? null : Key('matrix-cell-${cell!.topicId}-${cell!.levelCode}'),
       onPress: available ? onTap : null,
       child: DecoratedBox(
-        decoration: const BoxDecoration(
-          border: Border(
+        decoration: BoxDecoration(
+          color: available ? SignageColors.paper : SignageColors.wall,
+          border: const Border(
             left: BorderSide(color: SignageColors.lineSoft, width: 1),
           ),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
           child: Center(
-            child: Text(
-              available
-                  ? (cell!.accuracyPercent != null
-                      ? '${cell!.accuracyPercent}%'
-                      : '${cell!.questionCount}Q')
-                  : '—',
-              style: SignageTypography.data(
-                fontSize: 12,
-                fontWeight: available ? FontWeight.w700 : FontWeight.w400,
-                color: available ? SignageColors.signBlue : SignageColors.inkMuted,
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: SignageTypography.data(
+                    fontSize: 11,
+                    fontWeight: available ? FontWeight.w700 : FontWeight.w400,
+                    color: available
+                        ? SignageColors.signBlue
+                        : SignageColors.inkMuted,
+                  ),
+                ),
+                if (cell != null && !available) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    cell!.isRestingNow ? 'REST' : 'LOCKED',
+                    style: SignageTypography.label(
+                      fontSize: 9,
+                      color: SignageColors.inkMuted,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),

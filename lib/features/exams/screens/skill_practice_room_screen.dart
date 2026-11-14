@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/media/audio_media_adapter.dart';
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../models/placement_models.dart';
 import '../models/skill_practice_models.dart';
 import '../providers/skill_practice_providers.dart';
@@ -114,7 +115,8 @@ class _SkillPracticeRoomScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        
+          _error = extractApiError(e, fallback: 'The skill practice request failed.');
         _loading = false;
       });
     }
@@ -150,7 +152,8 @@ class _SkillPracticeRoomScreenState
         if (!mounted) return;
         setState(() {
           _uploadingAudio = false;
-          _error = e.toString();
+          
+          _error = extractApiError(e, fallback: 'The skill practice request failed.');
         });
       }
     } else {
@@ -214,7 +217,8 @@ class _SkillPracticeRoomScreenState
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _error = e.toString();
+        
+          _error = extractApiError(e, fallback: 'The skill practice request failed.');
       });
     }
   }

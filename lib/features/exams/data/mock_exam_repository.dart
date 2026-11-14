@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 
 import '../models/mock_exam_models.dart';
 import '../models/placement_models.dart';
+import '../models/preflight_models.dart';
 
 /// Repository for `/api/learner/exams*` and `/api/learner/attempts*`.
 class MockExamRepository {
@@ -12,38 +13,18 @@ class MockExamRepository {
 
   final Dio _dio;
 
-  Future<List<MockExamSummary>> fetchMockExams() async {
-    final response =
-        await _dio.get<dynamic>('/api/learner/exams');
-    final data = response.data;
-    final list = data is List
-        ? data
-        : (data is Map<String, dynamic>
-            ? (data['exams'] as List<dynamic>? ??
-                data['items'] as List<dynamic>? ??
-                const [])
-            : const []);
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(MockExamSummary.fromJson)
-        .toList();
+  Future<MockExamCatalogue> fetchCatalogue() async {
+    final response = await _dio.get<Map<String, dynamic>>('/api/learner/exams');
+    return MockExamCatalogue.fromJson(
+      response.data ?? const <String, dynamic>{},
+    );
   }
 
-  Future<List<ExamHistoryItem>> fetchExamHistory() async {
-    final response =
-        await _dio.get<dynamic>('/api/learner/exams/history');
-    final data = response.data;
-    final list = data is List
-        ? data
-        : (data is Map<String, dynamic>
-            ? (data['attempts'] as List<dynamic>? ??
-                data['items'] as List<dynamic>? ??
-                const [])
-            : const []);
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(ExamHistoryItem.fromJson)
-        .toList();
+  Future<ExamHistory> fetchExamHistory() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/learner/exams/history',
+    );
+    return ExamHistory.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   Future<MockExamInstructions> fetchInstructions(int examId) async {
@@ -65,29 +46,25 @@ class MockExamRepository {
         0;
   }
 
-  Future<int> resumeByAuthorizationCode(String authorizationCode) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      '/api/learner/attempts/resume',
-      data: {'authorizationCode': authorizationCode},
-    );
-    final data = response.data ?? const <String, dynamic>{};
-    return (data['attemptId'] as num?)?.toInt() ??
-        (data['id'] as num?)?.toInt() ??
-        0;
-  }
-
-  Future<MockPreflight> fetchPreflight(int attemptId) async {
+  /// `GET /api/learner/attempts/{id}/preflight` — the device gate's facts.
+  Future<PreflightStatus> fetchPreflightStatus(int attemptId) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/learner/attempts/$attemptId/preflight',
     );
-    return MockPreflight.fromJson(
+    return PreflightStatus.fromJson(
       response.data ?? const <String, dynamic>{},
     );
   }
 
-  Future<void> verifyPreflight(int attemptId) async {
-    await _dio.post<void>(
+  /// `POST /api/learner/attempts/{id}/preflight/verify` — opens the sitting.
+  ///
+  /// Answers 200 with the same [PreflightStatus], now `isVerified: true`.
+  Future<PreflightStatus> verifyPreflight(int attemptId) async {
+    final response = await _dio.post<Map<String, dynamic>>(
       '/api/learner/attempts/$attemptId/preflight/verify',
+    );
+    return PreflightStatus.fromJson(
+      response.data ?? const <String, dynamic>{},
     );
   }
 
@@ -127,10 +104,7 @@ class MockExamRepository {
   }) async {
     await _dio.post<void>(
       '/api/learner/attempts/$attemptId/draft',
-      data: {
-        'questionId': questionId,
-        'responseText': responseText,
-      },
+      data: {'questionId': questionId, 'responseText': responseText},
     );
   }
 
@@ -240,18 +214,14 @@ class MockExamRepository {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/learner/insights/exam/$attemptId',
     );
-    return ExamAiInsight.fromJson(
-      response.data ?? const <String, dynamic>{},
-    );
+    return ExamAiInsight.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   Future<ExamAiInsight> retryExamInsight(int attemptId) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/api/learner/insights/exam/$attemptId/retry',
     );
-    return ExamAiInsight.fromJson(
-      response.data ?? const <String, dynamic>{},
-    );
+    return ExamAiInsight.fromJson(response.data ?? const <String, dynamic>{});
   }
 
   Future<MockAttemptReview> fetchReview(int attemptId) async {

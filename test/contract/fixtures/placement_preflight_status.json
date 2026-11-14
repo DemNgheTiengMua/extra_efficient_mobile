@@ -1,0 +1,19 @@
+{
+  "attemptId": 3,
+  "examId": 2,
+  "examName": "TOEIC Placement Test — Diagnostic",
+  "certCode": "TOEIC",
+  "certName": "TOEIC Listening & Reading",
+  "durationMinutes": 45,
+  "requiresPreflight": true,
+  "requiresAudio": true,
+  "requiresMicrophone": true,
+  "isVerified": true,
+  "verifiedAt": "2026-11-13T10:33:17.4484889+00:00",
+  "audioUrls": [
+    "/audio/toeic/placement-p1.mp3",
+    "/audio/toeic/placement-p2.mp3",
+    "/audio/toeic/test1-p3.mp3",
+    "/audio/toeic/test1-p4.mp3"
+  ]
+}

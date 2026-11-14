@@ -4,6 +4,7 @@ import 'package:forui/forui.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../../context/learner_context_provider.dart';
 import '../mentor_models.dart';
 import '../mentor_providers.dart';
@@ -165,7 +166,7 @@ class _MentorRow extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  mentor.name,
+                  mentor.displayName,
                   style: SignageTypography.condensedSentence(fontSize: 17),
                 ),
               ),
@@ -192,8 +193,7 @@ class _MentorRow extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '${mentor.sessionLengthMinutes} MIN · ${mentor.priceCredits} CREDITS'
-                  '${mentor.averageRating != null ? ' · ★ ${mentor.averageRating!.toStringAsFixed(1)}' : ''}',
+                  mentor.summaryLabel,
                   style: SignageTypography.data(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -229,20 +229,53 @@ class _BookingRow extends ConsumerStatefulWidget {
 
 class _BookingRowState extends ConsumerState<_BookingRow> {
   bool _isCancelling = false;
+  String? _launchError;
+  String? _cancelError;
+  String? _cancelNotice;
+
+  Future<void> _joinMeeting(String url) async {
+    final launched =
+        await ref.read(urlLauncherAdapterProvider).launchExternalUrl(url);
+    if (!mounted) return;
+    setState(() {
+      _launchError = launched
+          ? null
+          : 'Could not open the meeting link. Copy it into a browser: $url';
+    });
+  }
 
   Future<void> _cancel() async {
-    setState(() => _isCancelling = true);
+    setState(() {
+      _isCancelling = true;
+      _cancelError = null;
+      _cancelNotice = null;
+    });
     try {
-      await ref.read(mentorRepositoryProvider).cancelBooking(widget.booking.id);
+      final result =
+          await ref.read(mentorRepositoryProvider).cancelBooking(widget.booking.id);
+      // The booking is cancelled and the ledger refunded; refresh both so the
+      // refunded credit is visible on the wallet placard straight away.
       await Future.wait([
         ref.read(mentorBookingsProvider.notifier).refresh(),
         ref.read(walletSummaryProvider.notifier).refresh(),
         ref.read(learnerContextProvider.notifier).refreshContext(),
       ]);
-    } finally {
-      if (mounted) {
-        setState(() => _isCancelling = false);
-      }
+      if (!mounted) return;
+      setState(() {
+        _isCancelling = false;
+        _cancelNotice = result.refundedCredits > 0
+            ? 'Booking cancelled. ${result.refundedCredits} credits refunded.'
+            : 'Booking cancelled. No credits were refunded.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isCancelling = false;
+        _cancelError = extractApiError(
+          e,
+          fallback: 'Could not cancel this booking.',
+        );
+      });
     }
   }
 
@@ -266,7 +299,7 @@ class _BookingRowState extends ConsumerState<_BookingRow> {
                 label: booking.status.toUpperCase(),
                 variant: switch (booking.status) {
                   'confirmed' => PlacardBadgeVariant.info,
-                  'completed' => PlacardBadgeVariant.success,
+                  'done' => PlacardBadgeVariant.success,
                   'cancelled' => PlacardBadgeVariant.danger,
                   _ => PlacardBadgeVariant.muted,
                 },
@@ -283,10 +316,12 @@ class _BookingRowState extends ConsumerState<_BookingRow> {
               ),
             ),
           ],
-          if (booking.rating != null) ...[
+          if (booking.review != null) ...[
             const SizedBox(height: 4),
             Text(
-              'Rated: ${booking.rating}/5${booking.reviewText != null ? ' — ${booking.reviewText}' : ''}',
+              'Rated: ${booking.review!.rating}/5'
+              '${booking.reviewText != null ? ' — ${booking.reviewText}' : ''}',
+              key: Key('booking-review-${booking.id}'),
               style: SignageTypography.data(
                 fontSize: 12,
                 color: SignageColors.signGreen,
@@ -294,18 +329,42 @@ class _BookingRowState extends ConsumerState<_BookingRow> {
             ),
           ],
           const SizedBox(height: 10),
+          if (_launchError != null) ...[
+            PlacardAlert(
+              variant: PlacardAlertVariant.danger,
+              title: 'Could not open link',
+              subtitle: _launchError,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (_cancelError != null) ...[
+            PlacardAlert(
+              key: Key('cancel-error-${booking.id}'),
+              variant: PlacardAlertVariant.danger,
+              title: 'Could not cancel booking',
+              subtitle: _cancelError,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (_cancelNotice != null) ...[
+            PlacardAlert(
+              key: Key('cancel-notice-${booking.id}'),
+              variant: PlacardAlertVariant.success,
+              title: _cancelNotice!,
+            ),
+            const SizedBox(height: 10),
+          ],
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              if (booking.meetLink != null && booking.canCancel)
+              // Only a live session with a link offers JOIN MEET.
+              if (booking.canJoinMeet)
                 PlacardButton(
                   key: Key('join-meet-button-${booking.id}'),
                   label: 'JOIN MEET',
                   expand: false,
-                  onPress: () => ref
-                      .read(urlLauncherAdapterProvider)
-                      .launchExternalUrl(booking.meetLink!),
+                  onPress: () => _joinMeeting(booking.meetLink!),
                 ),
               if (booking.canCancel)
                 PlacardButton(
@@ -346,12 +405,14 @@ class _BookMentorView extends ConsumerStatefulWidget {
 }
 
 class _BookMentorViewState extends ConsumerState<_BookMentorView> {
-  MentorProfile? _mentor;
-  int? _selectedSlotId;
+  MentorDetail? _detail;
+  MentorSlot? _selectedSlot;
   final _focusController = TextEditingController();
   bool _isLoading = true;
   bool _isSubmitting = false;
   String? _error;
+
+  MentorProfile? get _mentor => _detail?.mentor;
 
   @override
   void initState() {
@@ -376,14 +437,14 @@ class _BookMentorViewState extends ConsumerState<_BookMentorView> {
           .getMentorDetail(widget.mentorId);
       if (mounted) {
         setState(() {
-          _mentor = detail;
+          _detail = detail;
           _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = extractApiError(e, fallback: 'Could not load this mentor.');
           _isLoading = false;
         });
       }
@@ -393,7 +454,7 @@ class _BookMentorViewState extends ConsumerState<_BookMentorView> {
   Future<void> _book() async {
     final mentor = _mentor;
     if (mentor == null) return;
-    if (!mentor.isAi && _selectedSlotId == null) {
+    if (!mentor.isAi && _selectedSlot == null) {
       setState(() => _error = 'Please select an available time slot.');
       return;
     }
@@ -406,7 +467,7 @@ class _BookMentorViewState extends ConsumerState<_BookMentorView> {
       final focus = _focusController.text.trim();
       await ref.read(mentorRepositoryProvider).bookMentor(
             mentor.id,
-            slotId: mentor.isAi ? null : _selectedSlotId,
+            slotId: mentor.isAi ? null : _selectedSlot?.id,
             focusArea: focus.isEmpty ? null : focus,
           );
       await Future.wait([
@@ -418,9 +479,10 @@ class _BookMentorViewState extends ConsumerState<_BookMentorView> {
         widget.onClose();
       }
     } catch (e) {
+      // The backend's own message, and the button stays usable for a retry.
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = extractApiError(e, fallback: 'Could not book this mentor.');
           _isSubmitting = false;
         });
       }
@@ -429,6 +491,11 @@ class _BookMentorViewState extends ConsumerState<_BookMentorView> {
 
   @override
   Widget build(BuildContext context) {
+    final mentor = _mentor;
+    final balance = ref.watch(learnerContextProvider).value?.creditBalance;
+    final shortOfCredits =
+        mentor != null && balance != null && balance < mentor.priceCredits;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -444,50 +511,79 @@ class _BookMentorViewState extends ConsumerState<_BookMentorView> {
         const SizedBox(height: 16),
         if (_isLoading)
           const Center(child: FCircularProgress())
-        else if (_mentor != null)
+        else if (mentor != null)
           PlacardPanel(
-            title: _mentor!.isAi ? 'BOOK AI MENTOR' : 'BOOK HUMAN MENTOR',
+            title: mentor.isAi ? 'BOOK AI MENTOR' : 'BOOK HUMAN MENTOR',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  _mentor!.name,
+                  mentor.displayName,
                   style: SignageTypography.headline(),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${_mentor!.sessionLengthMinutes} MIN · ${_mentor!.priceCredits} CREDITS',
+                  '${mentor.sessionMinutes} MIN · ${mentor.priceCredits} CREDITS',
+                  key: const Key('booking-price'),
                   style: SignageTypography.data(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: SignageColors.signBlue,
                   ),
                 ),
+                if (balance != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'YOUR BALANCE: $balance CREDITS',
+                    style: SignageTypography.label(
+                      fontSize: 12,
+                      color: shortOfCredits
+                          ? SignageColors.signRed
+                          : SignageColors.inkMuted,
+                    ),
+                  ),
+                ],
+                if (shortOfCredits) ...[
+                  const SizedBox(height: 12),
+                  PlacardAlert(
+                    variant: PlacardAlertVariant.warning,
+                    title: 'Not enough credits',
+                    subtitle:
+                        'This session costs ${mentor.priceCredits} credits and '
+                        'you have $balance. Top up in CREDITS & ORDERS first.',
+                  ),
+                ],
                 if (_error != null) ...[
                   const SizedBox(height: 12),
                   PlacardAlert(
+                    key: const Key('booking-error'),
                     variant: PlacardAlertVariant.danger,
                     title: _error!,
                   ),
                 ],
-                if (!_mentor!.isAi) ...[
+                if (!mentor.isAi) ...[
                   const SizedBox(height: 16),
-                  Text(
-                    'SELECT A SLOT',
-                    style: SignageTypography.label(),
-                  ),
+                  Text('SELECT A SLOT', style: SignageTypography.label()),
                   const SizedBox(height: 8),
-                  for (final slot in _mentor!.slots)
+                  if (_detail!.availableSlots.isEmpty)
+                    Text(
+                      'This mentor has no open times right now.',
+                      style: SignageTypography.body(
+                        fontSize: 14,
+                        color: SignageColors.inkMuted,
+                      ),
+                    ),
+                  for (final slot in _detail!.availableSlots)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: FTappable(
                         key: Key('mentor-slot-${slot.id}'),
-                        onPress: slot.isAvailable
-                            ? () => setState(() => _selectedSlotId = slot.id)
+                        onPress: slot.isOpen
+                            ? () => setState(() => _selectedSlot = slot)
                             : null,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            color: _selectedSlotId == slot.id
+                            color: _selectedSlot?.id == slot.id
                                 ? SignageColors.ink
                                 : SignageColors.paper,
                             border: Border.all(
@@ -498,11 +594,11 @@ class _BookMentorViewState extends ConsumerState<_BookMentorView> {
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Text(
-                              '${slot.startsAt} → ${slot.endsAt}',
+                              describeSlotTime(slot),
                               style: SignageTypography.data(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
-                                color: _selectedSlotId == slot.id
+                                color: _selectedSlot?.id == slot.id
                                     ? SignageColors.paper
                                     : SignageColors.ink,
                               ),
@@ -535,7 +631,7 @@ class _BookMentorViewState extends ConsumerState<_BookMentorView> {
                   key: const Key('confirm-booking-button'),
                   label: 'CONFIRM BOOKING',
                   isLoading: _isSubmitting,
-                  onPress: _book,
+                  onPress: shortOfCredits ? null : _book,
                 ),
               ],
             ),
@@ -589,7 +685,7 @@ class _RateBookingViewState extends ConsumerState<_RateBookingView> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = extractApiError(e, fallback: 'Could not submit this rating.');
           _isSubmitting = false;
         });
       }

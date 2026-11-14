@@ -1,0 +1,53 @@
+{
+  "placementId": 2,
+  "attemptId": 1003,
+  "examName": "TOEIC Placement Test — Diagnostic",
+  "certCode": "TOEIC",
+  "startedAt": "2026-11-13T15:25:44.1338593+00:00",
+  "expiresAt": "2026-11-15T15:25:44.1338593+00:00",
+  "skills": [
+    {
+      "skillId": 1,
+      "code": "LIST",
+      "name": "Listening",
+      "isDone": false,
+      "isActive": true,
+      "answeredCount": 0,
+      "totalQuestions": 10
+    },
+    {
+      "skillId": 2,
+      "code": "READ",
+      "name": "Reading",
+      "isDone": false,
+      "isActive": false,
+      "answeredCount": 0,
+      "totalQuestions": 14
+    },
+    {
+      "skillId": 3,
+      "code": "SPEA",
+      "name": "Speaking",
+      "isDone": false,
+      "isActive": false,
+      "answeredCount": 0,
+      "totalQuestions": 3
+    },
+    {
+      "skillId": 4,
+      "code": "WRIT",
+      "name": "Writing",
+      "isDone": false,
+      "isActive": false,
+      "answeredCount": 0,
+      "totalQuestions": 2
+    }
+  ],
+  "activeSkillId": 1,
+  "activeSkillName": "Listening",
+  "activeStage": 1,
+  "totalStages": 4,
+  "syncedAnswerCount": 0,
+  "totalQuestions": 29,
+  "lastQuestionId": 12
+}

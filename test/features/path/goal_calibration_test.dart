@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:forui/forui.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:extra_efficient_mobile/app.dart';
 import 'package:extra_efficient_mobile/core/media/audio_media_adapter.dart';
 import 'package:extra_efficient_mobile/core/network/dio_client.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
+import 'package:extra_efficient_mobile/features/path/models/path_models.dart';
 import 'package:extra_efficient_mobile/features/path/screens/goal_calibration_screen.dart';
+import 'package:extra_efficient_mobile/theme/signage_theme.dart';
+
 import '../../helpers/fake_http_adapter.dart';
+import 'path_fixtures.dart';
 
 void main() {
   testWidgets(
@@ -54,17 +60,42 @@ void main() {
         }
         if (options.path == '/api/learner/dashboard') {
           return FakeHttpClientAdapter.jsonResponse({
-            'currentBandCode': 'B1',
-            'targetBandCode': targetBand,
-            'scaledScore': 620,
-            'placementCompleted': true,
-            'hasLearningPath': true,
+            'certificate': {
+              'code': 'TOEIC',
+              'name': 'TOEIC Listening & Reading',
+              'sectionNoun': 'Part',
+            },
+            'nextAction': {
+              'eyebrow': 'SET THE TARGET',
+              'title': 'Choose the band you are working towards',
+              'description': 'Goals turn practice into a plan.',
+              'actionLabel': 'Set your target band',
+              'actionUrl': '/placement/target-band',
+              'severity': 'info',
+              'cascadeStep': 'next_step',
+              'metaLabel': 'NOW below_A1',
+            },
+            'goal': {
+              'currentBandCode': 'below_A1',
+              'currentBandName': 'Below A1',
+              'currentScore': 10,
+              'currentSource': 'mock',
+              'targetBandCode': targetBand,
+              'targetBandName': 'Intermediate',
+              'completedPathSteps': 0,
+              'totalPathSteps': 0,
+              'scoreDisplayFactor': 1,
+              'hasNoMeasurement': false,
+            },
+            'skills': <Map<String, dynamic>>[],
+            'attemptCount': 1,
+            'practiceCount': 0,
           });
         }
         if (options.path == '/api/learner/insights/dashboard') {
           return FakeHttpClientAdapter.jsonResponse({
-            'status': 'ready',
-            'narrative': 'Steady progress.',
+            'status': 'done',
+            'formattedNarrative': 'Steady progress.',
           });
         }
         if (options.path == '/api/learner/target-band' &&
@@ -74,7 +105,53 @@ void main() {
             'targetBandCode': targetBand,
             'targetDate': '2026-12-20',
             'weeklyStudyHours': 8,
-            'availableBands': ['A1', 'A2', 'B1', 'B2', 'C1'],
+            'availableBands': [
+            {
+              'code': 'A1',
+              'name': 'Beginner',
+              'minTotal': 120,
+              'maxTotal': 220,
+              'description': '120 to 220 points',
+              'isCurrent': false,
+              'isTarget': false,
+            },
+            {
+              'code': 'A2',
+              'name': 'Elementary',
+              'minTotal': 225,
+              'maxTotal': 545,
+              'description': '225 to 545 points',
+              'isCurrent': false,
+              'isTarget': false,
+            },
+            {
+              'code': 'B1',
+              'name': 'Intermediate',
+              'minTotal': 550,
+              'maxTotal': 780,
+              'description': '550 to 780 points',
+              'isCurrent': false,
+              'isTarget': false,
+            },
+            {
+              'code': 'B2',
+              'name': 'Upper intermediate',
+              'minTotal': 785,
+              'maxTotal': 940,
+              'description': '785 to 940 points',
+              'isCurrent': false,
+              'isTarget': false,
+            },
+            {
+              'code': 'C1',
+              'name': 'Advanced',
+              'minTotal': 945,
+              'maxTotal': 990,
+              'description': '945 to 990 points',
+              'isCurrent': false,
+              'isTarget': false,
+            },
+          ],
           });
         }
         if (options.path == '/api/learner/goal' && options.method == 'POST') {
@@ -90,10 +167,24 @@ void main() {
         if (options.path == '/api/learner/calibration' &&
             options.method == 'GET') {
           return FakeHttpClientAdapter.jsonResponse({
-            'pending': calibrationPending,
-            'currentTargetBandCode': targetBand,
-            'recommendedBandCode': 'C1',
-            'reason': 'Recent mock scores exceed B2 threshold.',
+            'placedBandCode': 'below_A1',
+            'placedBandName': 'Below A1',
+            'validAnswerCount': 24,
+            'requiredValidAnswerCount': 20,
+            'excludedRushedCount': 1,
+            'observedAccuracyPct': 88.5,
+            'reason': 'above_threshold',
+            'proposal': calibrationPending
+                ? {
+                    'proposedBandCode': 'C1',
+                    'proposedBandName': 'Advanced',
+                    'observedAccuracyPct': 88.5,
+                    'validAnswerCount': 24,
+                    'requiredAccuracyPct': 85,
+                    'evidence':
+                        'Recent mock scores exceed B2 threshold on 24 answers.',
+                  }
+                : null,
           });
         }
         if (options.path == '/api/learner/calibration/decision' &&
@@ -104,8 +195,12 @@ void main() {
             targetBand = 'C1';
           }
           return FakeHttpClientAdapter.jsonResponse({
-            'pending': false,
-            'targetBandCode': targetBand,
+            'decision': calibrationDecisionPayload!['adjust'] == true
+                ? 'adjusted'
+                : 'kept',
+            'placedBandCode': 'below_A1',
+            'proposedBandCode': 'C1',
+            'pathAdjusted': calibrationDecisionPayload!['adjust'] == true,
           });
         }
         return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
@@ -125,24 +220,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('open-goal-calibration-btn')));
+      final goalBtn = find.byKey(const Key('open-goal-calibration-btn'));
+      await tester.scrollUntilVisible(goalBtn, 200);
+      await tester.pumpAndSettle();
+      await tester.tap(goalBtn);
       await tester.pumpAndSettle();
 
       expect(find.text('TARGET BAND & STUDY GOAL'), findsOneWidget);
-      expect(
-        find.text('Recent mock scores exceed B2 threshold.'),
-        findsOneWidget,
-      );
-
-      // Select C1 target band and update weekly hours.
-      await tester.tap(find.byKey(const Key('target-band-C1')));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(
-        find.byKey(const Key('weekly-hours-input')),
-        '10',
-      );
-      await tester.pumpAndSettle();
 
       final goalScrollable = find
           .descendant(
@@ -150,6 +234,34 @@ void main() {
             matching: find.byType(Scrollable),
           )
           .first;
+
+      await tester.scrollUntilVisible(
+        find.text('SUGGESTED TARGET: ADVANCED'),
+        200,
+        scrollable: goalScrollable,
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Recent mock scores exceed B2 threshold on 24 answers.'),
+        findsOneWidget,
+      );
+      expect(find.text('SUGGESTED TARGET: ADVANCED'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('target-band-C1')),
+        -200,
+        scrollable: goalScrollable,
+      );
+      await tester.pumpAndSettle();
+
+      // Select C1 target band and update weekly hours.
+      await tester.tap(find.byKey(const Key('target-band-C1')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('weekly-hours-input')), '10');
+      await tester.pumpAndSettle();
+
       final saveBtn = find.byKey(const Key('save-goal-btn'));
       await tester.scrollUntilVisible(saveBtn, 200, scrollable: goalScrollable);
       await tester.drag(goalScrollable, const Offset(0, -100));
@@ -178,5 +290,148 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('CALIBRATION APPLIED'), findsOneWidget);
     },
+  );
+
+  testWidgets(
+    'the bands offered are the certificate\'s own, each with its score range',
+    (tester) async {
+      final adapter = adapterForBands();
+
+      await tester.pumpWidget(appWith(adapter));
+      await tester.pumpAndSettle();
+
+      // All six of the certificate's real bands, by code — the payload's ladder,
+      // not a hardcoded one.
+      for (final code in ['below_A1', 'A1', 'A2', 'B1', 'B2', 'C1']) {
+        expect(
+          find.byKey(Key('target-band-$code')),
+          findsOneWidget,
+          reason: 'band $code is in the certificate payload',
+        );
+      }
+      // The ready-to-print range the backend supplies beside each band.
+      expect(find.text('10 to 119 points'), findsOneWidget);
+      expect(find.text('945 to 990 points'), findsOneWidget);
+      // The code and name as the tile prints them.
+      expect(find.textContaining('BELOW A1'), findsWidgets);
+    },
+  );
+
+  testWidgets(
+    'no saved goal renders no target badge, because "" is absent, not a band',
+    (tester) async {
+      final payload = targetBandNoGoalPayload();
+
+      // The live oddity: `goal.targetBandCode` is "" while the outer one is null.
+      expect(payload['targetBandCode'], isNull);
+      expect((payload['goal'] as Map)['targetBandCode'], '');
+
+      final goal = TargetBandGoal.fromJson(payload);
+      expect(goal.targetBandCode, isNull);
+      expect(goal.hasTargetBand, isFalse);
+    },
+  );
+
+  testWidgets('a failed save reports the backend message', (tester) async {
+    final adapter = FakeHttpClientAdapter((options, body) async {
+      if (options.path == '/api/learner/goal' && options.method == 'POST') {
+        return FakeHttpClientAdapter.jsonResponse({
+          'title': 'Invalid goal',
+          'status': 400,
+          'detail': "Band code 'Z9' is not valid for this certificate.",
+          'code': 'TARGET_BAND_INVALID',
+        }, statusCode: 400);
+      }
+      return adapterForBands(
+        targetBand: targetBandWithGoalPayload(),
+      ).handler(options, body);
+    });
+
+    await tester.pumpWidget(appWith(adapter));
+    await tester.pumpAndSettle();
+
+    final goalScrollable = find
+        .descendant(
+          of: find.byType(GoalCalibrationScreen),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    final saveBtn = find.byKey(const Key('save-goal-btn'));
+    await tester.scrollUntilVisible(saveBtn, 200, scrollable: goalScrollable);
+    await tester.pumpAndSettle();
+    await tester.tap(saveBtn);
+    await tester.pumpAndSettle();
+
+    // The failure notice is painted above the panel, so scroll back to it.
+    await tester.drag(goalScrollable, const Offset(0, 1200));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('is not valid for this certificate'),
+      findsOneWidget,
+    );
+  });
+}
+
+/// The recorded target-band payloads, so the band list is the certificate's own.
+FakeHttpClientAdapter adapterForBands({Map<String, dynamic>? targetBand}) {
+  return FakeHttpClientAdapter((options, body) async {
+    if (options.path == '/api/auth/me') {
+      return FakeHttpClientAdapter.jsonResponse({
+        'userId': 2,
+        'email': 'learner@demo.local',
+        'fullName': 'Demo Learner',
+        'role': 'learner',
+        'emailVerified': true,
+      });
+    }
+    if (options.path == '/api/learner/target-band' &&
+        options.method == 'GET') {
+      return FakeHttpClientAdapter.jsonResponse(
+        targetBand ?? targetBandNoGoalPayload(),
+      );
+    }
+    if (options.path == '/api/learner/calibration' &&
+        options.method == 'GET') {
+      return FakeHttpClientAdapter.jsonResponse({
+        'placedBandCode': '',
+        'validAnswerCount': 0,
+        'requiredValidAnswerCount': 20,
+        'excludedRushedCount': 0,
+        'reason': 'not_enough_answers',
+      });
+    }
+    return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+  });
+}
+
+Widget appWith(FakeHttpClientAdapter adapter) {
+  return ProviderScope(
+    overrides: [
+      tokenStorageProvider.overrideWithValue(
+        InMemoryTokenStorage(initialToken: 'valid-jwt'),
+      ),
+      httpClientAdapterProvider.overrideWithValue(adapter),
+    ],
+    child: MaterialApp.router(
+      theme: ThemeData(
+        useMaterial3: false,
+        scaffoldBackgroundColor: SignageColors.wall,
+      ),
+      builder: (context, child) => FTheme(
+        data: buildSignageTheme(),
+        child: child ?? const SizedBox.shrink(),
+      ),
+      routerConfig: GoRouter(
+        initialLocation: '/path/goal',
+        routes: [
+          GoRoute(
+            path: '/path/goal',
+            builder: (context, state) =>
+                Scaffold(body: GoalCalibrationScreen()),
+          ),
+        ],
+      ),
+    ),
   );
 }

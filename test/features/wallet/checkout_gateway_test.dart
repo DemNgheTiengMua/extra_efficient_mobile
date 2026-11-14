@@ -5,327 +5,244 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:extra_efficient_mobile/app.dart';
 import 'package:extra_efficient_mobile/core/media/audio_media_adapter.dart';
 import 'package:extra_efficient_mobile/core/network/dio_client.dart';
+import 'package:extra_efficient_mobile/core/platform/external_url_launcher.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
-import 'package:extra_efficient_mobile/features/wallet/wallet_providers.dart';
+import '../../contract/fixture_loader.dart';
 import '../../helpers/fake_http_adapter.dart';
 
-class _RecordingUrlLauncher implements UrlLauncherAdapter {
+class _RecordingLauncher implements UrlLauncherAdapter {
+  _RecordingLauncher({this.result = true});
+
+  final bool result;
   final List<String> launchedUrls = [];
 
   @override
   Future<bool> launchExternalUrl(String url) async {
     launchedUrls.add(url);
-    return true;
+    return result;
   }
 }
 
+Map<String, dynamic> _user() => {
+  'userId': 2,
+  'email': 'learner@demo.local',
+  'fullName': 'Demo Learner',
+  'role': 'learner',
+  'emailVerified': true,
+  'permissions': [],
+  'held': [],
+};
+
+Map<String, dynamic> _context() => {
+  'active': {'code': 'TOEIC', 'name': 'TOEIC', 'sectionNoun': 'Part'},
+  'certificates': [
+    {'code': 'TOEIC', 'name': 'TOEIC', 'sectionNoun': 'Part'},
+  ],
+  'creditBalance': 11,
+  'examinedSkills': ['listening', 'reading'],
+  'examDate': null,
+};
+
+/// Serves the recorded wallet, packages and checkout fixtures, and lets one
+/// test swap the checkout preview or fail the order call.
+FakeHttpClientAdapter _adapter({
+  Object? preview,
+  Object? orderResponse,
+  Object? orderStatus = 200,
+  Object? result,
+}) {
+  return FakeHttpClientAdapter((options, body) async {
+    if (options.path == '/api/auth/me') {
+      return FakeHttpClientAdapter.jsonResponse(_user());
+    }
+    if (options.path == '/api/learner/context') {
+      return FakeHttpClientAdapter.jsonResponse(_context());
+    }
+    if (options.path == '/api/learner/wallet') {
+      return FakeHttpClientAdapter.jsonResponse(loadFixture('wallet'));
+    }
+    if (options.path == '/api/packages') {
+      return FakeHttpClientAdapter.jsonResponse(loadFixture('credit_packages'));
+    }
+    if (options.path == '/api/checkout/preview') {
+      return FakeHttpClientAdapter.jsonResponse(
+        preview ?? loadFixture('checkout_preview'),
+      );
+    }
+    if (options.path == '/api/checkout/orders' && options.method == 'POST') {
+      return FakeHttpClientAdapter.jsonResponse(
+        orderResponse ?? loadFixture('checkout_create_order'),
+        statusCode: orderStatus as int,
+      );
+    }
+    if (options.path.endsWith('/result')) {
+      return FakeHttpClientAdapter.jsonResponse(
+        result ?? loadFixture('payment_result_failed'),
+      );
+    }
+    return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+  });
+}
+
+Future<void> _pumpApp(
+  WidgetTester tester,
+  FakeHttpClientAdapter adapter, {
+  UrlLauncherAdapter? launcher,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        tokenStorageProvider.overrideWithValue(
+          InMemoryTokenStorage(initialToken: 'valid-jwt'),
+        ),
+        httpClientAdapterProvider.overrideWithValue(adapter),
+        audioMediaAdapterProvider.overrideWithValue(FakeAudioMediaAdapter()),
+        if (launcher != null)
+          urlLauncherAdapterProvider.overrideWithValue(launcher),
+      ],
+      child: const ExtraEfficientApp(),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('WALLET'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _buy(WidgetTester tester, int packageId) async {
+  final button = find.byKey(Key('buy-package-$packageId'));
+  await tester.ensureVisible(button);
+  await tester.pumpAndSettle();
+  await tester.tap(button);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _tapAndSettle(WidgetTester tester, String key) async {
+  final finder = find.byKey(Key(key));
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
 void main() {
-  testWidgets(
-    'Checkout creates order, launches checkoutUrl, completes via Mock Gateway paid, and refreshes wallet',
-    (tester) async {
-      final tokenStorage = InMemoryTokenStorage(initialToken: 'valid-jwt');
-      final urlLauncher = _RecordingUrlLauncher();
+  testWidgets('checkout quotes the package price recorded from the backend', (
+    tester,
+  ) async {
+    await _pumpApp(tester, _adapter());
+    await _buy(tester, 2);
 
-      var creditBalance = 13;
-      var purchased = 20;
-      var orderStatus = 'pending';
-      var orderCreated = false;
-      String? mockActionSent;
+    expect(find.text('CHECKOUT PREVIEW'), findsOneWidget);
+    // The backend's `price` for package 2; never 0 ₫.
+    expect(find.text('100,000 ₫'), findsOneWidget);
+    expect(find.text('0 ₫'), findsNothing);
+  });
 
-      final adapter = FakeHttpClientAdapter((options, body) async {
-        if (options.path == '/api/auth/me') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'userId': 2,
-            'email': 'learner@demo.local',
-            'fullName': 'Demo Learner',
-            'role': 'learner',
-            'emailVerified': true,
-            'permissions': [],
-            'held': [],
-          });
-        }
-        if (options.path == '/api/learner/context') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'active': {
-              'code': 'TOEIC',
-              'name': 'TOEIC Listening & Reading',
-              'sectionNoun': 'Part',
-            },
-            'certificates': [
-              {
-                'code': 'TOEIC',
-                'name': 'TOEIC Listening & Reading',
-                'sectionNoun': 'Part',
-              },
-            ],
-            'creditBalance': creditBalance,
-            'examinedSkills': ['listening', 'reading'],
-            'examDate': null,
-          });
-        }
-        if (options.path == '/api/learner/wallet') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'creditsPurchased': purchased,
-            'creditsUsed': 7,
-            'balance': creditBalance,
-            'ledger': const [],
-            'orders': orderCreated
-                ? [
-                    {
-                      'orderCode': 'ORD-2001',
-                      'packageId': 2,
-                      'packageName': 'Pro 60',
-                      'credits': 60,
-                      'amountVnd': 499000,
-                      'status': orderStatus,
-                      'checkoutUrl': 'https://pay.payos.vn/web/ORD-2001',
-                      'createdAt': '2026-11-13T09:00:00Z',
-                    },
-                  ]
-                : const [],
-          });
-        }
-        if (options.path == '/api/packages') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'packages': [
-              {
-                'id': 2,
-                'name': 'Pro 60',
-                'credits': 60,
-                'priceVnd': 499000,
-                'isFeatured': true,
-                'description': 'Best value for full certificate prep.',
-              },
-            ],
-          });
-        }
-        if (options.path == '/api/checkout/preview') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'packageId': 2,
-            'packageName': 'Pro 60',
-            'credits': 60,
-            'amountVnd': 499000,
-            'hasOpenOrder': false,
-          });
-        }
-        if (options.path == '/api/checkout/orders' &&
-            options.method == 'POST') {
-          orderCreated = true;
-          orderStatus = 'pending';
-          return FakeHttpClientAdapter.jsonResponse({
-            'orderCode': 'ORD-2001',
-            'packageId': 2,
-            'packageName': 'Pro 60',
-            'credits': 60,
-            'amountVnd': 499000,
-            'status': 'pending',
-            'checkoutUrl': 'https://pay.payos.vn/web/ORD-2001',
-            'createdAt': '2026-11-13T09:00:00Z',
-          });
-        }
-        if (options.path == '/api/mock-gateway/action' &&
-            options.method == 'POST') {
-          mockActionSent = body['action'] as String;
-          if (mockActionSent == 'paid') {
-            orderStatus = 'paid';
-            purchased = 80;
-            creditBalance = 73;
-          }
-          return FakeHttpClientAdapter.jsonResponse({
-            'orderCode': 'ORD-2001',
-            'packageId': 2,
-            'packageName': 'Pro 60',
-            'credits': 60,
-            'amountVnd': 499000,
-            'status': orderStatus,
-          });
-        }
-        if (options.path == '/api/checkout/orders/ORD-2001/result') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'orderCode': 'ORD-2001',
-            'packageId': 2,
-            'packageName': 'Pro 60',
-            'credits': 60,
-            'amountVnd': 499000,
-            'status': orderStatus,
-            'checkoutUrl': 'https://pay.payos.vn/web/ORD-2001',
-          });
-        }
-        return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
-      });
+  testWidgets('an open order blocks checkout and surfaces that order', (
+    tester,
+  ) async {
+    await _pumpApp(
+      tester,
+      _adapter(preview: loadFixture('checkout_preview_open_order')),
+    );
+    await _buy(tester, 1);
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            tokenStorageProvider.overrideWithValue(tokenStorage),
-            httpClientAdapterProvider.overrideWithValue(adapter),
-            audioMediaAdapterProvider.overrideWithValue(FakeAudioMediaAdapter()),
-            urlLauncherAdapterProvider.overrideWithValue(urlLauncher),
-          ],
-          child: const ExtraEfficientApp(),
-        ),
-      );
-      await tester.pumpAndSettle();
+    // Blocked, no way to create a second order, and the existing one is named.
+    expect(find.byKey(const Key('create-order-button')), findsNothing);
+    expect(find.textContaining('DH-20261113-0103'), findsOneWidget);
 
-      await tester.tap(find.text('WALLET'));
-      await tester.pumpAndSettle();
+    await _tapAndSettle(tester, 'view-open-order-button');
 
-      // Tap BUY on Pro 60
-      await tester.tap(find.byKey(const Key('buy-package-2')));
-      await tester.pumpAndSettle();
+    expect(find.text('ORDER DETAILS'), findsOneWidget);
+    expect(find.text('PENDING'), findsOneWidget);
+  });
 
-      // Checkout preview shown
-      expect(find.text('CHECKOUT PREVIEW'), findsOneWidget);
-      expect(find.text('Pro 60'), findsWidgets);
+  testWidgets('a failed order shows the gateway error code', (tester) async {
+    await _pumpApp(tester, _adapter());
+    await _buy(tester, 1);
+    await _tapAndSettle(tester, 'create-order-button');
 
-      // Create order
-      await tester.tap(find.byKey(const Key('create-order-button')));
-      await tester.pumpAndSettle();
+    expect(find.text('PENDING'), findsOneWidget);
+    await _tapAndSettle(tester, 'check-order-status-button');
 
-      // Pending order state
-      expect(find.text('PENDING'), findsOneWidget);
-      expect(find.text('ORD-2001'), findsOneWidget);
+    expect(find.text('FAILED'), findsOneWidget);
+    expect(find.textContaining('MOCK_DECLINED'), findsOneWidget);
+  });
 
-      // Launch external payOS URL
-      await tester.tap(find.byKey(const Key('open-gateway-url-button')));
-      await tester.pumpAndSettle();
-      expect(urlLauncher.launchedUrls, ['https://pay.payos.vn/web/ORD-2001']);
+  testWidgets('a failed order creation reports the backend code and stays usable', (
+    tester,
+  ) async {
+    var attempts = 0;
+    final adapter = FakeHttpClientAdapter((options, body) async {
+      if (options.path == '/api/auth/me') {
+        return FakeHttpClientAdapter.jsonResponse(_user());
+      }
+      if (options.path == '/api/learner/context') {
+        return FakeHttpClientAdapter.jsonResponse(_context());
+      }
+      if (options.path == '/api/learner/wallet') {
+        return FakeHttpClientAdapter.jsonResponse(loadFixture('wallet'));
+      }
+      if (options.path == '/api/packages') {
+        return FakeHttpClientAdapter.jsonResponse(
+          loadFixture('credit_packages'),
+        );
+      }
+      if (options.path == '/api/checkout/preview') {
+        return FakeHttpClientAdapter.jsonResponse(
+          loadFixture('checkout_preview'),
+        );
+      }
+      if (options.path == '/api/checkout/orders' && options.method == 'POST') {
+        attempts++;
+        return FakeHttpClientAdapter.jsonResponse({
+          'code': 'order_already_open',
+          'title': 'You already have an open order.',
+          'status': 409,
+        }, statusCode: 409);
+      }
+      return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+    });
 
-      // Simulate Paid via Mock Gateway
-      await tester.ensureVisible(
-        find.byKey(const Key('mock-gateway-paid-button')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('mock-gateway-paid-button')));
-      await tester.pumpAndSettle();
+    await _pumpApp(tester, adapter);
+    await _buy(tester, 2);
+    await _tapAndSettle(tester, 'create-order-button');
 
-      expect(mockActionSent, 'paid');
-      expect(find.text('PAID'), findsOneWidget);
-      expect(find.text('73 CREDITS'), findsOneWidget);
-    },
-  );
+    // The failure is reported, not swallowed, and the control is still usable.
+    expect(find.text('Checkout error'), findsOneWidget);
+    expect(find.text('You already have an open order.'), findsOneWidget);
+    expect(find.byKey(const Key('create-order-button')), findsOneWidget);
 
-  testWidgets(
-    'Single-open-order guard blocks new order when reconciling order exists and renders failed/expired states',
-    (tester) async {
-      final tokenStorage = InMemoryTokenStorage(initialToken: 'valid-jwt');
-      var orderStatus = 'reconciling';
+    await _tapAndSettle(tester, 'create-order-button');
+    expect(attempts, 2);
+  });
 
-      final adapter = FakeHttpClientAdapter((options, body) async {
-        if (options.path == '/api/auth/me') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'userId': 2,
-            'email': 'learner@demo.local',
-            'fullName': 'Demo Learner',
-            'role': 'learner',
-            'emailVerified': true,
-            'permissions': [],
-            'held': [],
-          });
-        }
-        if (options.path == '/api/learner/context') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'active': {
-              'code': 'TOEIC',
-              'name': 'TOEIC Listening & Reading',
-              'sectionNoun': 'Part',
-            },
-            'certificates': [
-              {
-                'code': 'TOEIC',
-                'name': 'TOEIC Listening & Reading',
-                'sectionNoun': 'Part',
-              },
-            ],
-            'creditBalance': 13,
-            'examinedSkills': ['listening', 'reading'],
-            'examDate': null,
-          });
-        }
-        if (options.path == '/api/learner/wallet') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'creditsPurchased': 20,
-            'creditsUsed': 7,
-            'balance': 13,
-            'ledger': const [],
-            'orders': [
-              {
-                'orderCode': 'ORD-OPEN-1',
-                'packageId': 2,
-                'packageName': 'Pro 60',
-                'credits': 60,
-                'amountVnd': 499000,
-                'status': orderStatus,
-                'createdAt': '2026-11-13T09:00:00Z',
-              },
-            ],
-          });
-        }
-        if (options.path == '/api/packages') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'packages': [
-              {
-                'id': 2,
-                'name': 'Pro 60',
-                'credits': 60,
-                'priceVnd': 499000,
-                'isFeatured': true,
-                'description': 'Best value',
-              },
-            ],
-          });
-        }
-        if (options.path == '/api/checkout/orders/ORD-OPEN-1/result') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'orderCode': 'ORD-OPEN-1',
-            'packageId': 2,
-            'packageName': 'Pro 60',
-            'credits': 60,
-            'amountVnd': 499000,
-            'status': orderStatus,
-            'errorCode': orderStatus == 'failed' ? 'GATEWAY_DECLINED' : null,
-          });
-        }
-        return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
-      });
+  testWidgets('OPEN PAYMENT GATEWAY launches the checkout url', (tester) async {
+    final launcher = _RecordingLauncher();
+    await _pumpApp(tester, _adapter(), launcher: launcher);
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            tokenStorageProvider.overrideWithValue(tokenStorage),
-            httpClientAdapterProvider.overrideWithValue(adapter),
-            audioMediaAdapterProvider.overrideWithValue(FakeAudioMediaAdapter()),
-          ],
-          child: const ExtraEfficientApp(),
-        ),
-      );
-      await tester.pumpAndSettle();
+    await _buy(tester, 1);
+    await _tapAndSettle(tester, 'create-order-button');
+    await _tapAndSettle(tester, 'open-gateway-url-button');
 
-      await tester.tap(find.text('WALLET'));
-      await tester.pumpAndSettle();
+    // The mock gateway's checkout url is root-relative; the launcher resolves it.
+    expect(launcher.launchedUrls, [
+      '/checkout/mock-gateway?orderCode=DH-20261113-0103',
+    ]);
+    expect(find.text('Could not open link'), findsNothing);
+  });
 
-      // Single-open-order guard banner & disabled/blocked new order
-      expect(find.textContaining('Do not pay again'), findsOneWidget);
-      expect(find.byKey(const Key('view-open-order-button')), findsOneWidget);
+  testWidgets('a gateway that cannot open reports a message', (tester) async {
+    final launcher = _RecordingLauncher(result: false);
+    await _pumpApp(tester, _adapter(), launcher: launcher);
 
-      // Open the reconciling order
-      await tester.tap(find.byKey(const Key('view-open-order-button')));
-      await tester.pumpAndSettle();
-      expect(find.text('RECONCILING'), findsWidgets);
+    await _buy(tester, 1);
+    await _tapAndSettle(tester, 'create-order-button');
+    await _tapAndSettle(tester, 'open-gateway-url-button');
 
-      // Transition to failed and check status
-      orderStatus = 'failed';
-      await tester.tap(find.byKey(const Key('check-order-status-button')));
-      await tester.pumpAndSettle();
-      expect(find.text('FAILED'), findsOneWidget);
-      expect(find.textContaining('GATEWAY_DECLINED'), findsOneWidget);
-
-      // Transition to expired and check status
-      orderStatus = 'expired';
-      await tester.tap(find.byKey(const Key('check-order-status-button')));
-      await tester.pumpAndSettle();
-      expect(find.text('EXPIRED'), findsOneWidget);
-      expect(find.textContaining('15-minute'), findsOneWidget);
-    },
-  );
+    expect(find.text('Could not open link'), findsOneWidget);
+    expect(
+      find.textContaining('Copy this link into a browser'),
+      findsOneWidget,
+    );
+  });
 }

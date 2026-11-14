@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/media/audio_media_adapter.dart';
 import '../data/mock_exam_repository.dart';
+import '../models/exam_room_stop.dart';
 import '../models/placement_models.dart';
 import 'placement_exam_controller.dart';
 
@@ -26,6 +27,9 @@ class MockExamState {
     this.isAudioReviewActive = false,
     this.audioReviewRemainingSeconds = 0,
     this.uploadedAudioQuestionIds = const <int>{},
+    this.answeredCount = 0,
+    this.stop,
+    this.needsPreflight = false,
   });
 
   final bool isLoading;
@@ -45,6 +49,15 @@ class MockExamState {
   final bool isAudioReviewActive;
   final int audioReviewRemainingSeconds;
   final Set<int> uploadedAudioQuestionIds;
+
+  /// The server's count of answers it holds.
+  final int answeredCount;
+
+  /// Set when the sitting cannot be opened at all.
+  final ExamRoomStop? stop;
+
+  /// The backend refused the sitting with `preflight_required`.
+  final bool needsPreflight;
 
   PlacementQuestion? get currentQuestion =>
       (currentIndex >= 0 && currentIndex < questions.length)
@@ -70,6 +83,9 @@ class MockExamState {
     bool? isAudioReviewActive,
     int? audioReviewRemainingSeconds,
     Set<int>? uploadedAudioQuestionIds,
+    int? answeredCount,
+    ExamRoomStop? stop,
+    bool? needsPreflight,
   }) {
     return MockExamState(
       isLoading: isLoading ?? this.isLoading,
@@ -91,6 +107,9 @@ class MockExamState {
           audioReviewRemainingSeconds ?? this.audioReviewRemainingSeconds,
       uploadedAudioQuestionIds:
           uploadedAudioQuestionIds ?? this.uploadedAudioQuestionIds,
+      answeredCount: answeredCount ?? this.answeredCount,
+      stop: stop ?? this.stop,
+      needsPreflight: needsPreflight ?? this.needsPreflight,
     );
   }
 }
@@ -125,6 +144,12 @@ class MockExamController extends ChangeNotifier {
       final now = DateTime.now().toUtc();
       final remaining =
           attemptState.expiresAt.toUtc().difference(now).inSeconds;
+      final stop = stopForSitting(
+        status: attemptState.status,
+        questionCount: attemptState.questions.length,
+        resultRoute: '/exams/attempts/$attemptId/result',
+        hubRoute: '/exams',
+      );
       _update(
         _state.copyWith(
           isLoading: false,
@@ -132,16 +157,35 @@ class MockExamController extends ChangeNotifier {
           expiresAt: attemptState.expiresAt,
           remainingSeconds: remaining > 0 ? remaining : 0,
           questions: attemptState.questions,
+          answeredCount: attemptState.answeredCount,
           currentIndex: 0,
           activeSkillId: attemptState.activeSkillId,
           activeUnitNumber: attemptState.activeUnitNumber,
           activeGroupId: attemptState.activeGroupId,
           phaseDeadlineAt: attemptState.phaseDeadlineAt,
+          stop: stop,
         ),
       );
+      if (stop != null) return;
       _startCountdown();
       await _loadAudioForCurrentQuestion();
     } catch (e) {
+      if (isPreflightRequired(e)) {
+        _update(_state.copyWith(isLoading: false, needsPreflight: true));
+        return;
+      }
+      if (isSittingOver(e) || isSittingMissing(e)) {
+        _update(
+          _state.copyWith(
+            isLoading: false,
+            stop: terminalStopForError(
+              e,
+              resultRoute: '/exams/attempts/$attemptId/result',
+            ),
+          ),
+        );
+        return;
+      }
       _update(_state.copyWith(isLoading: false, error: e.toString()));
     }
   }
@@ -164,7 +208,7 @@ class MockExamController extends ChangeNotifier {
 
   Future<void> _loadAudioForCurrentQuestion() async {
     final q = _state.currentQuestion;
-    if (q == null || q.audioUrl == null || q.audioUrl!.isEmpty) {
+    if (q == null || q.audioPath == null || q.audioPath!.isEmpty) {
       if (_loadedAudioQuestionId != null) {
         await audioAdapter.stop();
         _loadedAudioQuestionId = null;
@@ -174,7 +218,7 @@ class MockExamController extends ChangeNotifier {
     if (_loadedAudioQuestionId == q.questionId) return;
     _loadedAudioQuestionId = q.questionId;
     await audioAdapter.setAudioUrl(
-      q.audioUrl!,
+      q.audioPath!,
       clipStart:
           q.audioStartMs != null ? Duration(milliseconds: q.audioStartMs!) : null,
       clipEnd:
@@ -470,6 +514,9 @@ class MockExamController extends ChangeNotifier {
     }
   }
 
+  /// The deliberate CANCEL action. Its failure is reported — cancelling is a
+  /// transaction — but leaving the room is the screen's job and never waits for
+  /// this answer, because a graded or expired attempt refuses cancellation.
   Future<bool> cancel() async {
     _debounceTimer?.cancel();
     _countdownTimer?.cancel();
@@ -477,6 +524,7 @@ class MockExamController extends ChangeNotifier {
       await repository.cancelAttempt(attemptId);
       return true;
     } catch (e) {
+      if (_disposed) return false;
       _update(_state.copyWith(error: e.toString()));
       return false;
     }

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/dio_client.dart';
+import '../../core/network/provider_retry.dart';
 import '../auth/auth_provider.dart';
 import '../context/learner_context_provider.dart';
 import 'account_models.dart';
@@ -71,6 +72,7 @@ class ProfileNotifier extends AsyncNotifier<LearnerProfile?> {
 final profileProvider =
     AsyncNotifierProvider<ProfileNotifier, LearnerProfile?>(
   ProfileNotifier.new,
+  retry: noProviderRetry,
 );
 
 /// Manages `GET /api/learner/complaints` and `POST /api/learner/complaints`.
@@ -129,6 +131,7 @@ class ComplaintsNotifier extends AsyncNotifier<List<Complaint>> {
 final complaintsProvider =
     AsyncNotifierProvider<ComplaintsNotifier, List<Complaint>>(
   ComplaintsNotifier.new,
+  retry: noProviderRetry,
 );
 
 /// Fetches eligible owned subjects for filing a new Complaint.
@@ -138,4 +141,4 @@ final eligibleSubjectsProvider =
   final response =
       await dio.get<dynamic>('/api/learner/complaints/eligible-subjects');
   return EligibleSubject.parseResponse(response.data);
-});
+}, retry: noProviderRetry);

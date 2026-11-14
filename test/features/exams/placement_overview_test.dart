@@ -2,160 +2,164 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:extra_efficient_mobile/app.dart';
+import 'package:extra_efficient_mobile/features/exams/screens/placement_overview_screen.dart';
 import 'package:extra_efficient_mobile/core/media/audio_media_adapter.dart';
 import 'package:extra_efficient_mobile/core/network/dio_client.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
+import 'package:extra_efficient_mobile/theme/signage_theme.dart';
+import 'package:forui/forui.dart';
+import 'package:go_router/go_router.dart';
+
 import '../../helpers/fake_http_adapter.dart';
 
 void main() {
-  Map<String, dynamic> authMePayload() => {
-        'userId': 2,
-        'email': 'learner@demo.local',
-        'fullName': 'Demo Learner',
-        'role': 'learner',
-        'emailVerified': true,
-        'permissions': [],
-        'held': [],
-      };
-
-  Map<String, dynamic> contextPayload({int creditBalance = 10}) => {
-        'active': {
-          'code': 'TOEIC',
-          'name': 'TOEIC Listening & Reading',
-          'sectionNoun': 'Part',
-        },
-        'certificates': [
-          {
-            'code': 'TOEIC',
-            'name': 'TOEIC Listening & Reading',
-            'sectionNoun': 'Part',
-          },
-        ],
-        'creditBalance': creditBalance,
-        'examinedSkills': ['listening', 'reading'],
-        'examDate': null,
-      };
-
-  testWidgets(
-      'free first placement shows FREE badge, runs audio/mic preflight, and starts attempt',
-      (tester) async {
+  Widget buildApp(FakeHttpClientAdapter adapter) {
     final tokenStorage = InMemoryTokenStorage(initialToken: 'valid-jwt');
-    final audioAdapter = FakeAudioMediaAdapter();
+    final router = GoRouter(
+      initialLocation: '/placement',
+      routes: [
+        GoRoute(
+          path: '/placement',
+          builder: (context, state) => const PlacementOverviewScreen(),
+        ),
+        GoRoute(
+          path: '/placement/take/:placementId',
+          builder: (context, state) => Scaffold(
+            body: Center(
+              child: Text(
+                'PLACEMENT ROOM #${state.pathParameters['placementId']}',
+              ),
+            ),
+          ),
+        ),
+        GoRoute(
+          path: '/placement/take/:placementId/preflight',
+          builder: (context, state) => Scaffold(
+            body: Center(
+              child: Text(
+                'PLACEMENT PREFLIGHT #${state.pathParameters['placementId']}',
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    return ProviderScope(
+      overrides: [
+        tokenStorageProvider.overrideWithValue(tokenStorage),
+        httpClientAdapterProvider.overrideWithValue(adapter),
+        audioMediaAdapterProvider.overrideWithValue(FakeAudioMediaAdapter()),
+      ],
+      child: MaterialApp.router(
+        theme: ThemeData(
+          useMaterial3: false,
+          scaffoldBackgroundColor: SignageColors.wall,
+        ),
+        builder: (context, child) => FTheme(
+          data: buildSignageTheme(),
+          child: child ?? const SizedBox.shrink(),
+        ),
+        routerConfig: router,
+      ),
+    );
+  }
+
+  /// Recorded `GET /api/learner/placement` shape: the envelope.
+  Map<String, dynamic> catalogPayload({
+    bool isRetake = false,
+    int? activePlacementId,
+    bool includeExam = true,
+  }) => {
+    'activeCert': {
+      'code': 'TOEIC',
+      'name': 'TOEIC Listening & Reading',
+      'sectionNoun': 'Part',
+    },
+    'currentBandCode': null,
+    'currentBandName': null,
+    'currentTotalScore': null,
+    'exams': [
+      if (includeExam)
+        {
+          'examId': 101,
+          'certId': 1,
+          'certCode': 'TOEIC',
+          'name': 'TOEIC Diagnostic Placement',
+          'description': 'A diagnostic across all four skills.',
+          'durationMinutes': 45,
+          'questionCount': 29,
+          'isRecommended': true,
+          'activePlacementId': activePlacementId,
+        },
+    ],
+    'activePlacementId': activePlacementId,
+    'activeAttemptId': 3,
+    'isRetake': isRetake,
+    'allSkillsRetakeCredits': 5,
+    'listeningAndReadingRetakeCredits': 3,
+    'creditBalance': null,
+  };
+
+  /// Recorded `GET /api/learner/placement/preflight` shape: offers, not scopes.
+  Map<String, dynamic> preflightPayload() => {
+    'certId': 1,
+    'certCode': 'TOEIC',
+    'examId': 101,
+    'offers': [
+      {
+        'skillId': 1,
+        'skillCode': 'LIST',
+        'skillName': 'Listening',
+        'modality': 'listening',
+        'requiresMicrophone': false,
+        'requiresAudio': true,
+        'levelCode': 'A2',
+        'positionInBand': 13,
+        'measuredAt': '2026-11-13T16:00:07Z',
+        'expiresAt': '2027-02-11T16:00:07Z',
+        'canReuse': true,
+        'isAged': false,
+      },
+    ],
+    'cooldownUntil': null,
+    'cooldownWaived': false,
+    'hasReusableSkills': true,
+    'isStartable': true,
+    'requiresMicrophone': true,
+    'requiresAudio': true,
+    'isRetake': false,
+    'allSkillsRetakeCredits': 5,
+    'listeningAndReadingRetakeCredits': 3,
+    'creditBalance': null,
+  };
+
+  testWidgets('free first placement shows the free badge and starts with the '
+      'catalogue exam id', (tester) async {
     Map<String, dynamic>? startPayload;
 
     final adapter = FakeHttpClientAdapter((options, body) async {
-      if (options.path == '/api/auth/me') {
-        return FakeHttpClientAdapter.jsonResponse(authMePayload());
-      }
-      if (options.path == '/api/learner/context') {
-        return FakeHttpClientAdapter.jsonResponse(contextPayload(creditBalance: 0));
-      }
       if (options.path == '/api/learner/placement' && options.method == 'GET') {
-        return FakeHttpClientAdapter.jsonResponse({
-          'examId': 101,
-          'examTitle': 'TOEIC Diagnostic Placement',
-          'certificateCode': 'TOEIC',
-          'isFirstPlacement': true,
-          'creditBalance': 0,
-          'scopes': [
-            {'scope': 'all_skills', 'label': 'All 4 Skills', 'credits': 5},
-            {
-              'scope': 'listening_and_reading',
-              'label': 'Listening & Reading',
-              'credits': 3,
-            },
-          ],
-        });
+        return FakeHttpClientAdapter.jsonResponse(catalogPayload());
       }
       if (options.path == '/api/learner/placement/preflight' &&
           options.method == 'GET') {
-        return FakeHttpClientAdapter.jsonResponse({
-          'audioSampleUrl': 'https://cdn.example.com/preflight.mp3',
-          'requiresMicrophone': true,
-          'reusableSkills': [
-            {
-              'skill': 'reading',
-              'band': 'B1',
-              'expiresAt': '2026-12-01T00:00:00Z',
-              'canReuse': true,
-            },
-          ],
-        });
+        return FakeHttpClientAdapter.jsonResponse(preflightPayload());
       }
       if (options.path == '/api/learner/placement/start' &&
           options.method == 'POST') {
         startPayload = body as Map<String, dynamic>?;
-        return FakeHttpClientAdapter.jsonResponse({
-          'placementId': 555,
-        });
-      }
-      if (options.path == '/api/learner/placement/take/555' &&
-          options.method == 'GET') {
-        return FakeHttpClientAdapter.jsonResponse({
-          'placementId': 555,
-          'expiresAt':
-              DateTime.now().toUtc().add(const Duration(minutes: 20)).toIso8601String(),
-          'questions': [
-            {
-              'questionId': 1,
-              'index': 0,
-              'skill': 'listening',
-              'sectionName': 'Part 1',
-              'prompt': 'Look at the picture.',
-              'options': [
-                {'optionId': 11, 'label': 'A', 'text': 'Option A'},
-                {'optionId': 12, 'label': 'B', 'text': 'Option B'},
-              ],
-              'isFlagged': false,
-            },
-          ],
-        });
+        return FakeHttpClientAdapter.jsonResponse({'placementId': 555});
       }
       return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
     });
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          tokenStorageProvider.overrideWithValue(tokenStorage),
-          httpClientAdapterProvider.overrideWithValue(adapter),
-          audioMediaAdapterProvider.overrideWithValue(audioAdapter),
-        ],
-        child: const ExtraEfficientApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    // Navigate to EXAMS tab
-    await tester.tap(find.text('EXAMS'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('PLACEMENT ASSESSMENT'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('open-placement-btn')));
+    await tester.pumpWidget(buildApp(adapter));
     await tester.pumpAndSettle();
 
     expect(find.text('FREE FIRST PLACEMENT'), findsOneWidget);
     expect(find.text('TOEIC Diagnostic Placement'), findsOneWidget);
 
-    // Run audio check
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('preflight-audio-check-btn')),
-      200,
-    );
-    await tester.tap(find.byKey(const Key('preflight-audio-check-btn')));
-    await tester.pumpAndSettle();
-    expect(audioAdapter.lastLoadedUrl, 'https://cdn.example.com/preflight.mp3');
-
-    // Run microphone check
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('preflight-mic-check-btn')),
-      200,
-    );
-    await tester.tap(find.byKey(const Key('preflight-mic-check-btn')));
-    await tester.pumpAndSettle();
-
-    // Start placement
     await tester.scrollUntilVisible(
       find.byKey(const Key('start-placement-btn')),
       200,
@@ -166,118 +170,48 @@ void main() {
     expect(startPayload, isNotNull);
     expect(startPayload!['examId'], 101);
     expect(startPayload!['scope'], 'all_skills');
-    expect(find.byKey(const Key('exam-room-header')), findsOneWidget);
+    // A freshly started sitting takes the same device gate as a resumed one.
+    expect(find.text('PLACEMENT PREFLIGHT #555'), findsOneWidget);
   });
 
-  testWidgets(
-      'paid retake allows choosing listening_and_reading (3 Credits) and reuseValidSkills',
-      (tester) async {
-    final tokenStorage = InMemoryTokenStorage(initialToken: 'valid-jwt');
-    final audioAdapter = FakeAudioMediaAdapter();
+  testWidgets('paid retake offers both scopes at the catalogue prices and '
+      'sends the chosen one', (tester) async {
     Map<String, dynamic>? startPayload;
 
     final adapter = FakeHttpClientAdapter((options, body) async {
-      if (options.path == '/api/auth/me') {
-        return FakeHttpClientAdapter.jsonResponse(authMePayload());
-      }
-      if (options.path == '/api/learner/context') {
-        return FakeHttpClientAdapter.jsonResponse(contextPayload(creditBalance: 13));
-      }
       if (options.path == '/api/learner/placement' && options.method == 'GET') {
-        return FakeHttpClientAdapter.jsonResponse({
-          'examId': 101,
-          'examTitle': 'TOEIC Diagnostic Placement',
-          'certificateCode': 'TOEIC',
-          'isFirstPlacement': false,
-          'creditBalance': 13,
-          'scopes': [
-            {'scope': 'all_skills', 'label': 'All 4 Skills', 'credits': 5},
-            {
-              'scope': 'listening_and_reading',
-              'label': 'Listening & Reading',
-              'credits': 3,
-            },
-          ],
-        });
+        return FakeHttpClientAdapter.jsonResponse(
+          catalogPayload(isRetake: true),
+        );
       }
       if (options.path == '/api/learner/placement/preflight' &&
           options.method == 'GET') {
-        return FakeHttpClientAdapter.jsonResponse({
-          'audioSampleUrl': 'https://cdn.example.com/preflight.mp3',
-          'requiresMicrophone': false,
-          'reusableSkills': [
-            {
-              'skill': 'speaking',
-              'band': 'B2',
-              'expiresAt': '2026-12-01T00:00:00Z',
-              'canReuse': true,
-            },
-          ],
-        });
+        return FakeHttpClientAdapter.jsonResponse(preflightPayload());
       }
       if (options.path == '/api/learner/placement/start' &&
           options.method == 'POST') {
         startPayload = body as Map<String, dynamic>?;
         return FakeHttpClientAdapter.jsonResponse({'placementId': 777});
       }
-      if (options.path == '/api/learner/placement/take/777' &&
-          options.method == 'GET') {
-        return FakeHttpClientAdapter.jsonResponse({
-          'placementId': 777,
-          'expiresAt':
-              DateTime.now().toUtc().add(const Duration(minutes: 20)).toIso8601String(),
-          'questions': [],
-        });
-      }
       return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
     });
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          tokenStorageProvider.overrideWithValue(tokenStorage),
-          httpClientAdapterProvider.overrideWithValue(adapter),
-          audioMediaAdapterProvider.overrideWithValue(audioAdapter),
-        ],
-        child: const ExtraEfficientApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('EXAMS'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('open-placement-btn')));
+    await tester.pumpWidget(buildApp(adapter));
     await tester.pumpAndSettle();
 
     expect(find.text('PAID RETAKE'), findsOneWidget);
-    expect(find.textContaining('5 CREDITS'), findsWidgets);
-    expect(find.textContaining('3 CREDITS'), findsWidgets);
+    expect(find.text('5 CREDITS'), findsOneWidget);
+    expect(find.text('3 CREDITS'), findsOneWidget);
 
-    // Select listening_and_reading scope
     await tester.scrollUntilVisible(
       find.byKey(const Key('scope-option-listening_and_reading')),
       200,
     );
-    await tester.tap(find.byKey(const Key('scope-option-listening_and_reading')));
-    await tester.pumpAndSettle();
-
-    // Toggle reuseValidSkills
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('reuse-skills-toggle')),
-      200,
+    await tester.tap(
+      find.byKey(const Key('scope-option-listening_and_reading')),
     );
-    await tester.tap(find.byKey(const Key('reuse-skills-toggle')));
     await tester.pumpAndSettle();
 
-    // Run audio check
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('preflight-audio-check-btn')),
-      200,
-    );
-    await tester.tap(find.byKey(const Key('preflight-audio-check-btn')));
-    await tester.pumpAndSettle();
-
-    // Start placement
     await tester.scrollUntilVisible(
       find.byKey(const Key('start-placement-btn')),
       200,
@@ -287,6 +221,68 @@ void main() {
 
     expect(startPayload, isNotNull);
     expect(startPayload!['scope'], 'listening_and_reading');
-    expect(startPayload!['reuseValidSkills'], true);
+  });
+
+  testWidgets('an unfinished placement offers RESUME into its room', (
+    tester,
+  ) async {
+    final adapter = FakeHttpClientAdapter((options, body) async {
+      if (options.path == '/api/learner/placement' && options.method == 'GET') {
+        return FakeHttpClientAdapter.jsonResponse(
+          catalogPayload(activePlacementId: 41),
+        );
+      }
+      if (options.path == '/api/learner/placement/preflight' &&
+          options.method == 'GET') {
+        return FakeHttpClientAdapter.jsonResponse(preflightPayload());
+      }
+      return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+    });
+
+    await tester.pumpWidget(buildApp(adapter));
+    await tester.pumpAndSettle();
+
+    expect(find.text('IN-PROGRESS ATTEMPT'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('resume-placement-btn')));
+    await tester.pumpAndSettle();
+    // RESUME goes through the device gate, not straight into the room.
+    expect(find.text('PLACEMENT PREFLIGHT #41'), findsOneWidget);
+  });
+
+  testWidgets('no published exam disables the start control', (tester) async {
+    final adapter = FakeHttpClientAdapter((options, body) async {
+      if (options.path == '/api/learner/placement' && options.method == 'GET') {
+        return FakeHttpClientAdapter.jsonResponse(
+          catalogPayload(includeExam: false),
+        );
+      }
+      if (options.path == '/api/learner/placement/preflight' &&
+          options.method == 'GET') {
+        return FakeHttpClientAdapter.jsonResponse(preflightPayload());
+      }
+      return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+    });
+
+    await tester.pumpWidget(buildApp(adapter));
+    await tester.pumpAndSettle();
+
+    expect(find.text('NO PLACEMENT EXAM AVAILABLE'), findsWidgets);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('start-placement-btn')),
+      200,
+    );
+    // A disabled control renders at the dimmed opacity and does not navigate.
+    final opacity = tester.widget<Opacity>(
+      find.descendant(
+        of: find.byKey(const Key('start-placement-btn')),
+        matching: find.byType(Opacity),
+      ),
+    );
+    expect(opacity.opacity, lessThan(1));
+
+    await tester.tap(find.byKey(const Key('start-placement-btn')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('PLACEMENT ROOM'), findsNothing);
   });
 }

@@ -41,5 +41,16 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Browser visibility for the payment gateway and mentor meeting links.
+             Without these entries Android 11+ hides every browser from the app,
+             so canLaunchUrl reports false and a pre-check would block the launch. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="http"/>
+        </intent>
     </queries>
 </manifest>

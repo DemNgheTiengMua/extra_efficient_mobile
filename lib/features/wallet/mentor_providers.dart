@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/dio_client.dart';
+import '../../core/network/provider_retry.dart';
 import '../auth/auth_provider.dart';
 import '../context/learner_context_provider.dart';
 import 'mentor_models.dart';
@@ -10,15 +11,19 @@ final mentorRepositoryProvider = Provider<MentorRepository>((ref) {
   return MentorRepository(ref.watch(dioProvider));
 });
 
-final mentorsListProvider = FutureProvider<List<MentorProfile>>((ref) async {
-  final authState = ref.watch(authNotifierProvider);
-  if (!authState.isAuthenticated) {
-    return const [];
-  }
-  ref.watch(certificateScopeVersionProvider);
-  final certCode = ref.watch(learnerContextProvider).value?.active.code;
-  return ref.read(mentorRepositoryProvider).getMentors(certCode: certCode);
-});
+/// The directory.
+final mentorsListProvider = FutureProvider<List<MentorProfile>>(
+  (ref) async {
+    final authState = ref.watch(authNotifierProvider);
+    if (!authState.isAuthenticated) {
+      return const [];
+    }
+    ref.watch(certificateScopeVersionProvider);
+    final certCode = ref.watch(learnerContextProvider).value?.active.code;
+    return ref.read(mentorRepositoryProvider).getMentors(certCode: certCode);
+  },
+  retry: noProviderRetry,
+);
 
 class MentorBookingsNotifier extends AsyncNotifier<List<MentorBooking>> {
   @override
@@ -41,4 +46,5 @@ class MentorBookingsNotifier extends AsyncNotifier<List<MentorBooking>> {
 final mentorBookingsProvider =
     AsyncNotifierProvider<MentorBookingsNotifier, List<MentorBooking>>(
   MentorBookingsNotifier.new,
+  retry: noProviderRetry,
 );

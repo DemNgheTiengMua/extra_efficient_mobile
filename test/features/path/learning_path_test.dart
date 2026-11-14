@@ -1,259 +1,337 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:forui/forui.dart';
+import 'package:go_router/go_router.dart';
 
-import 'package:extra_efficient_mobile/app.dart';
 import 'package:extra_efficient_mobile/core/media/audio_media_adapter.dart';
 import 'package:extra_efficient_mobile/core/network/dio_client.dart';
 import 'package:extra_efficient_mobile/core/storage/token_storage.dart';
 import 'package:extra_efficient_mobile/features/path/screens/learning_path_screen.dart';
+import 'package:extra_efficient_mobile/theme/signage_theme.dart';
+
 import '../../helpers/fake_http_adapter.dart';
+import 'path_fixtures.dart';
 
+/// The learning-path screen against the recorded payloads: no path means an
+/// offer to generate (once a target band exists), a path means its real weeks,
+/// remaining time and progress, and an insight only when a path exists.
 void main() {
-  testWidgets(
-    'Learning Path generates path, displays modules & sequential items, retries path insight, starts lesson step, and resets path',
-    (tester) async {
-      final tokenStorage = InMemoryTokenStorage(initialToken: 'valid-jwt');
-      var hasPath = false;
-      var generateCalled = 0;
-      var resetCalled = 0;
-      var stepStartedId = 0;
-      var pathInsightRetried = 0;
+  void useTallViewport(WidgetTester tester) {
+    tester.view.physicalSize = const Size(900, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+  }
 
-      final adapter = FakeHttpClientAdapter((options, body) async {
-        if (options.path == '/api/auth/me') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'userId': 2,
-            'email': 'learner@demo.local',
-            'fullName': 'Demo Learner',
-            'role': 'learner',
-            'emailVerified': true,
-            'permissions': <String>[],
-            'held': <String>[],
-          });
-        }
-        if (options.path == '/api/learner/context') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'active': {
-              'id': 1,
+  Widget buildApp(FakeHttpClientAdapter adapter) {
+    return ProviderScope(
+      overrides: [
+        tokenStorageProvider.overrideWithValue(
+          InMemoryTokenStorage(initialToken: 'valid-jwt'),
+        ),
+        httpClientAdapterProvider.overrideWithValue(adapter),
+        audioMediaAdapterProvider.overrideWithValue(FakeAudioMediaAdapter()),
+      ],
+      child: MaterialApp.router(
+        theme: ThemeData(
+          useMaterial3: false,
+          scaffoldBackgroundColor: SignageColors.wall,
+        ),
+        builder: (context, child) => FTheme(
+          data: buildSignageTheme(),
+          child: child ?? const SizedBox.shrink(),
+        ),
+        routerConfig: GoRouter(
+          initialLocation: '/path/learning-path',
+          routes: [
+            GoRoute(
+              path: '/path/learning-path',
+              builder: (context, state) => Scaffold(body: LearningPathScreen()),
+            ),
+            GoRoute(
+              path: '/path/goal',
+              builder: (context, state) =>
+                  Scaffold(body: Center(child: Text('GOAL CALIBRATION'))),
+            ),
+            GoRoute(
+              path: '/practice/:sessionId',
+              builder: (context, state) => Scaffold(
+                body: Center(
+                  child: Text('PRACTICE ${state.pathParameters['sessionId']}'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  FakeHttpClientAdapter adapterWith({
+    required Map<String, dynamic> learningPath,
+    required Map<String, dynamic> targetBand,
+    int generateStatus = 200,
+    Map<String, dynamic>? stepStart,
+    int stepStartStatus = 200,
+    int insightStatus = 404,
+    void Function(int stepId)? onStart,
+  }) {
+    return FakeHttpClientAdapter((options, body) async {
+      if (options.path == '/api/auth/me') {
+        return FakeHttpClientAdapter.jsonResponse({
+          'userId': 2,
+          'email': 'learner@demo.local',
+          'fullName': 'Demo Learner',
+          'role': 'learner',
+          'emailVerified': true,
+        });
+      }
+      if (options.path == '/api/learner/context') {
+        return FakeHttpClientAdapter.jsonResponse({
+          'active': {
+            'code': 'TOEIC',
+            'name': 'TOEIC Listening & Reading',
+            'sectionNoun': 'Part',
+          },
+          'certificates': [
+            {
               'code': 'TOEIC',
               'name': 'TOEIC Listening & Reading',
               'sectionNoun': 'Part',
             },
-            'certificates': [
-              {
-                'id': 1,
-                'code': 'TOEIC',
-                'name': 'TOEIC Listening & Reading',
-                'sectionNoun': 'Part',
-              },
-            ],
-            'creditBalance': 13,
-            'examinedSkills': ['listening', 'reading'],
-            'examDate': '2026-12-20',
-          });
+          ],
+          'creditBalance': 11,
+        });
+      }
+      if (options.path == '/api/learner/target-band' &&
+          options.method == 'GET') {
+        return FakeHttpClientAdapter.jsonResponse(targetBand);
+      }
+      if (options.path == '/api/learner/learning-path' &&
+          options.method == 'GET') {
+        return FakeHttpClientAdapter.jsonResponse(learningPath);
+      }
+      if (options.path == '/api/learner/learning-path/generate') {
+        return FakeHttpClientAdapter.jsonResponse(
+          {'hasActivePath': false},
+          statusCode: generateStatus,
+        );
+      }
+      final startMatch = RegExp(
+        r'^/api/learner/learning-path/steps/(\d+)/start$',
+      ).firstMatch(options.path);
+      if (startMatch != null) {
+        onStart?.call(int.parse(startMatch.group(1)!));
+        return FakeHttpClientAdapter.jsonResponse(
+          stepStart ?? startStepResultPayload(),
+          statusCode: stepStartStatus,
+        );
+      }
+      if (options.path == '/api/learner/insights/path' &&
+          options.method == 'GET') {
+        return FakeHttpClientAdapter.jsonResponse({}, statusCode: insightStatus);
+      }
+      return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+    });
+  }
+
+  testWidgets(
+    'no active path and no target band: generation is not offered, the '
+    'missing prerequisite is named',
+    (tester) async {
+      useTallViewport(tester);
+      var generateCalls = 0;
+      final adapter = FakeHttpClientAdapter((options, body) async {
+        if (options.path == '/api/learner/learning-path/generate') {
+          generateCalls++;
+          return FakeHttpClientAdapter.jsonResponse(
+            generateNoGoalErrorPayload(),
+            statusCode: 422,
+          );
         }
-        if (options.path == '/api/learner/dashboard') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'currentBandCode': 'B1',
-            'targetBandCode': 'B2',
-            'scaledScore': 620,
-            'placementCompleted': true,
-            'hasLearningPath': hasPath,
-          });
-        }
-        if (options.path == '/api/learner/insights/dashboard') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'status': 'ready',
-            'narrative': 'Steady progress.',
-          });
-        }
-        if (options.path == '/api/learner/learning-path' &&
-            options.method == 'GET') {
-          if (!hasPath) {
-            return FakeHttpClientAdapter.jsonResponse(
-              {'message': 'No learning path yet'},
-              statusCode: 404,
-            );
-          }
-          return FakeHttpClientAdapter.jsonResponse({
-            'currentBandCode': 'B1',
-            'targetBandCode': 'B2',
-            'remainingMinutes': 180,
-            'modules': [
-              {
-                'id': 10,
-                'weekNumber': 1,
-                'title': 'Week 1: Grammar Fundamentals',
-                'estimatedMinutes': 180,
-                'items': [
-                  {
-                    'stepId': 101,
-                    'title': 'Clause Modifiers',
-                    'type': 'lesson',
-                    'status': 'available',
-                    'estimatedMinutes': 20,
-                    'lessonId': 14,
-                  },
-                  {
-                    'stepId': 102,
-                    'title': 'Part 5 Timed Drill',
-                    'type': 'practice',
-                    'status': 'locked',
-                    'estimatedMinutes': 30,
-                  },
-                ],
-              },
-            ],
-          });
-        }
-        if (options.path == '/api/learner/learning-path/generate' &&
-            options.method == 'POST') {
-          generateCalled++;
-          hasPath = true;
-          return FakeHttpClientAdapter.jsonResponse({'generated': true});
-        }
-        if (options.path == '/api/learner/learning-path/reset' &&
-            options.method == 'POST') {
-          resetCalled++;
-          hasPath = false;
-          return FakeHttpClientAdapter.jsonResponse({'reset': true});
-        }
-        if (options.path == '/api/learner/learning-path/steps/101' &&
-            options.method == 'GET') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'stepId': 101,
-            'title': 'Clause Modifiers',
-            'type': 'lesson',
-            'status': 'available',
-            'lessonId': 14,
-          });
-        }
-        if (options.path == '/api/learner/learning-path/steps/101/start' &&
-            options.method == 'POST') {
-          stepStartedId = 101;
-          return FakeHttpClientAdapter.jsonResponse({
-            'stepId': 101,
-            'status': 'in_progress',
-            'lessonId': 14,
-          });
-        }
-        if (options.path == '/api/learner/insights/path' &&
-            options.method == 'GET') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'status': 'ready',
-            'narrative': 'Week 1 focuses on grammar foundations.',
-          });
-        }
-        if (options.path == '/api/learner/insights/path/retry' &&
-            options.method == 'POST') {
-          pathInsightRetried++;
-          return FakeHttpClientAdapter.jsonResponse({
-            'status': 'ready',
-            'narrative': 'Refreshed path insight: 2 modules remaining.',
-          });
-        }
-        if (options.path == '/api/learner/lessons/14' &&
-            options.method == 'GET') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'id': 14,
-            'title': 'Clause Modifiers',
-            'cards': [
-              {
-                'id': 1,
-                'type': 'rule',
-                'title': 'Relative Clauses',
-                'body': 'Use who/which/that to modify nouns.',
-              },
-            ],
-          });
-        }
-        if (options.path == '/api/learner/lessons/14/progress' &&
-            options.method == 'GET') {
-          return FakeHttpClientAdapter.jsonResponse({
-            'viewedCount': 0,
-            'totalCount': 1,
-            'lastViewedCardIndex': 0,
-            'completed': false,
-          });
-        }
-        return FakeHttpClientAdapter.jsonResponse({}, statusCode: 404);
+        return adapterWith(
+          learningPath: learningPathSummaryEmptyPayload(),
+          targetBand: targetBandNoGoalPayload(),
+        ).handler(options, body);
       });
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            tokenStorageProvider.overrideWithValue(tokenStorage),
-            httpClientAdapterProvider.overrideWithValue(adapter),
-            audioMediaAdapterProvider.overrideWithValue(
-              FakeAudioMediaAdapter(),
-            ),
-          ],
-          child: const ExtraEfficientApp(),
-        ),
-      );
+      await tester.pumpWidget(buildApp(adapter));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('open-learning-path-btn')));
+      // `hasActivePath: false` is the existence switch, so the empty shell of
+      // weeks is replaced by an offer — but the offer is gated.
+      expect(find.text('LOADING LEARNING PATH'), findsNothing);
+      expect(find.byKey(const Key('generate-learning-path-btn')), findsNothing);
+      expect(find.text('Choose a target band first'), findsOneWidget);
+      expect(find.byKey(const Key('set-target-band-btn')), findsOneWidget);
+      expect(generateCalls, 0);
+    },
+  );
+
+  testWidgets('the missing prerequisite leads to the target-band surface', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    final adapter = adapterWith(
+      learningPath: learningPathSummaryEmptyPayload(),
+      targetBand: targetBandNoGoalPayload(),
+    );
+
+    await tester.pumpWidget(buildApp(adapter));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('set-target-band-btn')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('GOAL CALIBRATION'), findsOneWidget);
+  });
+
+  testWidgets(
+    'a measured band and a target band can generate a path, and its real weeks, '
+    'remaining time and progress render',
+    (tester) async {
+      useTallViewport(tester);
+      var generateCalls = 0;
+      var hasPath = false;
+      final adapter = FakeHttpClientAdapter((options, body) async {
+        if (options.path == '/api/learner/learning-path' &&
+            options.method == 'GET') {
+          return FakeHttpClientAdapter.jsonResponse(
+            hasPath
+                ? learningPathActivePayload()
+                : learningPathSummaryEmptyPayload(),
+          );
+        }
+        if (options.path == '/api/learner/learning-path/generate') {
+          generateCalls++;
+          hasPath = true;
+          return FakeHttpClientAdapter.jsonResponse(
+            learningPathActivePayload(),
+          );
+        }
+        return adapterWith(
+          learningPath: learningPathSummaryEmptyPayload(),
+          targetBand: targetBandWithGoalPayload(),
+        ).handler(options, body);
+      });
+
+      await tester.pumpWidget(buildApp(adapter));
       await tester.pumpAndSettle();
 
-      // Initially no path -> Generate button is shown.
-      final genBtn = find.byKey(const Key('generate-learning-path-btn'));
-      expect(genBtn, findsOneWidget);
-      await tester.tap(genBtn);
+      final generateBtn = find.byKey(const Key('generate-learning-path-btn'));
+      expect(generateBtn, findsOneWidget);
+      await tester.tap(generateBtn);
       await tester.pumpAndSettle();
 
-      expect(generateCalled, 1);
-      expect(find.text('180 MIN REMAINING'), findsOneWidget);
-      expect(find.text('WEEK 1: GRAMMAR FUNDAMENTALS'), findsOneWidget);
-      expect(find.text('Clause Modifiers'), findsOneWidget);
-      expect(find.text('Part 5 Timed Drill'), findsOneWidget);
-      expect(find.text('AVAILABLE'), findsOneWidget);
+      expect(generateCalls, 1);
+      expect(find.text('TARGET B2'), findsOneWidget);
+      expect(find.text('0/16'), findsOneWidget);
+      expect(find.text('720 MIN'), findsWidgets);
+      expect(find.text('WEEK 1'), findsOneWidget);
+      expect(find.text('WEEK 4'), findsOneWidget);
+      // A locked step stays visible as an unavailable line rather than hidden.
+      expect(find.byKey(const Key('start-step-2')), findsOneWidget);
       expect(find.text('LOCKED'), findsWidgets);
+      // The first step is the one the server says can start.
+      expect(find.text('START'), findsOneWidget);
+    },
+  );
 
-      // Scroll to path insight & retry.
-      final pathScrollable = find
-          .descendant(
-            of: find.byType(LearningPathScreen),
-            matching: find.byType(Scrollable),
-          )
-          .first;
-      final retryInsightBtn = find.byKey(const Key('retry-path-insight-btn'));
-      await tester.scrollUntilVisible(
-        retryInsightBtn,
-        200,
-        scrollable: pathScrollable,
+  testWidgets('starting a step follows the redirect URL the server supplies', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    int? startedStep;
+    final adapter = adapterWith(
+      learningPath: learningPathActivePayload(),
+      targetBand: targetBandWithGoalPayload(),
+      onStart: (stepId) => startedStep = stepId,
+    );
+
+    await tester.pumpWidget(buildApp(adapter));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('start-step-1')));
+    await tester.pumpAndSettle();
+
+    expect(startedStep, 1);
+    // `redirectUrl` in the recorded payload is `/practice/21`.
+    expect(find.text('PRACTICE 21'), findsOneWidget);
+  });
+
+  testWidgets(
+    'a step that is not on the active path reports a terminal state instead of '
+    'crashing',
+    (tester) async {
+      useTallViewport(tester);
+      final adapter = adapterWith(
+        learningPath: learningPathActivePayload(),
+        targetBand: targetBandWithGoalPayload(),
+        stepStart: stepNotFoundPayload(),
+        stepStartStatus: 404,
       );
-      await tester.drag(pathScrollable, const Offset(0, -100));
-      await tester.pumpAndSettle();
-      await tester.tap(retryInsightBtn);
+
+      await tester.pumpWidget(buildApp(adapter));
       await tester.pumpAndSettle();
 
-      expect(pathInsightRetried, 1);
+      await tester.tap(find.byKey(const Key('start-step-1')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cannot open that step'), findsOneWidget);
       expect(
-        find.text('Refreshed path insight: 2 modules remaining.'),
+        find.textContaining('is not on your active path'),
         findsOneWidget,
       );
+    },
+  );
 
-      // Reset path test, then regenerate to test starting step.
-      final resetBtn = find.byKey(const Key('reset-learning-path-btn'));
-      await tester.scrollUntilVisible(
-        resetBtn,
-        -200,
-        scrollable: pathScrollable,
+  testWidgets('the path insight is absent while no path exists', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    var insightRequests = 0;
+    final adapter = FakeHttpClientAdapter((options, body) async {
+      if (options.path == '/api/learner/insights/path') {
+        insightRequests++;
+      }
+      return adapterWith(
+        learningPath: learningPathSummaryEmptyPayload(),
+        targetBand: targetBandWithGoalPayload(),
+      ).handler(options, body);
+    });
+
+    await tester.pumpWidget(buildApp(adapter));
+    await tester.pumpAndSettle();
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+    expect(insightRequests, 0);
+    expect(find.text('PATH INSIGHT'), findsNothing);
+  });
+
+  testWidgets(
+    'a redirect the app has not registered does not crash the screen',
+    (tester) async {
+      useTallViewport(tester);
+      // The backend's NEXT ACTION can name `/learning-path/steps/{id}`, which
+      // this table has no route for. The global fallback is #12's; this only
+      // proves the path screen survives the push.
+      final adapter = adapterWith(
+        learningPath: learningPathActivePayload(),
+        targetBand: targetBandWithGoalPayload(),
+        stepStart: {
+          ...startStepResultPayload(),
+          'redirectUrl': '/learning-path/steps/1',
+        },
       );
-      await tester.tap(resetBtn);
-      await tester.pumpAndSettle();
-      expect(resetCalled, 1);
-      expect(find.byKey(const Key('generate-learning-path-btn')), findsOneWidget);
 
-      // Regenerate and start step 101.
-      await tester.tap(find.byKey(const Key('generate-learning-path-btn')));
+      await tester.pumpWidget(buildApp(adapter));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('start-step-101')));
+      await tester.tap(find.byKey(const Key('start-step-1')));
       await tester.pumpAndSettle();
-      expect(stepStartedId, 101);
+
+      expect(tester.takeException(), isNull);
     },
   );
 }
+

@@ -13,9 +13,10 @@ import '../../features/auth/screens/register_screen.dart';
 import '../../features/auth/screens/sign_in_screen.dart';
 import '../../features/auth/screens/verify_email_screen.dart';
 import '../../features/exams/screens/exam_hub_screen.dart';
+import '../../features/exams/screens/exam_preflight_screen.dart';
+import '../../features/exams/providers/exam_room_gate_providers.dart';
 import '../../features/exams/screens/mock_exam_room_screen.dart';
 import '../../features/exams/screens/mock_instructions_screen.dart';
-import '../../features/exams/screens/mock_preflight_screen.dart';
 import '../../features/exams/screens/mock_result_screen.dart';
 import '../../features/exams/screens/mock_review_screen.dart';
 import '../../features/exams/screens/placement_exam_room_screen.dart';
@@ -32,6 +33,7 @@ import '../../features/practice/screens/practice_hub_screen.dart';
 import '../../features/practice/screens/practice_session_screen.dart';
 import '../../features/shell/main_shell.dart';
 import '../../features/wallet/screens/wallet_screen.dart';
+import 'unmatched_route_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -49,6 +51,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/path',
     refreshListenable: refreshListenable,
+    // go_router has no `errorBuilder` on `GoRoute`, only globally. The backend
+    // can name a destination this build has not registered (its NEXT ACTION
+    // URL is free text), and a blank page would look like a broken app.
+    errorBuilder: (context, state) =>
+        UnmatchedRouteScreen(location: state.uri.toString()),
     redirect: (context, state) {
       final auth = ref.read(authNotifierProvider);
       if (auth.status == AuthStatus.unknown) {
@@ -175,9 +182,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final id =
               int.tryParse(state.pathParameters['placementId'] ?? '') ?? 0;
-          final resume = state.uri.queryParameters['resume'] == '1';
-          return PlacementExamRoomScreen(placementId: id, resume: resume);
+          return PlacementExamRoomScreen(placementId: id);
         },
+        routes: [
+          GoRoute(
+            path: 'preflight',
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) {
+              final id =
+                  int.tryParse(state.pathParameters['placementId'] ?? '') ?? 0;
+              return ExamPreflightScreen(
+                kind: SittingKind.placement,
+                sittingId: id,
+              );
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: '/placement/result/:placementId',
@@ -211,7 +231,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final attemptId =
               int.tryParse(state.pathParameters['attemptId'] ?? '') ?? 0;
-          return MockPreflightScreen(attemptId: attemptId);
+          return ExamPreflightScreen(
+            kind: SittingKind.attempt,
+            sittingId: attemptId,
+          );
         },
       ),
       GoRoute(

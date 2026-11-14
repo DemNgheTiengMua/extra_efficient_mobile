@@ -1,0 +1,9 @@
+﻿{
+    "orderId":  2005,
+    "orderCode":  "DH-20261113-0103",
+    "paymentNo":  103,
+    "amount":  190000.00,
+    "gateway":  "mock",
+    "checkoutUrl":  "/checkout/mock-gateway?orderCode=DH-20261113-0103",
+    "status":  "pending"
+}

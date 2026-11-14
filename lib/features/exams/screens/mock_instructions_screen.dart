@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../theme/signage_theme.dart';
 import '../../../widgets/signage_primitives.dart';
+import '../../auth/auth_provider.dart';
 import '../../context/learner_context_provider.dart';
 import '../providers/mock_exam_providers.dart';
 
@@ -41,7 +42,10 @@ class _MockInstructionsScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = extractApiError(
+          e,
+          fallback: 'The mock attempt could not be started.',
+        );
         _starting = false;
       });
     }
@@ -49,7 +53,9 @@ class _MockInstructionsScreenState
 
   @override
   Widget build(BuildContext context) {
-    final instructionsAsync = ref.watch(mockInstructionsProvider(widget.examId));
+    final instructionsAsync = ref.watch(
+      mockInstructionsProvider(widget.examId),
+    );
 
     return FScaffold(
       childPad: false,
@@ -105,7 +111,7 @@ class _MockInstructionsScreenState
           child: StateBlock(
             stamp: 'ERROR',
             title: 'UNABLE TO LOAD INSTRUCTIONS',
-            description: err.toString(),
+            description: extractApiError(err, fallback: 'The exam instructions could not be loaded.'),
             action: PlacardButton(
               label: 'RETRY',
               onPress: () =>
@@ -125,18 +131,30 @@ class _MockInstructionsScreenState
               const SizedBox(height: 12),
             ],
             PlacardPanel(
-              title: info.title,
-              trailing: PlacardBadge.info('${info.credits} CREDITS'),
+              title: info.examName,
+              trailing: PlacardBadge.info('${info.creditCost} CREDITS'),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${info.durationMinutes} MIN · ${info.questionCount} QUESTIONS',
+                    [
+                      '${info.durationMinutes} MIN',
+                      if (info.questionCount != null)
+                        '${info.questionCount} QUESTIONS',
+                    ].join(' · '),
                     style: SignageTypography.data(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+                  if (info.description != null &&
+                      info.description!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      info.description!,
+                      style: SignageTypography.body(fontSize: 14),
+                    ),
+                  ],
                   if (info.sections.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     for (final s in info.sections)
@@ -145,7 +163,10 @@ class _MockInstructionsScreenState
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(s.name, style: SignageTypography.body(fontSize: 14)),
+                            Text(
+                              s.name,
+                              style: SignageTypography.body(fontSize: 14),
+                            ),
                             Text(
                               '${s.questionCount} Q',
                               style: SignageTypography.data(fontSize: 13),
@@ -159,18 +180,26 @@ class _MockInstructionsScreenState
             ),
             const SizedBox(height: 16),
             PlacardPanel(
-              title: 'EXAM RULES',
+              title: 'BEFORE YOU START',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (final rule in info.instructions)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        rule,
-                        style: SignageTypography.body(fontSize: 14),
+                  Text(
+                    'Starting charges ${info.creditCost} credits from your '
+                    'balance of ${info.creditBalance}. The clock begins when '
+                    'you enter the room.',
+                    style: SignageTypography.body(fontSize: 14),
+                  ),
+                  if (info.hasActiveAttempt) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Attempt ${info.activeAttemptId} on this exam is still in progress.',
+                      style: SignageTypography.body(
+                        fontSize: 14,
+                        color: SignageColors.inkMuted,
                       ),
                     ),
+                  ],
                 ],
               ),
             ),
@@ -179,7 +208,7 @@ class _MockInstructionsScreenState
               key: const Key('start-mock-attempt-btn'),
               label: _starting
                   ? 'STARTING...'
-                  : 'START MOCK ATTEMPT (${info.credits} CREDITS)',
+                  : 'START MOCK ATTEMPT (${info.creditCost} CREDITS)',
               onPress: _starting ? null : _startAttempt,
             ),
           ],
